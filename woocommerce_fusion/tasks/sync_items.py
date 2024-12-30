@@ -33,7 +33,8 @@ def run_item_sync_from_hook(doc, method):
 		and len(doc.woocommerce_servers) > 0
 	):
 		frappe.msgprint(
-			_("Background sync to WooCommerce triggered for {0} {1}").format(frappe.bold(doc.name), method),
+			_("Background sync to WooCommerce triggered for {0} {1}").format(
+			    frappe.bold(doc.name), method),
 			indicator="blue",
 			alert=True,
 		)
@@ -78,11 +79,13 @@ def run_item_sync(
 		if not item:
 			item = frappe.get_doc("Item", item_code)
 		if not item.woocommerce_servers:
-			frappe.throw(_("No WooCommerce Servers defined for Item {0}").format(item_code))
+			frappe.throw(
+			    _("No WooCommerce Servers defined for Item {0}").format(item_code))
 		for wc_server in item.woocommerce_servers:
 			# Trigger sync for every linked server
 			sync = SynchroniseItem(
-				item=ERPNextItemToSync(item=item, item_woocommerce_server_idx=wc_server.idx)
+				item=ERPNextItemToSync(
+				    item=item, item_woocommerce_server_idx=wc_server.idx)
 			)
 			if enqueue:
 				frappe.enqueue(sync.run)
@@ -141,6 +144,25 @@ class ERPNextItemToSync:
 		return self.item.woocommerce_servers[self.item_woocommerce_server_idx - 1]
 
 
+<< << << < HEAD
+== == == =
+
+
+def format_erpnext_img_url(image_details):
+	"""Formats the ERPNext image URL for WooCommerce."""
+	if image_details[2] == 0:  # is_private == 0 implies image can be accessed publicly
+		if image_details[1].startswith("http"):  # file_url
+			return image_details[1]
+		else:
+			return f"https://{frappe.local.site}{image_details[1]}"
+	else:
+		frappe.log_error(f"Image is private: {image_details[1]}")
+		return None
+
+
+>>>>>> > fix pre-commit formatting
+
+
 class SynchroniseItem(SynchroniseWooCommerce):
 	"""
 	Class for managing synchronisation of WooCommerce Product with ERPNext Item
@@ -165,6 +187,9 @@ class SynchroniseItem(SynchroniseWooCommerce):
 			self.get_corresponding_item_or_product()
 			self.sync_wc_product_with_erpnext_item()
 		except Exception as err:
+
+
+<< << << < HEAD
 			try:
 				woocommerce_product_dict = (
 					self.woocommerce_product.as_dict()
@@ -173,6 +198,13 @@ class SynchroniseItem(SynchroniseWooCommerce):
 				)
 			except ValidationError as e:
 				woocommerce_product_dict = self.woocommerce_product
+== == == =
+			woocommerce_product_dict = (
+				self.woocommerce_product.as_dict()
+				if isinstance(self.woocommerce_product, WooCommerceProduct)
+				else self.woocommerce_product
+			)
+>>>>>> > fix pre-commit formatting
 			error_message = f"{frappe.get_traceback()}\n\nItem Data: \n{str(self.item) if self.item else ''}\n\nWC Product Data \n{str(woocommerce_product_dict) if self.woocommerce_product else ''})"
 			frappe.log_error("WooCommerce Error", error_message)
 			raise err
@@ -215,6 +247,7 @@ class SynchroniseItem(SynchroniseWooCommerce):
 		itm = frappe.qb.DocType("Item")
 
 		and_conditions = [
+			iws.enabled == 1,
 			iws.woocommerce_server == self.woocommerce_product.woocommerce_server,
 			iws.woocommerce_id == self.woocommerce_product.woocommerce_id,
 		]
@@ -241,6 +274,10 @@ class SynchroniseItem(SynchroniseWooCommerce):
 		"""
 		Syncronise Item between ERPNext and WooCommerce
 		"""
+<<<<<<< HEAD
+=======
+		frappe.log_error(self.item)
+>>>>>>> fix pre-commit formatting
 		if self.item and not self.woocommerce_product:
 			# create missing product in WooCommerce
 			self.create_woocommerce_product(self.item)
@@ -294,6 +331,51 @@ class SynchroniseItem(SynchroniseWooCommerce):
 		Update the WooCommerce Product with fields from it's corresponding ERPNext Item
 		"""
 		wc_product_dirty = False
+		if item.item.image:
+			image_details = frappe.db.get_value(
+				"File",
+				{"file_url": item.item.image},
+				["file_name", "file_url", "is_private", "content_hash", "modified"],
+			)
+			if image_details:
+				image_url = format_erpnext_img_url(image_details)
+				if image_url:
+					erp_image_date = image_details[4]
+					if erp_image_date:
+						date_created_str = erp_image_date.isoformat()
+						current_images = json.loads(wc_product.images) if wc_product.images else []
+
+						if current_images:
+							wc_image_date_str = current_images[0].get("date_modified")
+							try:
+								wc_image_date = datetime.fromisoformat(wc_image_date_str) if wc_image_date_str else None
+							except ValueError:
+								wc_image_date = None
+								frappe.log_error(f"Invalid date format for WooCommerce image: {wc_image_date_str}")
+
+							if not wc_image_date or erp_image_date > wc_image_date:  # Compare dates
+								new_image = {
+									"id": current_images[0].get("id"),
+									"src": image_url,
+									"date_created": date_created_str,
+								}
+
+								image_updated = False
+								for i, img in enumerate(current_images):
+									if img["src"] == image_url:
+										current_images[i] = new_image
+										image_updated = True
+										break
+								if not image_updated:
+									current_images.append(new_image)
+
+								wc_product.images = json.dumps(current_images)
+								wc_product_dirty = True
+
+						else:  # No existing images, so upload the ERPNext image
+							new_image = {"src": image_url, "date_created": date_created_str}
+							wc_product.images = json.dumps([new_image])
+							wc_product_dirty = True
 
 		# Update properties
 		if wc_product.woocommerce_name != item.item.item_name:
@@ -363,6 +445,24 @@ class SynchroniseItem(SynchroniseWooCommerce):
 
 				wc_product.attributes = json.dumps(wc_product_attributes)
 
+			# Image Synchronization
+			if item.item.image:
+				# Retrieve image details from ERPNext
+				image_details = frappe.db.get_value(
+					"File",
+					{"file_url": item.item.image},
+					["file_name", "file_url", "is_private", "content_hash", "creation"],
+				)
+				if image_details:
+					image_url = format_erpnext_img_url(image_details)
+					if image_url:
+						date_created_str = (
+							image_details[4].isoformat() if image_details[4] else datetime.now().isoformat()
+						)  # Convert to ISO format
+						wc_product.images = json.dumps(
+							[{"src": image_url, "date_created": date_created_str}]
+						)  # modified date
+
 			# Set properties
 			wc_product.woocommerce_server = item.item_woocommerce_server.woocommerce_server
 			wc_product.woocommerce_name = item.item.item_name
@@ -427,15 +527,6 @@ class SynchroniseItem(SynchroniseWooCommerce):
 		row.woocommerce_server = wc_server.name
 		item.flags.ignore_mandatory = True
 		item.flags.created_by_sync = True
-
-		if wc_server.enable_image_sync:
-			wc_product_images = json.loads(wc_product.images)
-			if len(wc_product_images) > 0:
-				item.image = wc_product_images[0]["src"]
-
-		modified, item = self.set_item_fields(item=item)
-		item.flags.created_by_sync = True
-
 		item.insert()
 
 		self.item = ERPNextItemToSync(
@@ -446,6 +537,8 @@ class SynchroniseItem(SynchroniseWooCommerce):
 				if iws.woocommerce_server == wc_product.woocommerce_server
 			),
 		)
+
+		self.set_item_fields()
 
 		self.set_sync_hash()
 

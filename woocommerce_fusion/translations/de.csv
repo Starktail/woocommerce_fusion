@@ -240,6 +240,7 @@ taxable,steuerpflichtig,
 variable,variabel,
 variation,Variation,
 visible,sichtbar,
+<<<<<<< HEAD
 yes,ja,
 Fetching Shipping Methods from WooCommerce,Versandmethoden von WooCommerce abrufen,
 Shipping Methods Sync,Versandmethoden synchronisieren,
@@ -272,3 +273,6 @@ If two WooCommerce Customer records share the same email address but one is a Co
 Reserved Stock Adjustment,Reservierter Bestandsausgleich,
 Adjusts stock levels sent to WooCommerce by subtracting reserved stock ensuring only available stock is synced,Passt die an WooCommerce gesendeten Lagerbestände an indem reservierte Lagerbestände abgezogen werden um sicherzustellen dass nur verfügbare Lagerbestände synchronisiert werden
 In order to enable 'Reserved Stock Adjustment' please enable 'Enable Stock Reservation' in 'ERPNext > Stock Settings > Stock Reservation',Um die 'Reservierter Bestandsausgleich' zu aktivieren aktivieren Sie bitte 'Bestandsreservierung aktivieren' in 'ERPNext > Lager-Einstellungen > Bestandsreservierung',
+=======
+yes,ja,
+>>>>>>> fix pre-commit formatting

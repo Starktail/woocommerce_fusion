@@ -70,7 +70,13 @@ class TestIntegrationWooCommerce(FrappeTestCase):
 		row = wc_server.append("warehouses")
 		row.warehouse = "Stores - SC"
 
+<<<<<<< HEAD
 		wc_server.item_field_map = []
+=======
+		row = wc_server.append("item_field_map")
+		row.erpnext_field_name = "description | Description"
+		row.woocommerce_field_name = "short_description"
+>>>>>>> fix pre-commit formatting
 
 		wc_server.save()
 		self.wc_server = wc_server
@@ -89,12 +95,15 @@ class TestIntegrationWooCommerce(FrappeTestCase):
 		item_price: float = 10,
 		item_qty: int = 1,
 		currency: str = None,
+<<<<<<< HEAD
 		customer_id: int = None,
 		email: str = "john.doe@example.com",
 		address_1: str = "123 Main St",
 		shipping_method_id: str = None,
 		customer_note: str = None,
 		coupon_code: str = None,
+=======
+>>>>>>> fix pre-commit formatting
 	) -> Tuple[str, str]:
 		"""
 		Create a dummy order on a WooCommerce testing site
@@ -121,19 +130,31 @@ class TestIntegrationWooCommerce(FrappeTestCase):
 			"billing": {
 				"first_name": "John",
 				"last_name": "Doe",
+<<<<<<< HEAD
 				"address_1": address_1,
+=======
+				"address_1": "123 Main St",
+>>>>>>> fix pre-commit formatting
 				"address_2": "",
 				"city": "Anytown",
 				"state": "CA",
 				"postcode": "12345",
 				"country": "US",
+<<<<<<< HEAD
 				"email": email,
+=======
+				"email": "john.doe@example.com",
+>>>>>>> fix pre-commit formatting
 				"phone": "123-456-7890",
 			},
 			"shipping": {
 				"first_name": "John",
 				"last_name": "Doe",
+<<<<<<< HEAD
 				"address_1": address_1,
+=======
+				"address_1": "123 Main St",
+>>>>>>> fix pre-commit formatting
 				"address_2": "",
 				"city": "Anytown",
 				"state": "CA",
@@ -145,6 +166,7 @@ class TestIntegrationWooCommerce(FrappeTestCase):
 
 		if currency:
 			data["currency"] = currency
+<<<<<<< HEAD
 		if customer_id:
 			data["customer_id"] = customer_id
 		if shipping_method_id:
@@ -155,6 +177,8 @@ class TestIntegrationWooCommerce(FrappeTestCase):
 			data["customer_note"] = customer_note
 		if coupon_code:
 			data["coupon_lines"] = [{"code": coupon_code}]
+=======
+>>>>>>> fix pre-commit formatting
 		payload = json.dumps(data)
 		headers = {"Content-Type": "application/json"}
 
@@ -164,6 +188,7 @@ class TestIntegrationWooCommerce(FrappeTestCase):
 		id = response.json()["id"]
 		return id, self.wc_server.name + WC_RESOURCE_DELIMITER + str(response.json()["id"])
 
+<<<<<<< HEAD
 	def post_woocommerce_coupon(self, coupon_code: int, percent_discount: int) -> Tuple[str, str]:
 		"""
 		Create a coupon on a WooCommerce testing site
@@ -195,6 +220,8 @@ class TestIntegrationWooCommerce(FrappeTestCase):
 		id = response.json()["id"]
 		return id
 
+=======
+>>>>>>> fix pre-commit formatting
 	def post_woocommerce_product(
 		self,
 		product_name: str,
@@ -202,8 +229,11 @@ class TestIntegrationWooCommerce(FrappeTestCase):
 		regular_price: float = 10,
 		type: str = "simple",
 		attributes: List[str] = ["Material Type", "Volume"],
+<<<<<<< HEAD
 		image_url: str = None,
 		meta_data: List[dict] = None,
+=======
+>>>>>>> fix pre-commit formatting
 	) -> int:
 		"""
 		Create a dummy product on a WooCommerce testing site
@@ -255,12 +285,15 @@ class TestIntegrationWooCommerce(FrappeTestCase):
 				for attr in attributes
 			]
 
+<<<<<<< HEAD
 		if image_url:
 			payload["images"] = [{"src": image_url}]
 
 		if meta_data:
 			payload["meta_data"] = meta_data
 
+=======
+>>>>>>> fix pre-commit formatting
 		payload = json.dumps(payload)
 		headers = {"Content-Type": "application/json"}
 
@@ -413,6 +446,7 @@ class TestIntegrationWooCommerce(FrappeTestCase):
 
 		return attribute_data
 
+<<<<<<< HEAD
 	def update_woocommerce_product_metadata(
 		self,
 		product_id: int,
@@ -441,6 +475,8 @@ class TestIntegrationWooCommerce(FrappeTestCase):
 
 		return response.json()["id"]
 
+=======
+>>>>>>> fix pre-commit formatting
 
 def create_bank_account(
 	bank_name=default_bank, account_name="_Test Bank", company=default_company
@@ -519,6 +555,7 @@ def get_woocommerce_server(woocommerce_server_url: str):
 	)
 	wc_server = wc_servers[0] if len(wc_servers) > 0 else None
 	return wc_server
+<<<<<<< HEAD
 
 
 def create_shipping_rule(shipping_rule_type, shipping_rule_name):
@@ -538,3 +575,5 @@ def create_shipping_rule(shipping_rule_type, shipping_rule_name):
 	sr.insert(ignore_permissions=True)
 	sr.submit()
 	return sr
+=======
+>>>>>>> fix pre-commit formatting

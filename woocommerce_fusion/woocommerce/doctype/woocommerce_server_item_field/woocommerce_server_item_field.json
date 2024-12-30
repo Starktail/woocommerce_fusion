@@ -1,47 +1,47 @@
 {
- "actions": [],
- "allow_rename": 1,
- "creation": "2024-07-08 14:28:39.369279",
- "doctype": "DocType",
- "editable_grid": 1,
- "engine": "InnoDB",
- "field_order": [
-  "erpnext_field_name",
-  "column_break_kddy",
-  "woocommerce_field_name"
- ],
- "fields": [
-  {
-   "fieldname": "erpnext_field_name",
-   "fieldtype": "Select",
-   "in_list_view": 1,
-   "label": "ERPNext Field Name",
-   "reqd": 1
-  },
-  {
-   "fieldname": "column_break_kddy",
-   "fieldtype": "Column Break"
-  },
-  {
-   "description": "e.g. <code>$.short_description</code> or <code>$.meta_data[0].value</code> where <code>$</code> refers to WooCommerce Product",
-   "documentation_url": "https://woocommerce-fusion-docs.finfoot.tech/features/items.html#custom-fields-mapping",
-   "fieldname": "woocommerce_field_name",
-   "fieldtype": "Data",
-   "in_list_view": 1,
-   "label": "JSONPath on WooCommerce Product",
-   "reqd": 1
-  }
- ],
- "index_web_pages_for_search": 1,
- "istable": 1,
- "links": [],
- "modified": "2025-02-07 11:44:33.375997",
- "modified_by": "Administrator",
- "module": "WooCommerce",
- "name": "WooCommerce Server Item Field",
- "owner": "Administrator",
- "permissions": [],
- "sort_field": "modified",
- "sort_order": "DESC",
- "states": []
+  "actions": [],
+  "allow_rename": 1,
+  "creation": "2024-07-08 14:28:39.369279",
+  "doctype": "DocType",
+  "editable_grid": 1,
+  "engine": "InnoDB",
+  "field_order": [
+    "erpnext_field_name",
+    "column_break_kddy",
+    "woocommerce_field_name"
+  ],
+  "fields": [
+    {
+      "fieldname": "erpnext_field_name",
+      "fieldtype": "Select",
+      "in_list_view": 1,
+      "label": "ERPNext Field Name",
+      "reqd": 1
+    },
+    {
+      "fieldname": "column_break_kddy",
+      "fieldtype": "Column Break"
+    },
+    {
+      "description": "e.g. <code>$.short_description</code> or <code>$.meta_data[0].value</code> where <code>$</code> refers to WooCommerce Product",
+      "documentation_url": "https://woocommerce-fusion-docs.finfoot.tech/features/items.html#custom-fields-mapping",
+      "fieldname": "woocommerce_field_name",
+      "fieldtype": "Data",
+      "in_list_view": 1,
+      "label": "JSONPath on WooCommerce Product",
+      "reqd": 1
+    }
+  ],
+  "index_web_pages_for_search": 1,
+  "istable": 1,
+  "links": [],
+  "modified": "2025-02-07 11:44:33.375997",
+  "modified_by": "Administrator",
+  "module": "WooCommerce",
+  "name": "WooCommerce Server Item Field",
+  "owner": "Administrator",
+  "permissions": [],
+  "sort_field": "modified",
+  "sort_order": "DESC",
+  "states": []
 }

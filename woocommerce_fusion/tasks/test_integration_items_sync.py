@@ -44,6 +44,7 @@ class TestIntegrationWooCommerceItemsSync(TestIntegrationWooCommerce):
 		self.assertEqual(item.item_code, str(wc_product_id))
 		self.assertEqual(item.item_name, "SOME_ITEM")
 
+<<<<<<< HEAD
 	def test_sync_create_new_item_with_image_when_synchronising_with_woocommerce(
 		self, mock_log_error
 	):
@@ -123,6 +124,10 @@ class TestIntegrationWooCommerceItemsSync(TestIntegrationWooCommerce):
 
 		# Expect value in mapped field in Item
 		self.assertEqual(item.description, "Test 2")
+=======
+		# Expect correct custom mapped field values
+		self.assertEqual(item.description, "<p>SOME_ITEM</p>\n")
+>>>>>>> fix pre-commit formatting
 
 	def test_sync_create_new_template_item_when_synchronising_with_woocommerce(self, mock_log_error):
 		"""
@@ -189,7 +194,10 @@ class TestIntegrationWooCommerceItemsSync(TestIntegrationWooCommerce):
 		self.assertEqual(len(item.attributes), 1)
 		self.assertEqual(item.attributes[0].attribute, "Material Type")
 		self.assertIsNotNone(item.attributes[0].attribute_value)
+<<<<<<< HEAD
 		self.assertEqual(item.item_name, "T-SHIRT parent - Option 1")
+=======
+>>>>>>> fix pre-commit formatting
 
 	def test_sync_create_new_wc_product_when_synchronising_with_woocommerce(self, mock_log_error):
 		"""
@@ -221,6 +229,12 @@ class TestIntegrationWooCommerceItemsSync(TestIntegrationWooCommerce):
 		# Expect correct item name in item
 		self.assertEqual(wc_product["name"], item.item_name)
 
+<<<<<<< HEAD
+=======
+		# Expect correct custom mapped field values
+		self.assertEqual(wc_product["short_description"], "<p>ITEM101</p>\n")
+
+>>>>>>> fix pre-commit formatting
 	def test_sync_create_new_variable_wc_product_when_synchronising_with_woocommerce(
 		self, mock_log_error
 	):
@@ -315,6 +329,7 @@ class TestIntegrationWooCommerceItemsSync(TestIntegrationWooCommerce):
 		self.assertEqual(wc_product["attributes"][0]["name"], "Material Type")
 		self.assertEqual(wc_product["attributes"][0]["option"], "Option 2")
 
+<<<<<<< HEAD
 	def test_sync_create_new_wc_product_with_custom_fields_when_synchronising_with_woocommerce(
 		self, mock_log_error
 	):
@@ -414,6 +429,8 @@ class TestIntegrationWooCommerceItemsSync(TestIntegrationWooCommerce):
 		self.assertEqual(wc_product["attributes"][1]["name"], "Volume")
 		self.assertEqual(wc_product["attributes"][1]["variation"], True)
 
+=======
+>>>>>>> fix pre-commit formatting
 
 def get_items_for_wc_product(woocommerce_id: str, woocommerce_server: str):
 	"""

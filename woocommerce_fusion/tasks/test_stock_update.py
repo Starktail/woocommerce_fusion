@@ -75,6 +75,7 @@ class TestWooCommerceStockSync(FrappeTestCase):
 		self.assertEqual(actual_put_endpoints, expected_put_endpoints)
 		self.assertEqual(actual_put_data, expected_put_data)
 
+<<<<<<< HEAD
 	@patch("woocommerce_fusion.tasks.stock_update.frappe")
 	@patch("woocommerce_fusion.tasks.stock_update.APIWithRequestLogging", autospec=True)
 	def test_update_stock_levels_on_woocommerce_site_variant(self, mock_wc_api, mock_frappe):
@@ -132,6 +133,8 @@ class TestWooCommerceStockSync(FrappeTestCase):
 		self.assertEqual(actual_put_endpoint, expected_put_endpoint)
 		self.assertEqual(actual_put_data, expected_data)
 
+=======
+>>>>>>> fix pre-commit formatting
 	@patch("woocommerce_fusion.tasks.stock_update.frappe.db.get_all")
 	@patch("woocommerce_fusion.tasks.stock_update.frappe.enqueue")
 	def test_update_stock_levels_for_all_enabled_items_in_background(

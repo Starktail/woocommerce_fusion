@@ -134,7 +134,10 @@
   },
   {
    "description": "This company will be used to create Sales Orders.",
+<<<<<<< HEAD
    "documentation_url": "https://woocommerce-fusion-docs.finfoot.tech/features/sales-order.html",
+=======
+>>>>>>> fix pre-commit formatting
    "fieldname": "company",
    "fieldtype": "Link",
    "label": "Company",
@@ -203,7 +206,10 @@
   },
   {
    "default": "1",
+<<<<<<< HEAD
    "documentation_url": "https://woocommerce-fusion-docs.finfoot.tech/configure.html",
+=======
+>>>>>>> fix pre-commit formatting
    "fieldname": "enable_sync",
    "fieldtype": "Check",
    "in_list_view": 1,
@@ -232,7 +238,10 @@
   },
   {
    "default": "0",
+<<<<<<< HEAD
    "documentation_url": "https://woocommerce-fusion-docs.finfoot.tech/features/woocommerce-plugins.html",
+=======
+>>>>>>> fix pre-commit formatting
    "fieldname": "wc_plugin_advanced_shipment_tracking",
    "fieldtype": "Check",
    "label": "Enable integration with 'Advanced Shipment Tracking' WooCommerce Plugin"
@@ -274,7 +283,10 @@
   },
   {
    "default": "0",
+<<<<<<< HEAD
    "documentation_url": "https://woocommerce-fusion-docs.finfoot.tech/features/item-prices.html",
+=======
+>>>>>>> fix pre-commit formatting
    "fieldname": "enable_price_list_sync",
    "fieldtype": "Check",
    "label": "Enable Price List Sync"
@@ -360,7 +372,10 @@
   },
   {
    "default": "0",
+<<<<<<< HEAD
    "documentation_url": "https://woocommerce-fusion-docs.finfoot.tech/features/item-stock-levels.html",
+=======
+>>>>>>> fix pre-commit formatting
    "fieldname": "enable_stock_level_synchronisation",
    "fieldtype": "Check",
    "label": "Enable Stock Level Synchronisation"
@@ -408,7 +423,10 @@
    "label": "Item Fields"
   },
   {
+<<<<<<< HEAD
    "documentation_url": "https://woocommerce-fusion-docs.finfoot.tech/features/items.html#custom-fields-mapping",
+=======
+>>>>>>> fix pre-commit formatting
    "fieldname": "item_field_map",
    "fieldtype": "Table",
    "label": "Fields Mapping",
@@ -427,6 +445,7 @@
    "fieldname": "sync_sales_orders",
    "fieldtype": "HTML",
    "options": "\n\t\t\t<div class=\"checkbox\">\n\t\t\t\t<label>\n\t\t\t\t\t<span class=\"input-area\" style=\"display: none;\"></span>\n\t\t\t\t\t<span class=\"disp-area\"><input type=\"checkbox\" disabled class=\"disabled-selected\"></span>\n\t\t\t\t\t<span class=\"label-area\">Synchronise Sales Orders</span>\n\t\t\t\t\t<span class=\"ml-1 help\"></span>\n\t\t\t\t</label>\n\t\t\t\t<p class=\"help-box small text-muted\">Create new ERPNext Sales Orders for existing and new WooCommerce Sales Orders. This can not be turned off.</p>\n\t\t\t</div>\n\t\t<span class=\"tooltip-content\">enable_so_sync</span>"
+<<<<<<< HEAD
   },
   {
    "fieldname": "section_addresses",
@@ -511,11 +530,17 @@
    "fieldname": "subtract_reserved_stock",
    "fieldtype": "Check",
    "label": "Reserved Stock Adjustment"
+=======
+>>>>>>> fix pre-commit formatting
   }
  ],
  "index_web_pages_for_search": 1,
  "links": [],
+<<<<<<< HEAD
  "modified": "2025-03-02 12:12:53.464419",
+=======
+ "modified": "2024-12-10 22:46:37.242357",
+>>>>>>> fix pre-commit formatting
  "modified_by": "Administrator",
  "module": "WooCommerce",
  "name": "WooCommerce Server",

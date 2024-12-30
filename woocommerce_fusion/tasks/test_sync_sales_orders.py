@@ -1,5 +1,9 @@
 import json
+<<<<<<< HEAD
 from unittest.mock import Mock, call, patch
+=======
+from unittest.mock import Mock, patch
+>>>>>>> fix pre-commit formatting
 
 import frappe
 from erpnext import get_default_company
@@ -270,6 +274,7 @@ class TestWooCommerceSync(FrappeTestCase):
 		mock_frappe_new_doc.assert_called_once_with("Payment Entry")
 		self.assertEqual(mock_row.reference_name, "INVOICE-12345")
 
+<<<<<<< HEAD
 	@patch.object(SynchroniseSalesOrder, "create_address")
 	@patch.object(SynchroniseSalesOrder, "update_address")
 	@patch("woocommerce_fusion.tasks.sync_sales_orders.frappe.new_doc")
@@ -374,6 +379,8 @@ class TestWooCommerceSync(FrappeTestCase):
 
 		mock_create_address.assert_has_calls(expected_calls)
 
+=======
+>>>>>>> fix pre-commit formatting
 
 def create_bank_account(
 	bank_name=default_bank, account_name="_Test Bank", company=default_company

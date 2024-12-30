@@ -2,18 +2,27 @@ from unittest.mock import patch
 
 import frappe
 from erpnext import get_default_company
+<<<<<<< HEAD
 from erpnext.selling.doctype.sales_order.sales_order import update_status
 from erpnext.stock.doctype.item.test_item import create_item
 from parameterized import parameterized
 
 from woocommerce_fusion.tasks.sync_sales_orders import (
 	get_addresses_linking_to,
+=======
+from erpnext.stock.doctype.item.test_item import create_item
+
+from woocommerce_fusion.tasks.sync_sales_orders import (
+>>>>>>> fix pre-commit formatting
 	get_tax_inc_price_for_woocommerce_line_item,
 	run_sales_order_sync,
 )
 from woocommerce_fusion.tasks.test_integration_helpers import (
 	TestIntegrationWooCommerce,
+<<<<<<< HEAD
 	create_shipping_rule,
+=======
+>>>>>>> fix pre-commit formatting
 	get_woocommerce_server,
 )
 
@@ -27,6 +36,7 @@ class TestIntegrationWooCommerceSync(TestIntegrationWooCommerce):
 	def _create_sales_taxes_and_charges_template(
 		self, wc_server, rate: float, included_in_rate: bool = False
 	) -> str:
+<<<<<<< HEAD
 		taxes_and_charges_template = None
 		title = f"_Test Sales Taxes and Charges Template for Woo {rate}-{included_in_rate}"
 		if frappe.db.exists("Sales Taxes and Charges Template", {"title": title}):
@@ -55,6 +65,29 @@ class TestIntegrationWooCommerceSync(TestIntegrationWooCommerce):
 		return taxes_and_charges_template.name
 
 	def test_sync_create_new_sales_order(self, mock_log_error):
+=======
+		taxes_and_charges_template = frappe.get_doc(
+			{
+				"company": wc_server.company,
+				"doctype": "Sales Taxes and Charges Template",
+				"taxes": [
+					{
+						"account_head": wc_server.tax_account,
+						"charge_type": "On Net Total",
+						"description": "VAT",
+						"doctype": "Sales Taxes and Charges",
+						"parentfield": "taxes",
+						"rate": rate,
+						"included_in_print_rate": included_in_rate,
+					}
+				],
+				"title": "_Test Sales Taxes and Charges Template for Woo",
+			}
+		).insert(ignore_if_duplicate=True)
+		return taxes_and_charges_template.name
+
+	def test_sync_create_new_sales_order_when_synchronising_with_woocommerce(self, mock_log_error):
+>>>>>>> fix pre-commit formatting
 		"""
 		Test that the Sales Order Synchronisation method creates a new Sales order when there is a new
 		WooCommerce order.
@@ -65,7 +98,11 @@ class TestIntegrationWooCommerceSync(TestIntegrationWooCommerce):
 		"""
 		# Create a new order in WooCommerce
 		wc_order_id, wc_order_name = self.post_woocommerce_order(
+<<<<<<< HEAD
 			payment_method_title="Doge", item_price=10, item_qty=1, customer_note="The big brown fox"
+=======
+			payment_method_title="Doge", item_price=10, item_qty=1
+>>>>>>> fix pre-commit formatting
 		)
 
 		# Run synchronisation
@@ -75,9 +112,14 @@ class TestIntegrationWooCommerceSync(TestIntegrationWooCommerce):
 		mock_log_error.assert_not_called()
 
 		# Expect newly created Sales Order in ERPNext
+<<<<<<< HEAD
 		sales_order_name = frappe.get_value("Sales Order", {"woocommerce_id": wc_order_id})
 		self.assertIsNotNone(sales_order_name)
 		sales_order = frappe.get_doc("Sales Order", sales_order_name)
+=======
+		sales_order = frappe.get_doc("Sales Order", {"woocommerce_id": wc_order_id})
+		self.assertIsNotNone(sales_order)
+>>>>>>> fix pre-commit formatting
 
 		# Expect correct payment method title on Sales Order
 		self.assertEqual(sales_order.woocommerce_payment_method, "Doge")
@@ -93,6 +135,7 @@ class TestIntegrationWooCommerceSync(TestIntegrationWooCommerce):
 		self.assertEqual(sales_order.taxes[0].total, 10)
 		self.assertEqual(sales_order.taxes[0].account_head, "VAT - SC")
 
+<<<<<<< HEAD
 		# Expect correct customer note
 		self.assertEqual(sales_order.custom_woocommerce_customer_note, "The big brown fox")
 
@@ -100,6 +143,14 @@ class TestIntegrationWooCommerceSync(TestIntegrationWooCommerce):
 		self.delete_woocommerce_order(wc_order_id=wc_order_id)
 
 	def test_sync_create_new_sales_order_in_usd(self, mock_log_error):
+=======
+		# Delete order in WooCommerce
+		self.delete_woocommerce_order(wc_order_id=wc_order_id)
+
+	def test_sync_create_new_sales_order_in_usd_when_synchronising_with_woocommerce(
+		self, mock_log_error
+	):
+>>>>>>> fix pre-commit formatting
 		"""
 		Test that the Sales Order Synchronisation method creates a new Sales order in the correct currency
 		when currency is different from base currency
@@ -120,6 +171,7 @@ class TestIntegrationWooCommerceSync(TestIntegrationWooCommerce):
 		mock_log_error.assert_not_called()
 
 		# Expect newly created Sales Order in ERPNext
+<<<<<<< HEAD
 		sales_order_currency = frappe.get_value(
 			"Sales Order", {"woocommerce_id": wc_order_id}, "currency"
 		)
@@ -127,10 +179,18 @@ class TestIntegrationWooCommerceSync(TestIntegrationWooCommerce):
 
 		# Expect correct currency in Sales Order
 		self.assertEqual(sales_order_currency, "USD")
+=======
+		sales_order = frappe.get_doc("Sales Order", {"woocommerce_id": wc_order_id})
+		self.assertIsNotNone(sales_order)
+
+		# Expect correct currency in Sales Order
+		self.assertEqual(sales_order.currency, "USD")
+>>>>>>> fix pre-commit formatting
 
 		# Delete order in WooCommerce
 		self.delete_woocommerce_order(wc_order_id=wc_order_id)
 
+<<<<<<< HEAD
 	@parameterized.expand([(True, 50, 13.04, 26.08, 100), (False, 43.48, 13.04, 26.08, 100)])
 	def test_sync_create_new_sales_order_with_tax_template_and_shipping(
 		self,
@@ -153,21 +213,44 @@ class TestIntegrationWooCommerceSync(TestIntegrationWooCommerce):
 		1. Tax Template that includes tax so Item Rate should include Tax (=50), and tax should be 50 x 2 x 15/115 = 13.04
 		2. Tax Template that excludes tax so Item Rate should exclude Tax (=43.48), and tax should be 50 x 2 x 15/115 = 13.04
 
+=======
+	def test_sync_create_new_sales_order_with_tax_template_when_synchronising_with_woocommerce(
+		self, mock_log_error
+	):
+		"""
+		Test that the Sales Order Synchronisation method creates a new Sales order with a Tax Template
+		for a new WooCommerce order and a Sales Taxes and Charges template has been set in settings.
+
+		Assumes that the Wordpress Site we're testing against has:
+		- Tax enabled
+		- Sales prices include tax
+>>>>>>> fix pre-commit formatting
 		"""
 		# Setup
 		wc_server = frappe.get_doc("WooCommerce Server", self.wc_server.name)
 		template_name = self._create_sales_taxes_and_charges_template(
+<<<<<<< HEAD
 			wc_server, rate=15, included_in_rate=included_in_rate
+=======
+			wc_server, rate=15, included_in_rate=1
+>>>>>>> fix pre-commit formatting
 		)
 		wc_server.use_actual_tax_type = 0
 		wc_server.sales_taxes_and_charges_template = template_name
 		wc_server.flags.ignore_mandatory = True
+<<<<<<< HEAD
 		wc_server.shipping_rule_map = []
+=======
+>>>>>>> fix pre-commit formatting
 		wc_server.save()
 
 		# Create a new order in WooCommerce
 		wc_order_id, wc_order_name = self.post_woocommerce_order(
+<<<<<<< HEAD
 			payment_method_title="Doge", item_price=50, item_qty=2, shipping_method_id="flat_rate"
+=======
+			payment_method_title="Doge", item_price=10, item_qty=2
+>>>>>>> fix pre-commit formatting
 		)
 
 		# Run synchronisation
@@ -177,22 +260,32 @@ class TestIntegrationWooCommerceSync(TestIntegrationWooCommerce):
 		mock_log_error.assert_not_called()
 
 		# Expect newly created Sales Order in ERPNext
+<<<<<<< HEAD
 		sales_order_name = frappe.get_value("Sales Order", {"woocommerce_id": wc_order_id}, "name")
 		self.assertIsNotNone(sales_order_name)
 		sales_order = frappe.get_doc("Sales Order", sales_order_name)
+=======
+		sales_order = frappe.get_doc("Sales Order", {"woocommerce_id": wc_order_id})
+		self.assertIsNotNone(sales_order)
+>>>>>>> fix pre-commit formatting
 
 		# Expect correct payment method title on Sales Order
 		self.assertEqual(sales_order.woocommerce_payment_method, "Doge")
 
 		# Expect correct items in Sales Order
+<<<<<<< HEAD
 		self.assertEqual(
 			sales_order.items[0].rate, expected_item_rate
 		)  # should show tax inclusive price
+=======
+		self.assertEqual(sales_order.items[0].rate, 10)  # should show tax inclusive price
+>>>>>>> fix pre-commit formatting
 		self.assertEqual(sales_order.items[0].qty, 2)
 
 		# Expect correct tax rows in Sales Order
 		self.assertEqual(sales_order.taxes[0].charge_type, "On Net Total")
 		self.assertEqual(sales_order.taxes[0].rate, 15)
+<<<<<<< HEAD
 		self.assertEqual(sales_order.taxes[0].tax_amount, expected_tax_amount)
 		self.assertEqual(sales_order.taxes[0].base_tax_amount, expected_base_tax_amount)
 		self.assertEqual(sales_order.taxes[0].total, expected_total_amount)
@@ -206,6 +299,18 @@ class TestIntegrationWooCommerceSync(TestIntegrationWooCommerce):
 		self.delete_woocommerce_order(wc_order_id=wc_order_id)
 
 	def test_sync_create_new_sales_order_and_pe(self, mock_log_error):
+=======
+		self.assertEqual(sales_order.taxes[0].tax_amount, 2.61)  # 20 x 15/115 = 2.61
+		self.assertEqual(sales_order.taxes[0].total, 20)
+		self.assertEqual(sales_order.taxes[0].account_head, "VAT - SC")
+
+		# Delete order in WooCommerce
+		self.delete_woocommerce_order(wc_order_id=wc_order_id)
+
+	def test_sync_create_new_sales_order_and_pe_when_synchronising_with_woocommerce(
+		self, mock_log_error
+	):
+>>>>>>> fix pre-commit formatting
 		"""
 		Test that the Sales Order Synchronisation method creates a new Sales orders and a Payment Entry
 		when there is a new fully paid WooCommerce orders.
@@ -217,16 +322,33 @@ class TestIntegrationWooCommerceSync(TestIntegrationWooCommerce):
 		run_sales_order_sync(woocommerce_order_name=wc_order_name)
 		mock_log_error.assert_not_called()
 
+<<<<<<< HEAD
 		# Expect newly created Sales Order and linked Payment Entry in ERPNext
 		sales_order_payment_entry = frappe.get_value(
 			"Sales Order", {"woocommerce_id": wc_order_id}, "woocommerce_payment_entry"
 		)
 		self.assertIsNotNone(sales_order_payment_entry)
+=======
+		# Expect newly created Sales Order in ERPNext
+		sales_order = frappe.get_doc("Sales Order", {"woocommerce_id": wc_order_id})
+		self.assertIsNotNone(sales_order)
+
+		# Expect linked Payment Entry in ERPNext
+		sales_order = frappe.get_doc("Sales Order", {"woocommerce_id": wc_order_id})
+		self.assertIsNotNone(sales_order)
+		self.assertIsNotNone(sales_order.woocommerce_payment_entry)
+>>>>>>> fix pre-commit formatting
 
 		# Delete order in WooCommerce
 		self.delete_woocommerce_order(wc_order_id=wc_order_id)
 
+<<<<<<< HEAD
 	def test_sync_create_new_draft_sales_order(self, mock_log_error):
+=======
+	def test_sync_create_new_draft_sales_order_when_synchronising_with_woocommerce(
+		self, mock_log_error
+	):
+>>>>>>> fix pre-commit formatting
 		"""
 		Test that the Sales Order Synchronisation method creates a new Draft Sales order without errors
 		when the submit_sales_orders setting is set to 0
@@ -246,8 +368,13 @@ class TestIntegrationWooCommerceSync(TestIntegrationWooCommerce):
 		mock_log_error.assert_not_called()
 
 		# Expect newly created Sales Order in ERPNext
+<<<<<<< HEAD
 		sales_order_name = frappe.get_value("Sales Order", {"woocommerce_id": wc_order_id}, "name")
 		self.assertIsNotNone(sales_order_name)
+=======
+		sales_order = frappe.get_doc("Sales Order", {"woocommerce_id": wc_order_id})
+		self.assertIsNotNone(sales_order)
+>>>>>>> fix pre-commit formatting
 
 		# Teardown
 		wc_server = frappe.get_doc("WooCommerce Server", self.wc_server.name)
@@ -258,7 +385,13 @@ class TestIntegrationWooCommerceSync(TestIntegrationWooCommerce):
 		# Delete order in WooCommerce
 		self.delete_woocommerce_order(wc_order_id=wc_order_id)
 
+<<<<<<< HEAD
 	def test_sync_link_payment_entry_after_so_submitted(self, mock_log_error):
+=======
+	def test_sync_link_payment_entry_after_so_submitted_when_synchronising_with_woocommerce(
+		self, mock_log_error
+	):
+>>>>>>> fix pre-commit formatting
 		"""
 		Test that the Sales Order Synchronisation method creates a linked Payment Entry if there are no linked
 		PE's on a now-submitted Sales Order
@@ -296,7 +429,11 @@ class TestIntegrationWooCommerceSync(TestIntegrationWooCommerce):
 		# Delete order in WooCommerce
 		self.delete_woocommerce_order(wc_order_id=wc_order_id)
 
+<<<<<<< HEAD
 	def test_sync_updates_woocommerce_order(self, mock_log_error):
+=======
+	def test_sync_updates_woocommerce_order_when_synchronising_with_woocommerce(self, mock_log_error):
+>>>>>>> fix pre-commit formatting
 		"""
 		Test that the Sales Order Synchronisation method updates a WooCommerce Order
 		with changed fields from Sales Order
@@ -332,9 +469,14 @@ class TestIntegrationWooCommerceSync(TestIntegrationWooCommerce):
 		mock_log_error.assert_not_called()
 
 		# Expect newly created Sales Order in ERPNext
+<<<<<<< HEAD
 		sales_order_name = frappe.get_value("Sales Order", {"woocommerce_id": wc_order_id}, "name")
 		self.assertIsNotNone(sales_order_name)
 		sales_order = frappe.get_doc("Sales Order", sales_order_name)
+=======
+		sales_order = frappe.get_doc("Sales Order", {"woocommerce_id": wc_order_id})
+		self.assertIsNotNone(sales_order)
+>>>>>>> fix pre-commit formatting
 
 		# In ERPNext, change quantity of first item, and add an additional item
 		sales_order.items[0].qty = 2
@@ -366,7 +508,13 @@ class TestIntegrationWooCommerceSync(TestIntegrationWooCommerce):
 		# Delete order in WooCommerce
 		self.delete_woocommerce_order(wc_order_id=wc_order_id)
 
+<<<<<<< HEAD
 	def test_sync_uses_dummy_item_for_deleted_item(self, mock_log_error):
+=======
+	def test_sync_uses_dummy_item_for_deleted_item_when_synchronising_with_woocommerce(
+		self, mock_log_error
+	):
+>>>>>>> fix pre-commit formatting
 		"""
 		Test that the Sales Order Synchronisation method uses a placeholder item when
 		synchronising with a WooCommerce Order that has a deleted item
@@ -391,9 +539,14 @@ class TestIntegrationWooCommerceSync(TestIntegrationWooCommerce):
 		mock_log_error.assert_not_called()
 
 		# Expect newly created Sales Order in ERPNext
+<<<<<<< HEAD
 		sales_order_name = frappe.get_value("Sales Order", {"woocommerce_id": wc_order_id}, "name")
 		self.assertIsNotNone(sales_order_name)
 		sales_order = frappe.get_doc("Sales Order", sales_order_name)
+=======
+		sales_order = frappe.get_doc("Sales Order", {"woocommerce_id": wc_order_id})
+		self.assertIsNotNone(sales_order)
+>>>>>>> fix pre-commit formatting
 
 		# Expect placeholder item
 		self.assertEqual(sales_order.items[0].item_code, "DELETED_WOOCOMMERCE_PRODUCT")
@@ -406,6 +559,7 @@ class TestIntegrationWooCommerceSync(TestIntegrationWooCommerce):
 
 		# Delete order in WooCommerce
 		self.delete_woocommerce_order(wc_order_id=wc_order_id)
+<<<<<<< HEAD
 
 	def test_sync_use_same_customer_for_multiple_orders(self, mock_log_error):
 		"""
@@ -723,3 +877,5 @@ class TestIntegrationWooCommerceSync(TestIntegrationWooCommerce):
 
 		# Delete order in WooCommerce
 		self.delete_woocommerce_order(wc_order_id=wc_order_id)
+=======
+>>>>>>> fix pre-commit formatting

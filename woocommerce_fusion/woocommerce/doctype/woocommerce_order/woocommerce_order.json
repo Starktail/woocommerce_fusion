@@ -370,7 +370,11 @@
  "index_web_pages_for_search": 1,
  "is_virtual": 1,
  "links": [],
+<<<<<<< HEAD
  "modified": "2024-12-12 08:17:46.566425",
+=======
+ "modified": "2024-07-01 09:02:14.658604",
+>>>>>>> fix pre-commit formatting
  "modified_by": "Administrator",
  "module": "WooCommerce",
  "name": "WooCommerce Order",

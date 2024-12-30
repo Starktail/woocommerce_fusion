@@ -19,9 +19,10 @@ Click on the "Sales Orders" tab and complete the mandatory fields
 !["Sales Orders" tab](images/so-tab-mandatory.png)
 
 **Settings**:
+
 - Synchronise Sales Order Line changes back
 
-When set, adding/removing/changing Sales Order **Lines** will be synchronised back to the WooCommerce Order (Note: Sales Orders will always be synchronised, this setting is for sync'ing changed Sales Order **Lines** *back* to WooCommerce)
+When set, adding/removing/changing Sales Order **Lines** will be synchronised back to the WooCommerce Order (Note: Sales Orders will always be synchronised, this setting is for sync'ing changed Sales Order **Lines** _back_ to WooCommerce)
 
 - Enable Payments Sync
 
@@ -29,17 +30,17 @@ Let the app create Payment Entries for paid Sales Orders. A mapping of Payment M
 
 A **Payment Entry** will only be created if the following conditions are true:
 
-- `WooCommerce Order` > `Payment Method` is set 
-**and**
+- `WooCommerce Order` > `Payment Method` is set
+  **and**
 - `WooCommerce Order` > `Date Paid` is set (unless `Ignore empty 'Date Paid' field on WooCommerce Orders` is set on `WooCommerce Server`
 
-*When the payment method is "Cash on Delivery" (cod), the `Date Paid` field would usually be blank, so creation of a *Payment Entry* won't happen. If you want to be sure, you can add `cod` in the mapping:
+*When the payment method is "Cash on Delivery" (cod), the `Date Paid` field would usually be blank, so creation of a *Payment Entry\* won't happen. If you want to be sure, you can add `cod` in the mapping:
 
 ```json
 {
-   "bacs": "1000-000 Bank Account",
-   "cheque": "1000-100 Other Bank Account",
-   "cod": ""
+  "bacs": "1000-000 Bank Account",
+  "cheque": "1000-100 Other Bank Account",
+  "cod": ""
 }
 ```
 
@@ -50,12 +51,13 @@ Click on the "Items" tab if you want to turn on Stock Level Synchronisation
 !["Items" tab](images/items-tab.png)
 
 **Settings**:
--  Default Item Code Naming Basis
-   -  How the item code should be determined when an item is created, either "WooCommerce ID" or "Product SKU".
--  Enable Stock Level Synchronisation
-   -  Turns on Syncrhonisation of Item Stock Levels to WooCommerce
--  Warehouses
-   -  Select the Warehouses that should be taken into account when synchronising Item Stock Levels
+
+- Default Item Code Naming Basis
+  - How the item code should be determined when an item is created, either "WooCommerce ID" or "Product SKU".
+- Enable Stock Level Synchronisation
+  - Turns on Syncrhonisation of Item Stock Levels to WooCommerce
+- Warehouses
+  - Select the Warehouses that should be taken into account when synchronising Item Stock Levels
 
 ---
 
