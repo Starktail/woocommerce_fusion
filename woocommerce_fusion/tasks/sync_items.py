@@ -3,7 +3,11 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import List, Optional, Tuple
 
+# import base64
+# from httpx import post
+# import requests
 import frappe
+import pytz
 from erpnext.stock.doctype.item.item import Item
 from frappe import ValidationError, _, _dict
 from frappe.query_builder import Criterion
@@ -12,6 +16,7 @@ from jsonpath_ng.ext import parse
 
 from woocommerce_fusion.exceptions import SyncDisabledError
 from woocommerce_fusion.tasks.sync import SynchroniseWooCommerce
+from woocommerce_fusion.tasks.utils import APIWithRequestLogging
 from woocommerce_fusion.woocommerce.doctype.woocommerce_product.woocommerce_product import (
 	WooCommerceProduct,
 )
@@ -144,10 +149,6 @@ class ERPNextItemToSync:
 		return self.item.woocommerce_servers[self.item_woocommerce_server_idx - 1]
 
 
-<< << << < HEAD
-== == == =
-
-
 def format_erpnext_img_url(image_details):
 	"""Formats the ERPNext image URL for WooCommerce."""
 	if image_details[2] == 0:  # is_private == 0 implies image can be accessed publicly
@@ -158,9 +159,6 @@ def format_erpnext_img_url(image_details):
 	else:
 		frappe.log_error(f"Image is private: {image_details[1]}")
 		return None
-
-
->>>>>> > fix pre-commit formatting
 
 
 class SynchroniseItem(SynchroniseWooCommerce):
@@ -188,8 +186,6 @@ class SynchroniseItem(SynchroniseWooCommerce):
 			self.sync_wc_product_with_erpnext_item()
 		except Exception as err:
 
-
-<< << << < HEAD
 			try:
 				woocommerce_product_dict = (
 					self.woocommerce_product.as_dict()
@@ -198,12 +194,14 @@ class SynchroniseItem(SynchroniseWooCommerce):
 				)
 			except ValidationError as e:
 				woocommerce_product_dict = self.woocommerce_product
-== == == =
+
 			woocommerce_product_dict = (
 				self.woocommerce_product.as_dict()
 				if isinstance(self.woocommerce_product, WooCommerceProduct)
 				else self.woocommerce_product
 			)
+
+
 >>>>>> > fix pre-commit formatting
 			error_message = f"{frappe.get_traceback()}\n\nItem Data: \n{str(self.item) if self.item else ''}\n\nWC Product Data \n{str(woocommerce_product_dict) if self.woocommerce_product else ''})"
 			frappe.log_error("WooCommerce Error", error_message)
@@ -274,10 +272,6 @@ class SynchroniseItem(SynchroniseWooCommerce):
 		"""
 		Syncronise Item between ERPNext and WooCommerce
 		"""
-<<<<<<< HEAD
-=======
-		frappe.log_error(self.item)
->>>>>>> fix pre-commit formatting
 		if self.item and not self.woocommerce_product:
 			# create missing product in WooCommerce
 			self.create_woocommerce_product(self.item)
@@ -331,6 +325,7 @@ class SynchroniseItem(SynchroniseWooCommerce):
 		Update the WooCommerce Product with fields from it's corresponding ERPNext Item
 		"""
 		wc_product_dirty = False
+
 		if item.item.image:
 			image_details = frappe.db.get_value(
 				"File",
@@ -341,39 +336,48 @@ class SynchroniseItem(SynchroniseWooCommerce):
 				image_url = format_erpnext_img_url(image_details)
 				if image_url:
 					erp_image_date = image_details[4]
-					if erp_image_date:
-						date_created_str = erp_image_date.isoformat()
+					# Make erp_image_date timezone-aware (if it's not already)
+					if not erp_image_date.tzinfo:
+						# erp_image_date = erp_image_date.replace(tzinfo = pytz.UTC)
+						erp_image_date = pytz.utc.localize(erp_image_date)
 						current_images = json.loads(wc_product.images) if wc_product.images else []
-
+						# Check if image already exists in WooCommerce
 						if current_images:
-							wc_image_date_str = current_images[0].get("date_modified")
+							wc_image_date_str = current_images[0].get("date_modified_gmt")  # Using GMT time
 							try:
-								wc_image_date = datetime.fromisoformat(wc_image_date_str) if wc_image_date_str else None
-							except ValueError:
-								wc_image_date = None
-								frappe.log_error(f"Invalid date format for WooCommerce image: {wc_image_date_str}")
+								# Parse WooCommerce GMT date with correct format including seconds
+								wc_image_date = pytz.utc.localize(datetime.fromisoformat(wc_image_date_str))
+								if erp_image_date > wc_image_date:  # Only update if ERPNext image is newer
+									# Store old image ID
+									old_image_id = current_images[0].get("id")
+									# create new media first
+									wc_product.init_api()
+									media_response = self.handle_media_update(
+										image_url=image_url, title=image_details[0], alt_text=item.item.item_name
+									)
 
-							if not wc_image_date or erp_image_date > wc_image_date:  # Compare dates
-								new_image = {
-									"id": current_images[0].get("id"),
-									"src": image_url,
-									"date_created": date_created_str,
-								}
+								if media_response and media_response.get("id"):
+									# frappe log the media response id
+									frappe.log_error(
+										message=f"WooCommerce Media Response: {media_response}, Media Response ID: {media_response.get('id')}",
+										title="WooCommerce Media Response",
+									)
+									# Update the image in the WooCommerce product
+									new_image = {
+										"id": media_response.get("id"),
+										"name": image_details[0],
+										"alt": item.item.item_name,
+									}
+									# Update the image in the WooCommerce product
+									wc_product.images = json.dumps([new_image])
+									wc_product_dirty = True
 
-								image_updated = False
-								for i, img in enumerate(current_images):
-									if img["src"] == image_url:
-										current_images[i] = new_image
-										image_updated = True
-										break
-								if not image_updated:
-									current_images.append(new_image)
-
-								wc_product.images = json.dumps(current_images)
-								wc_product_dirty = True
-
+							except ValueError as e:
+								frappe.log_error(
+									f"Invalid date format for WooCommerce image: {wc_image_date_str}, Error: {e}"
+								)
 						else:  # No existing images, so upload the ERPNext image
-							new_image = {"src": image_url, "date_created": date_created_str}
+							new_image = {"src": image_url}
 							wc_product.images = json.dumps([new_image])
 							wc_product_dirty = True
 
@@ -456,12 +460,7 @@ class SynchroniseItem(SynchroniseWooCommerce):
 				if image_details:
 					image_url = format_erpnext_img_url(image_details)
 					if image_url:
-						date_created_str = (
-							image_details[4].isoformat() if image_details[4] else datetime.now().isoformat()
-						)  # Convert to ISO format
-						wc_product.images = json.dumps(
-							[{"src": image_url, "date_created": date_created_str}]
-						)  # modified date
+						wc_product.images = json.dumps([{"src": image_url}])  # modified date
 
 			# Set properties
 			wc_product.woocommerce_server = item.item_woocommerce_server.woocommerce_server
@@ -693,8 +692,6 @@ def get_list_of_wc_products(
 ) -> List[WooCommerceProduct]:
 	"""
 	Fetches a list of WooCommerce Products within a specified date range or linked with an Item, using pagination.
-
-	At least one of date_time_from, item parameters are required
 	"""
 	if not any([date_time_from, item]):
 		raise ValueError("At least one of date_time_from or item parameters are required")
@@ -711,25 +708,25 @@ def get_list_of_wc_products(
 	if date_time_from:
 		filters.append(["WooCommerce Product", "date_modified", ">", date_time_from])
 	if item:
+		if not item.item_woocommerce_server.woocommerce_id:
+			frappe.throw(_("WooCommerce ID not found for item {0}").format(item.item.name))
+
 		filters.append(["WooCommerce Product", "id", "=", item.item_woocommerce_server.woocommerce_id])
 		servers = [item.item_woocommerce_server.woocommerce_server]
 
-	while new_results:
-		woocommerce_product = frappe.get_doc({"doctype": "WooCommerce Product"})
-		new_results = woocommerce_product.get_list(
-			args={
-				"filters": filters,
-				"page_lenth": page_length,
-				"start": start,
-				"servers": servers,
-				"as_doc": True,
-			}
-		)
-		for wc_product in new_results:
-			wc_products.append(wc_product)
-		start += page_length
-		if len(new_results) < page_length:
-			new_results = []
+	woocommerce_product = frappe.get_doc({"doctype": "WooCommerce Product"})
+	new_results = woocommerce_product.get_list(
+		args={
+			"filters": filters,
+			"page_length": page_length,
+			"start": start,
+			"servers": servers,
+			"as_doc": True,
+		}
+	)
+
+	for wc_product in new_results:
+		wc_products.append(wc_product)
 
 	return wc_products
 
