@@ -3,9 +3,6 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import List, Optional, Tuple
 
-# import base64
-# from httpx import post
-# import requests
 import frappe
 import pytz
 from erpnext.stock.doctype.item.item import Item
@@ -38,8 +35,7 @@ def run_item_sync_from_hook(doc, method):
 		and len(doc.woocommerce_servers) > 0
 	):
 		frappe.msgprint(
-			_("Background sync to WooCommerce triggered for {0} {1}").format(
-			    frappe.bold(doc.name), method),
+			_("Background sync to WooCommerce triggered for {}").format(frappe.bold(doc.name), method),
 			indicator="blue",
 			alert=True,
 		)
@@ -84,13 +80,11 @@ def run_item_sync(
 		if not item:
 			item = frappe.get_doc("Item", item_code)
 		if not item.woocommerce_servers:
-			frappe.throw(
-			    _("No WooCommerce Servers defined for Item {0}").format(item_code))
+			frappe.throw(_("No WooCommerce Servers defined for Item {0}").format(item_code))
 		for wc_server in item.woocommerce_servers:
 			# Trigger sync for every linked server
 			sync = SynchroniseItem(
-				item=ERPNextItemToSync(
-				    item=item, item_woocommerce_server_idx=wc_server.idx)
+				item=ERPNextItemToSync(item=item, item_woocommerce_server_idx=wc_server.idx)
 			)
 			if enqueue:
 				frappe.enqueue(sync.run)
@@ -187,6 +181,7 @@ class SynchroniseItem(SynchroniseWooCommerce):
 		except Exception as err:
 
 			try:
+
 				woocommerce_product_dict = (
 					self.woocommerce_product.as_dict()
 					if isinstance(self.woocommerce_product, WooCommerceProduct)
@@ -194,15 +189,6 @@ class SynchroniseItem(SynchroniseWooCommerce):
 				)
 			except ValidationError as e:
 				woocommerce_product_dict = self.woocommerce_product
-
-			woocommerce_product_dict = (
-				self.woocommerce_product.as_dict()
-				if isinstance(self.woocommerce_product, WooCommerceProduct)
-				else self.woocommerce_product
-			)
-
-
->>>>>> > fix pre-commit formatting
 			error_message = f"{frappe.get_traceback()}\n\nItem Data: \n{str(self.item) if self.item else ''}\n\nWC Product Data \n{str(woocommerce_product_dict) if self.woocommerce_product else ''})"
 			frappe.log_error("WooCommerce Error", error_message)
 			raise err
@@ -272,6 +258,7 @@ class SynchroniseItem(SynchroniseWooCommerce):
 		"""
 		Syncronise Item between ERPNext and WooCommerce
 		"""
+
 		if self.item and not self.woocommerce_product:
 			# create missing product in WooCommerce
 			self.create_woocommerce_product(self.item)
@@ -311,7 +298,6 @@ class SynchroniseItem(SynchroniseWooCommerce):
 				if item.item.image != wc_product_images[0]["src"]:
 					item.item.image = wc_product_images[0]["src"]
 					item_dirty = True
-
 		if item_dirty or fields_updated:
 			item.item.flags.created_by_sync = True
 			item.item.save()
@@ -356,21 +342,21 @@ class SynchroniseItem(SynchroniseWooCommerce):
 										image_url=image_url, title=image_details[0], alt_text=item.item.item_name
 									)
 
-								if media_response and media_response.get("id"):
-									# frappe log the media response id
-									frappe.log_error(
-										message=f"WooCommerce Media Response: {media_response}, Media Response ID: {media_response.get('id')}",
-										title="WooCommerce Media Response",
-									)
-									# Update the image in the WooCommerce product
-									new_image = {
-										"id": media_response.get("id"),
-										"name": image_details[0],
-										"alt": item.item.item_name,
-									}
-									# Update the image in the WooCommerce product
-									wc_product.images = json.dumps([new_image])
-									wc_product_dirty = True
+									if media_response and media_response.get("id"):
+										# frappe log the media response id
+										frappe.log_error(
+											message=f"WooCommerce Media Response: {media_response}, Media Response ID: {media_response.get('id')}",
+											title="WooCommerce Media Response",
+										)
+										# Update the image in the WooCommerce product
+										new_image = {
+											"id": media_response.get("id"),
+											"name": image_details[0],
+											"alt": item.item.item_name,
+										}
+										# Update the image in the WooCommerce product
+										wc_product.images = json.dumps([new_image])
+										wc_product_dirty = True
 
 							except ValueError as e:
 								frappe.log_error(
@@ -385,6 +371,22 @@ class SynchroniseItem(SynchroniseWooCommerce):
 		if wc_product.woocommerce_name != item.item.item_name:
 			wc_product.woocommerce_name = item.item.item_name
 			wc_product_dirty = True
+
+		# In the update_woocommerce_product method, add this check
+		if wc_product.type == "variation" and item.item.variant_of:
+			# Ensure the parent_id is set correctly
+			parent_item = frappe.get_doc("Item", item.item.variant_of)
+			parent_wc_server = next(
+				(
+					s
+					for s in parent_item.woocommerce_servers
+					if s.woocommerce_server == wc_product.woocommerce_server
+				),
+				None,
+			)
+			if parent_wc_server and parent_wc_server.woocommerce_id:
+				wc_product.parent_id = parent_wc_server.woocommerce_id
+				wc_product_dirty = True
 
 		product_fields_changed, wc_product = self.set_product_fields(wc_product, item)
 		if product_fields_changed:
@@ -429,6 +431,10 @@ class SynchroniseItem(SynchroniseWooCommerce):
 					)
 
 				wc_product.attributes = json.dumps(wc_product_attributes)
+				wc_product.status = "publish"
+				wc_product.purchasable = 1
+				# Flag to indicate this product needs variation generation
+				wc_product.needs_variation_generation = True
 
 			if item.item.variant_of:
 				# Check if parent exists
@@ -471,6 +477,10 @@ class SynchroniseItem(SynchroniseWooCommerce):
 
 			wc_product.insert()
 			self.woocommerce_product = wc_product
+
+			# Generate variations if this is a variable product
+			if wc_product.type == "variable" and getattr(wc_product, "needs_variation_generation", False):
+				self.generate_variations_for_product(wc_product.woocommerce_id)
 
 			# Reload ERPNext Item
 			item.item.reload()
@@ -537,9 +547,45 @@ class SynchroniseItem(SynchroniseWooCommerce):
 			),
 		)
 
-		self.set_item_fields()
-
 		self.set_sync_hash()
+
+	# This method to generates variations for a variable product in woocommerce
+
+	def generate_variations_for_product(self, wc_product_id):
+		"""Generate variations in WooCommerce for a variable product"""
+		wc_server = frappe.get_cached_doc(
+			"WooCommerce Server", self.woocommerce_product.woocommerce_server
+		)
+
+		if not wc_server or not wc_server.enable_sync:
+			return None
+
+		wc_api = APIWithRequestLogging(
+			url=wc_server.woocommerce_server_url,
+			consumer_key=wc_server.api_consumer_key,
+			consumer_secret=wc_server.api_consumer_secret,
+			version="wc/v3",
+			timeout=40,
+		)
+
+		try:
+			# Call the WooCommerce API to generate variations
+			endpoint = f"products/{wc_product_id}/variations/batch"
+			# This is a special endpoint that generates all possible variations
+			response = wc_api.post(endpoint, data={"create": []})
+			response.raise_for_status()
+
+			frappe.log_error(
+				f"Generated variations for product {wc_product_id}: {response.json()}",
+				"WooCommerce Variation Generation",
+			)
+			return response.json()
+		except Exception as err:
+			frappe.log_error(
+				f"Error generating variations for product {wc_product_id}: {str(err)}",
+				"WooCommerce Variation Generation Error",
+			)
+			return None
 
 	def create_or_update_item_attributes(self, wc_product: WooCommerceProduct):
 		"""
@@ -686,12 +732,83 @@ class SynchroniseItem(SynchroniseWooCommerce):
 			update_modified=False,
 		)
 
+	def handle_media_update(
+		self, image_url: str, title: str, alt_text: str, old_image_id: int = None
+	):
+		"""
+		Handle media creation and deletion using WooCommerce API
+		"""
+		wc_server = frappe.get_cached_doc(
+			"WooCommerce Server", self.woocommerce_product.woocommerce_server
+		)
+
+		if not wc_server or not wc_server.enable_sync:
+			return None
+
+		# Get image data using the item's image field and Convert image_url to base64
+		file_details = frappe.db.get_value(
+			"File",
+			{"file_url": self.item.item.image},
+			["file_name", "file_url", "is_private", "content_hash", "modified"],
+		)
+		if file_details:
+			formatted_url = format_erpnext_img_url(file_details)
+			# if formatted_url:
+			#     response = requests.get(formatted_url)
+			#     image_data = base64.b64encode(
+			#         response.content).decode('utf-8')
+
+		wc_api = APIWithRequestLogging(
+			url=wc_server.woocommerce_server_url,
+			consumer_key=wc_server.api_consumer_key,
+			consumer_secret=wc_server.api_consumer_secret,
+			version="wc/v3",
+			timeout=40,
+		)
+
+		# Create new media
+		media_endpoint = "media"
+		media_data = {
+			"image_url": image_url,
+			"title": title,
+			"alt_text": alt_text,
+			"post": self.woocommerce_product.woocommerce_id,
+			# "media_attachment": image_data
+		}
+
+		try:
+			response = wc_api.post(media_endpoint, data=media_data)
+			response.raise_for_status()
+
+			media_response = response.json()
+
+			if old_image_id:
+				# Delete old media
+				delete_response = wc_api.delete(f"media/{old_image_id}")
+				delete_response.raise_for_status()
+
+			return {
+				# Note the uppercase ID from WP response
+				"id": str(media_response["ID"]),
+				"src": media_response["guid"],
+				"name": media_response["post_title"],
+				"date_modified_gmt": media_response["post_modified_gmt"],
+				"alt": media_response.get("post_excerpt") or alt_text,
+			}
+
+		except Exception as err:
+			error_message = f"{frappe.get_traceback()}\n\nData in request: \n{str(media_data)}"
+			frappe.log_error("WooCommerce Error", error_message)
+			raise err
+
 
 def get_list_of_wc_products(
 	item: Optional[ERPNextItemToSync] = None, date_time_from: Optional[datetime] = None
 ) -> List[WooCommerceProduct]:
 	"""
 	Fetches a list of WooCommerce Products within a specified date range or linked with an Item, using pagination.
+
+	At least one of date_time_from, item parameters are required
 	"""
 	if not any([date_time_from, item]):
 		raise ValueError("At least one of date_time_from or item parameters are required")
@@ -708,25 +825,27 @@ def get_list_of_wc_products(
 	if date_time_from:
 		filters.append(["WooCommerce Product", "date_modified", ">", date_time_from])
 	if item:
-		if not item.item_woocommerce_server.woocommerce_id:
-			frappe.throw(_("WooCommerce ID not found for item {0}").format(item.item.name))
 
 		filters.append(["WooCommerce Product", "id", "=", item.item_woocommerce_server.woocommerce_id])
 		servers = [item.item_woocommerce_server.woocommerce_server]
 
-	woocommerce_product = frappe.get_doc({"doctype": "WooCommerce Product"})
-	new_results = woocommerce_product.get_list(
-		args={
-			"filters": filters,
-			"page_length": page_length,
-			"start": start,
-			"servers": servers,
-			"as_doc": True,
-		}
-	)
+	while new_results:
+		woocommerce_product = frappe.get_doc({"doctype": "WooCommerce Product"})
+		new_results = woocommerce_product.get_list(
+			args={
+				"filters": filters,
+				"page_length": page_length,
+				"start": start,
+				"servers": servers,
+				"as_doc": True,
+			}
+		)
 
-	for wc_product in new_results:
-		wc_products.append(wc_product)
+		for wc_product in new_results:
+			wc_products.append(wc_product)
+		start += page_length
+		if len(new_results) < page_length:
+			new_results = []
 
 	return wc_products
 
@@ -753,6 +872,35 @@ def get_item_price_rate(item: ERPNextItemToSync):
 			),
 			None,
 		)
+
+
+@frappe.whitelist()
+def sync_item_family(template_item_code):
+	"""Sync a template item and all its variants to WooCommerce"""
+	template_item = frappe.get_doc("Item", template_item_code)
+	if not template_item.has_variants:
+		frappe.throw(_("Item {0} is not a template item").format(template_item_code))
+
+	# First sync the template
+	parent_item, parent_wc_product = run_item_sync(item=template_item, enqueue=False)
+
+	if parent_wc_product and parent_wc_product.type == "variable":
+		# Generate variations in WooCommerce
+		sync = SynchroniseItem(woocommerce_product=parent_wc_product)
+		sync.generate_variations_for_product(parent_wc_product.woocommerce_id)
+
+	# Then sync all variants
+	variants = frappe.get_all("Item", filters={"variant_of": template_item_code})
+	for variant in variants:
+		variant_item = frappe.get_doc("Item", variant.name)
+		run_item_sync(item=variant_item, enqueue=True)
+
+	frappe.msgprint(
+		_("Syncing template item {0} and {1} variants").format(template_item_code, len(variants)),
+		alert=True,
+	)
+
+	return template_item_code
 
 
 def clear_sync_hash_and_run_item_sync(item_code: str):

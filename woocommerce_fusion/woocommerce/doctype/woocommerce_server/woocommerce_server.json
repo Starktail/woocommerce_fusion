@@ -1,610 +1,585 @@
 {
- "actions": [],
- "creation": "2023-11-15 07:51:11.482450",
- "default_view": "List",
- "doctype": "DocType",
- "editable_grid": 1,
- "engine": "InnoDB",
- "field_order": [
-  "tab_details",
-  "warning_html",
-  "section_break_yuyb",
-  "enable_sync",
-  "woocommerce_server_url",
-  "column_break_ikke",
-  "api_consumer_key",
-  "api_consumer_secret",
-  "section_details_defaults",
-  "creation_user",
-  "column_break_14",
-  "section_break_endpoints",
-  "secret",
-  "view_webhook_config",
-  "tab_sales_orders",
-  "column_break_tefw",
-  "sync_sales_orders",
-  "column_break_utsi",
-  "sync_so_items_to_wc",
-  "section_so_defaults",
-  "company",
-  "warehouse",
-  "item_group",
-  "column_break_xqqb",
-  "submit_sales_orders",
-  "sales_order_series",
-  "delivery_after_days",
-  "uom",
-  "section_break_accounting",
-  "tax_account",
-  "use_actual_tax_type",
-  "sales_taxes_and_charges_template",
-  "column_break_4b4vn",
-  "f_n_f_account",
-  "section_payments_sync",
-  "enable_payments_sync",
-  "ignore_date_paid",
-  "payment_method_bank_account_mapping",
-  "payment_method_gl_account_mapping",
-  "customers_sync_section",
-  "enable_dual_accounts",
-  "section_addresses",
-  "address_title_convention",
-  "shipping_methods_sync_section",
-  "enable_shipping_methods_sync",
-  "shipping_rule_map",
-  "so_status_sync_section",
-  "enable_so_status_sync",
-  "enable_so_status_sync_warning_html",
-  "sales_order_status_map",
-  "tab_items",
-  "item_section",
-  "name_by",
-  "enable_image_sync",
-  "item_stock_section",
-  "enable_stock_level_synchronisation",
-  "warehouses",
-  "subtract_reserved_stock",
-  "item_fields_section",
-  "item_fields_warning_html",
-  "item_field_map",
-  "tab_price_list",
-  "section_break_hnji",
-  "enable_price_list_sync",
-  "price_list",
-  "price_list_delay_per_item",
-  "tab_plugins",
-  "advanced_shipment_tracking_section",
-  "wc_plugin_advanced_shipment_tracking",
-  "wc_ast_shipment_providers"
- ],
- "fields": [
-  {
-   "fieldname": "warning_html",
-   "fieldtype": "HTML",
-   "label": "Warning HTML",
-   "options": "<div class=\"form-message red\">\n\t<div>{{__(\"Enabling Sync for WooCommerce Sites allows ERPNext to modify Stock Levels and Order Statuses on these Sites\")}}</div>\n</div>"
-  },
-  {
-   "default": "1",
-   "fieldname": "submit_sales_orders",
-   "fieldtype": "Check",
-   "label": "Submit Sales Orders during Synchronisation"
-  },
-  {
-   "fieldname": "section_break_accounting",
-   "fieldtype": "Section Break",
-   "label": "Accounting Details"
-  },
-  {
-   "depends_on": "eval: doc.use_actual_tax_type;",
-   "fieldname": "tax_account",
-   "fieldtype": "Link",
-   "label": "Tax Account",
-   "mandatory_depends_on": "eval: doc.use_actual_tax_type;",
-   "options": "Account"
-  },
-  {
-   "fieldname": "column_break_4b4vn",
-   "fieldtype": "Column Break"
-  },
-  {
-   "fieldname": "f_n_f_account",
-   "fieldtype": "Link",
-   "label": "Freight and Forwarding Account",
-   "options": "Account",
-   "reqd": 1
-  },
-  {
-   "description": "The user that will be used to create Customers, Items and Sales Orders. This user should have the relevant permissions.",
-   "fieldname": "creation_user",
-   "fieldtype": "Link",
-   "label": "Creation User",
-   "options": "User"
-  },
-  {
-   "description": "The fallback series is \"SO-WOO-\".",
-   "fieldname": "sales_order_series",
-   "fieldtype": "Select",
-   "label": "Sales Order Series",
-   "read_only": 1
-  },
-  {
-   "fieldname": "column_break_14",
-   "fieldtype": "Column Break"
-  },
-  {
-   "description": "This company will be used to create Sales Orders.",
-<<<<<<< HEAD
-   "documentation_url": "https://woocommerce-fusion-docs.finfoot.tech/features/sales-order.html",
-=======
->>>>>>> fix pre-commit formatting
-   "fieldname": "company",
-   "fieldtype": "Link",
-   "label": "Company",
-   "options": "Company",
-   "reqd": 1
-  },
-  {
-   "description": "This is the default offset (days) for the Delivery Date in Sales Orders. The fallback offset is 7 days from the order placement date.",
-   "fieldname": "delivery_after_days",
-   "fieldtype": "Int",
-   "label": "Delivery After (Days)"
-  },
-  {
-   "description": "This is the default UOM used for items and Sales orders. The fallback UOM is \"Nos\".",
-   "fieldname": "uom",
-   "fieldtype": "Link",
-   "label": "UOM",
-   "options": "UOM"
-  },
-  {
-   "fieldname": "section_break_endpoints",
-   "fieldtype": "Section Break",
-   "label": "Endpoints"
-  },
-  {
-   "description": "This is the default Item Group used for newly created items.",
-   "fieldname": "item_group",
-   "fieldtype": "Link",
-   "label": "Item Group",
-   "options": "Item Group",
-   "reqd": 1
-  },
-  {
-   "description": "Default warehouse for Sales Orders",
-   "fieldname": "warehouse",
-   "fieldtype": "Link",
-   "label": "Warehouse",
-   "options": "Warehouse",
-   "reqd": 1
-  },
-  {
-   "default": "1",
-   "description": "If checked, a 'Sales Taxes and Charges' line of type 'Actual' will be added for every WooCommerce Line Item with tax",
-   "fieldname": "use_actual_tax_type",
-   "fieldtype": "Check",
-   "label": "Use 'Actual' Tax Type"
-  },
-  {
-   "depends_on": "eval: !doc.use_actual_tax_type;",
-   "fieldname": "sales_taxes_and_charges_template",
-   "fieldtype": "Link",
-   "label": "Sales Taxes and Charges Template",
-   "mandatory_depends_on": "eval: !doc.use_actual_tax_type;",
-   "options": "Sales Taxes and Charges Template"
-  },
-  {
-   "fieldname": "secret",
-   "fieldtype": "Code",
-   "label": "Secret",
-   "read_only": 1
-  },
-  {
-   "fieldname": "view_webhook_config",
-   "fieldtype": "Button",
-   "label": "View WooCommerce Webhook Configuration"
-  },
-  {
-   "default": "1",
-<<<<<<< HEAD
-   "documentation_url": "https://woocommerce-fusion-docs.finfoot.tech/configure.html",
-=======
->>>>>>> fix pre-commit formatting
-   "fieldname": "enable_sync",
-   "fieldtype": "Check",
-   "in_list_view": 1,
-   "label": "Enable Sync"
-  },
-  {
-   "description": "e.g. https://mysite.woocommerce.com",
-   "fieldname": "woocommerce_server_url",
-   "fieldtype": "Data",
-   "in_list_view": 1,
-   "label": "WooCommerce Server URL",
-   "reqd": 1,
-   "set_only_once": 1
-  },
-  {
-   "fieldname": "api_consumer_key",
-   "fieldtype": "Data",
-   "label": "API consumer key",
-   "reqd": 1
-  },
-  {
-   "fieldname": "api_consumer_secret",
-   "fieldtype": "Data",
-   "label": "API consumer secret",
-   "reqd": 1
-  },
-  {
-   "default": "0",
-<<<<<<< HEAD
-   "documentation_url": "https://woocommerce-fusion-docs.finfoot.tech/features/woocommerce-plugins.html",
-=======
->>>>>>> fix pre-commit formatting
-   "fieldname": "wc_plugin_advanced_shipment_tracking",
-   "fieldtype": "Check",
-   "label": "Enable integration with 'Advanced Shipment Tracking' WooCommerce Plugin"
-  },
-  {
-   "fieldname": "wc_ast_shipment_providers",
-   "fieldtype": "Code",
-   "label": "Advanced Shipment Tracking Shipment Providers",
-   "read_only": 1
-  },
-  {
-   "default": "0",
-   "fieldname": "enable_payments_sync",
-   "fieldtype": "Check",
-   "label": "Enable Payments Sync"
-  },
-  {
-   "fieldname": "section_payments_sync",
-   "fieldtype": "Section Break",
-   "label": "Payment Entries Sync"
-  },
-  {
-   "default": "{}",
-   "depends_on": "eval: doc.enable_payments_sync === 1",
-   "fieldname": "payment_method_bank_account_mapping",
-   "fieldtype": "JSON",
-   "label": "Map Bank Accounts to Payment Methods"
-  },
-  {
-   "default": "{}",
-   "depends_on": "eval: doc.enable_payments_sync === 1",
-   "fieldname": "payment_method_gl_account_mapping",
-   "fieldtype": "JSON",
-   "label": "Map GL Accounts to Payment Methods"
-  },
-  {
-   "fieldname": "section_break_hnji",
-   "fieldtype": "Section Break"
-  },
-  {
-   "default": "0",
-<<<<<<< HEAD
-   "documentation_url": "https://woocommerce-fusion-docs.finfoot.tech/features/item-prices.html",
-=======
->>>>>>> fix pre-commit formatting
-   "fieldname": "enable_price_list_sync",
-   "fieldtype": "Check",
-   "label": "Enable Price List Sync"
-  },
-  {
-   "depends_on": "eval: doc.enable_price_list_sync",
-   "fieldname": "price_list",
-   "fieldtype": "Link",
-   "label": "Price List",
-   "mandatory_depends_on": "eval: doc.enable_price_list_sync",
-   "options": "Price List"
-  },
-  {
-   "default": "0",
-   "description": "Some WooCommerce payment gateways do not always set the 'Date Paid' field, which cause Payment Entries to not be created",
-   "fieldname": "ignore_date_paid",
-   "fieldtype": "Check",
-   "label": "Ignore empty 'Date Paid' field on WooCommerce Orders"
-  },
-  {
-   "default": "2",
-   "depends_on": "eval: doc.enable_price_list_sync",
-   "description": "In seconds. Increase if WC server can't handle the load.",
-   "fieldname": "price_list_delay_per_item",
-   "fieldtype": "Int",
-   "label": "Delay per POST Request"
-  },
-  {
-   "fieldname": "tab_details",
-   "fieldtype": "Tab Break",
-   "label": "Details"
-  },
-  {
-   "fieldname": "section_break_yuyb",
-   "fieldtype": "Section Break"
-  },
-  {
-   "fieldname": "column_break_ikke",
-   "fieldtype": "Column Break"
-  },
-  {
-   "fieldname": "section_details_defaults",
-   "fieldtype": "Section Break",
-   "label": "Defaults"
-  },
-  {
-   "depends_on": "eval: doc.enable_sync",
-   "fieldname": "tab_sales_orders",
-   "fieldtype": "Tab Break",
-   "label": "Sales Orders"
-  },
-  {
-   "fieldname": "section_so_defaults",
-   "fieldtype": "Section Break",
-   "label": "Defaults"
-  },
-  {
-   "fieldname": "column_break_xqqb",
-   "fieldtype": "Column Break"
-  },
-  {
-   "depends_on": "eval: doc.enable_sync",
-   "fieldname": "tab_items",
-   "fieldtype": "Tab Break",
-   "label": "Items"
-  },
-  {
-   "depends_on": "eval: doc.enable_sync",
-   "fieldname": "tab_plugins",
-   "fieldtype": "Tab Break",
-   "label": "WooCommerce Plugins"
-  },
-  {
-   "fieldname": "advanced_shipment_tracking_section",
-   "fieldtype": "Section Break",
-   "label": "Advanced Shipment Tracking"
-  },
-  {
-   "depends_on": "eval: doc.enable_sync",
-   "fieldname": "tab_price_list",
-   "fieldtype": "Tab Break",
-   "label": "Price List"
-  },
-  {
-   "default": "0",
-<<<<<<< HEAD
-   "documentation_url": "https://woocommerce-fusion-docs.finfoot.tech/features/item-stock-levels.html",
-=======
->>>>>>> fix pre-commit formatting
-   "fieldname": "enable_stock_level_synchronisation",
-   "fieldtype": "Check",
-   "label": "Enable Stock Level Synchronisation"
-  },
-  {
-   "default": "WooCommerce ID",
-   "description": "How the item code should be determined when an item is created",
-   "fieldname": "name_by",
-   "fieldtype": "Select",
-   "label": "Default Item Code Naming Basis",
-   "mandatory_depends_on": "eval: doc.enable_stock_level_synchronisation",
-   "options": "WooCommerce ID\nProduct SKU"
-  },
-  {
-   "fieldname": "column_break_utsi",
-   "fieldtype": "Column Break"
-  },
-  {
-   "default": "0",
-   "description": "When set, adding/removing/changing Sales Order Lines will be synchronised back to the WooCommerce Order",
-   "fieldname": "sync_so_items_to_wc",
-   "fieldtype": "Check",
-   "label": "Synchronise Sales Order Line changes back"
-  },
-  {
-   "fieldname": "item_section",
-   "fieldtype": "Section Break"
-  },
-  {
-   "fieldname": "item_stock_section",
-   "fieldtype": "Section Break",
-   "label": "Item Stock Levels"
-  },
-  {
-   "depends_on": "eval: doc.enable_stock_level_synchronisation",
-   "description": "Select the Warehouses that should be taken into account when synchronising Item Stock Levels",
-   "fieldname": "warehouses",
-   "fieldtype": "Table MultiSelect",
-   "label": "Warehouses",
-   "options": "WooCommerce Server Warehouse"
-  },
-  {
-   "fieldname": "item_fields_section",
-   "fieldtype": "Section Break",
-   "label": "Item Fields"
-  },
-  {
-<<<<<<< HEAD
-   "documentation_url": "https://woocommerce-fusion-docs.finfoot.tech/features/items.html#custom-fields-mapping",
-=======
->>>>>>> fix pre-commit formatting
-   "fieldname": "item_field_map",
-   "fieldtype": "Table",
-   "label": "Fields Mapping",
-   "options": "WooCommerce Server Item Field"
-  },
-  {
-   "fieldname": "item_fields_warning_html",
-   "fieldtype": "HTML",
-   "options": "<div class=\"alert alert-warning\">\nMapping item fields is recommended for advanced users only. Make sure to monitor Error Logs after adding field mappings.\n</div>"
-  },
-  {
-   "fieldname": "column_break_tefw",
-   "fieldtype": "Column Break"
-  },
-  {
-   "fieldname": "sync_sales_orders",
-   "fieldtype": "HTML",
-   "options": "\n\t\t\t<div class=\"checkbox\">\n\t\t\t\t<label>\n\t\t\t\t\t<span class=\"input-area\" style=\"display: none;\"></span>\n\t\t\t\t\t<span class=\"disp-area\"><input type=\"checkbox\" disabled class=\"disabled-selected\"></span>\n\t\t\t\t\t<span class=\"label-area\">Synchronise Sales Orders</span>\n\t\t\t\t\t<span class=\"ml-1 help\"></span>\n\t\t\t\t</label>\n\t\t\t\t<p class=\"help-box small text-muted\">Create new ERPNext Sales Orders for existing and new WooCommerce Sales Orders. This can not be turned off.</p>\n\t\t\t</div>\n\t\t<span class=\"tooltip-content\">enable_so_sync</span>"
-<<<<<<< HEAD
-  },
-  {
-   "fieldname": "section_addresses",
-   "fieldtype": "Section Break",
-   "label": "Addresses Sync"
-  },
-  {
-   "description": "Customer ID with Address Type: <code>{customer.name}-{address_type}</code><br>\nCustomer Name only: \n<code>{customer.customer_name}</code>",
-   "fieldname": "address_title_convention",
-   "fieldtype": "Select",
-   "label": "Address Title Naming Convention",
-   "options": "Customer ID with Address Type\nCustomer Name only"
-  },
-  {
-   "fieldname": "shipping_methods_sync_section",
-   "fieldtype": "Section Break",
-   "label": "Shipping Methods Sync"
-  },
-  {
-   "default": "0",
-   "documentation_url": "https://woocommerce-fusion-docs.finfoot.tech/features/sales-order.html#shipping-rule-synchronisation",
-   "fieldname": "enable_shipping_methods_sync",
-   "fieldtype": "Check",
-   "label": "Enable Shipping Methods Sync"
-  },
-  {
-   "depends_on": "eval: doc.enable_shipping_methods_sync === 1",
-   "fieldname": "shipping_rule_map",
-   "fieldtype": "Table",
-   "label": "Map WooCommerce Shipping Methods to ERPNext Shipping Rules",
-   "options": "WooCommerce Server Shipping Rule"
-  },
-  {
-   "fieldname": "so_status_sync_section",
-   "fieldtype": "Section Break",
-   "label": "Sales Order Status Sync"
-  },
-  {
-   "default": "0",
-   "description": "When enabled the Order Status for both ERPNext and WooCommerce orders will be automatically updated if either changes",
-   "documentation_url": "https://woocommerce-fusion-docs.finfoot.tech/features/sales-order.html#automatic-order-status-synchronisation",
-   "fieldname": "enable_so_status_sync",
-   "fieldtype": "Check",
-   "label": "Keep the Status of ERPNext Sales Orders and WooCommerce Orders in sync"
-  },
-  {
-   "depends_on": "eval: doc.enable_so_status_sync",
-   "description": "For example, if you map the ERPNext status \"To Deliver\" to the WooCommerce status \"Processing\", as soon as the ERPNext Sales Order's status changes, an attempt will be made to update the linked WooCommerce Order status to \"Processing\"",
-   "fieldname": "sales_order_status_map",
-   "fieldtype": "Table",
-   "label": "Sales Order Status Map",
-   "options": "WooCommerce Server Order Status"
-  },
-  {
-   "depends_on": "eval: doc.enable_so_status_sync",
-   "fieldname": "enable_so_status_sync_warning_html",
-   "fieldtype": "HTML"
-  },
-  {
-   "default": "0",
-   "description": "Set the WooCommerce Product's first image's URL as the Image for the ERPNext Item",
-   "fieldname": "enable_image_sync",
-   "fieldtype": "Check",
-   "label": "Enable Image Sync"
-  },
-  {
-   "fieldname": "customers_sync_section",
-   "fieldtype": "Section Break",
-   "label": "Customers Sync"
-  },
-  {
-   "default": "0",
-   "description": "If two WooCommerce Customer records share the same email address but one is a Company they will be treated as separate entries",
-   "fieldname": "enable_dual_accounts",
-   "fieldtype": "Check",
-   "label": "Enable Dual Accounts for Same Email (Private/Company)"
-  },
-  {
-   "default": "0",
-   "depends_on": "eval: doc.enable_stock_level_synchronisation",
-   "description": "Adjusts stock levels sent to WooCommerce by subtracting reserved stock, ensuring only available stock is synced",
-   "fieldname": "subtract_reserved_stock",
-   "fieldtype": "Check",
-   "label": "Reserved Stock Adjustment"
-=======
->>>>>>> fix pre-commit formatting
-  }
- ],
- "index_web_pages_for_search": 1,
- "links": [],
-<<<<<<< HEAD
- "modified": "2025-03-02 12:12:53.464419",
-=======
- "modified": "2024-12-10 22:46:37.242357",
->>>>>>> fix pre-commit formatting
- "modified_by": "Administrator",
- "module": "WooCommerce",
- "name": "WooCommerce Server",
- "owner": "Administrator",
- "permissions": [
-  {
-   "create": 1,
-   "delete": 1,
-   "email": 1,
-   "export": 1,
-   "print": 1,
-   "read": 1,
-   "report": 1,
-   "role": "System Manager",
-   "share": 1,
-   "write": 1
-  },
-  {
-   "email": 1,
-   "export": 1,
-   "print": 1,
-   "report": 1,
-   "role": "Sales User",
-   "select": 1,
-   "share": 1
-  },
-  {
-   "email": 1,
-   "export": 1,
-   "print": 1,
-   "report": 1,
-   "role": "Stock User",
-   "select": 1,
-   "share": 1
-  },
-  {
-   "email": 1,
-   "export": 1,
-   "print": 1,
-   "report": 1,
-   "role": "Item Manager",
-   "select": 1,
-   "share": 1
-  },
-  {
-   "email": 1,
-   "export": 1,
-   "print": 1,
-   "report": 1,
-   "role": "Sales Manager",
-   "select": 1,
-   "share": 1
-  },
-  {
-   "email": 1,
-   "export": 1,
-   "print": 1,
-   "report": 1,
-   "role": "Stock Manager",
-   "select": 1,
-   "share": 1
-  }
- ],
- "sort_field": "modified",
- "sort_order": "DESC",
- "states": []
+  "actions": [],
+  "creation": "2023-11-15 07:51:11.482450",
+  "default_view": "List",
+  "doctype": "DocType",
+  "editable_grid": 1,
+  "engine": "InnoDB",
+  "field_order": [
+    "tab_details",
+    "warning_html",
+    "section_break_yuyb",
+    "enable_sync",
+    "woocommerce_server_url",
+    "column_break_ikke",
+    "api_consumer_key",
+    "api_consumer_secret",
+    "section_details_defaults",
+    "creation_user",
+    "column_break_14",
+    "section_break_endpoints",
+    "secret",
+    "view_webhook_config",
+    "tab_sales_orders",
+    "column_break_tefw",
+    "sync_sales_orders",
+    "column_break_utsi",
+    "sync_so_items_to_wc",
+    "section_so_defaults",
+    "company",
+    "warehouse",
+    "item_group",
+    "column_break_xqqb",
+    "submit_sales_orders",
+    "sales_order_series",
+    "delivery_after_days",
+    "uom",
+    "section_break_accounting",
+    "tax_account",
+    "use_actual_tax_type",
+    "sales_taxes_and_charges_template",
+    "column_break_4b4vn",
+    "f_n_f_account",
+    "section_payments_sync",
+    "enable_payments_sync",
+    "ignore_date_paid",
+    "payment_method_bank_account_mapping",
+    "payment_method_gl_account_mapping",
+    "customers_sync_section",
+    "enable_dual_accounts",
+    "section_addresses",
+    "address_title_convention",
+    "shipping_methods_sync_section",
+    "enable_shipping_methods_sync",
+    "shipping_rule_map",
+    "so_status_sync_section",
+    "enable_so_status_sync",
+    "enable_so_status_sync_warning_html",
+    "sales_order_status_map",
+    "tab_items",
+    "item_section",
+    "name_by",
+    "enable_image_sync",
+    "item_stock_section",
+    "enable_stock_level_synchronisation",
+    "warehouses",
+    "subtract_reserved_stock",
+    "item_fields_section",
+    "item_fields_warning_html",
+    "item_field_map",
+    "tab_price_list",
+    "section_break_hnji",
+    "enable_price_list_sync",
+    "price_list",
+    "price_list_delay_per_item",
+    "tab_plugins",
+    "advanced_shipment_tracking_section",
+    "wc_plugin_advanced_shipment_tracking",
+    "wc_ast_shipment_providers"
+  ],
+  "fields": [
+    {
+      "fieldname": "warning_html",
+      "fieldtype": "HTML",
+      "label": "Warning HTML",
+      "options": "<div class=\"form-message red\">\n\t<div>{{__(\"Enabling Sync for WooCommerce Sites allows ERPNext to modify Stock Levels and Order Statuses on these Sites\")}}</div>\n</div>"
+    },
+    {
+      "default": "1",
+      "fieldname": "submit_sales_orders",
+      "fieldtype": "Check",
+      "label": "Submit Sales Orders during Synchronisation"
+    },
+    {
+      "fieldname": "section_break_accounting",
+      "fieldtype": "Section Break",
+      "label": "Accounting Details"
+    },
+    {
+      "depends_on": "eval: doc.use_actual_tax_type;",
+      "fieldname": "tax_account",
+      "fieldtype": "Link",
+      "label": "Tax Account",
+      "mandatory_depends_on": "eval: doc.use_actual_tax_type;",
+      "options": "Account"
+    },
+    {
+      "fieldname": "column_break_4b4vn",
+      "fieldtype": "Column Break"
+    },
+    {
+      "fieldname": "f_n_f_account",
+      "fieldtype": "Link",
+      "label": "Freight and Forwarding Account",
+      "options": "Account",
+      "reqd": 1
+    },
+    {
+      "description": "The user that will be used to create Customers, Items and Sales Orders. This user should have the relevant permissions.",
+      "fieldname": "creation_user",
+      "fieldtype": "Link",
+      "label": "Creation User",
+      "options": "User"
+    },
+    {
+      "description": "The fallback series is \"SO-WOO-\".",
+      "fieldname": "sales_order_series",
+      "fieldtype": "Select",
+      "label": "Sales Order Series",
+      "read_only": 1
+    },
+    {
+      "fieldname": "column_break_14",
+      "fieldtype": "Column Break"
+    },
+    {
+      "description": "This company will be used to create Sales Orders.",
+      "documentation_url": "https://woocommerce-fusion-docs.finfoot.tech/features/sales-order.html",
+      "fieldname": "company",
+      "fieldtype": "Link",
+      "label": "Company",
+      "options": "Company",
+      "reqd": 1
+    },
+    {
+      "description": "This is the default offset (days) for the Delivery Date in Sales Orders. The fallback offset is 7 days from the order placement date.",
+      "fieldname": "delivery_after_days",
+      "fieldtype": "Int",
+      "label": "Delivery After (Days)"
+    },
+    {
+      "description": "This is the default UOM used for items and Sales orders. The fallback UOM is \"Nos\".",
+      "fieldname": "uom",
+      "fieldtype": "Link",
+      "label": "UOM",
+      "options": "UOM"
+    },
+    {
+      "fieldname": "section_break_endpoints",
+      "fieldtype": "Section Break",
+      "label": "Endpoints"
+    },
+    {
+      "description": "This is the default Item Group used for newly created items.",
+      "fieldname": "item_group",
+      "fieldtype": "Link",
+      "label": "Item Group",
+      "options": "Item Group",
+      "reqd": 1
+    },
+    {
+      "description": "Default warehouse for Sales Orders",
+      "fieldname": "warehouse",
+      "fieldtype": "Link",
+      "label": "Warehouse",
+      "options": "Warehouse",
+      "reqd": 1
+    },
+    {
+      "default": "1",
+      "description": "If checked, a 'Sales Taxes and Charges' line of type 'Actual' will be added for every WooCommerce Line Item with tax",
+      "fieldname": "use_actual_tax_type",
+      "fieldtype": "Check",
+      "label": "Use 'Actual' Tax Type"
+    },
+    {
+      "depends_on": "eval: !doc.use_actual_tax_type;",
+      "fieldname": "sales_taxes_and_charges_template",
+      "fieldtype": "Link",
+      "label": "Sales Taxes and Charges Template",
+      "mandatory_depends_on": "eval: !doc.use_actual_tax_type;",
+      "options": "Sales Taxes and Charges Template"
+    },
+    {
+      "fieldname": "secret",
+      "fieldtype": "Code",
+      "label": "Secret",
+      "read_only": 1
+    },
+    {
+      "fieldname": "view_webhook_config",
+      "fieldtype": "Button",
+      "label": "View WooCommerce Webhook Configuration"
+    },
+    {
+      "default": "1",
+      "documentation_url": "https://woocommerce-fusion-docs.finfoot.tech/configure.html",
+      "fieldname": "enable_sync",
+      "fieldtype": "Check",
+      "in_list_view": 1,
+      "label": "Enable Sync"
+    },
+    {
+      "description": "e.g. https://mysite.woocommerce.com",
+      "fieldname": "woocommerce_server_url",
+      "fieldtype": "Data",
+      "in_list_view": 1,
+      "label": "WooCommerce Server URL",
+      "reqd": 1,
+      "set_only_once": 1
+    },
+    {
+      "fieldname": "api_consumer_key",
+      "fieldtype": "Data",
+      "label": "API consumer key",
+      "reqd": 1
+    },
+    {
+      "fieldname": "api_consumer_secret",
+      "fieldtype": "Data",
+      "label": "API consumer secret",
+      "reqd": 1
+    },
+    {
+      "default": "0",
+      "documentation_url": "https://woocommerce-fusion-docs.finfoot.tech/features/woocommerce-plugins.html",
+      "fieldname": "wc_plugin_advanced_shipment_tracking",
+      "fieldtype": "Check",
+      "label": "Enable integration with 'Advanced Shipment Tracking' WooCommerce Plugin"
+    },
+    {
+      "fieldname": "wc_ast_shipment_providers",
+      "fieldtype": "Code",
+      "label": "Advanced Shipment Tracking Shipment Providers",
+      "read_only": 1
+    },
+    {
+      "default": "0",
+      "fieldname": "enable_payments_sync",
+      "fieldtype": "Check",
+      "label": "Enable Payments Sync"
+    },
+    {
+      "fieldname": "section_payments_sync",
+      "fieldtype": "Section Break",
+      "label": "Payment Entries Sync"
+    },
+    {
+      "default": "{}",
+      "depends_on": "eval: doc.enable_payments_sync === 1",
+      "fieldname": "payment_method_bank_account_mapping",
+      "fieldtype": "JSON",
+      "label": "Map Bank Accounts to Payment Methods"
+    },
+    {
+      "default": "{}",
+      "depends_on": "eval: doc.enable_payments_sync === 1",
+      "fieldname": "payment_method_gl_account_mapping",
+      "fieldtype": "JSON",
+      "label": "Map GL Accounts to Payment Methods"
+    },
+    {
+      "fieldname": "section_break_hnji",
+      "fieldtype": "Section Break"
+    },
+    {
+      "default": "0",
+      "documentation_url": "https://woocommerce-fusion-docs.finfoot.tech/features/item-prices.html",
+      "fieldname": "enable_price_list_sync",
+      "fieldtype": "Check",
+      "label": "Enable Price List Sync"
+    },
+    {
+      "depends_on": "eval: doc.enable_price_list_sync",
+      "fieldname": "price_list",
+      "fieldtype": "Link",
+      "label": "Price List",
+      "mandatory_depends_on": "eval: doc.enable_price_list_sync",
+      "options": "Price List"
+    },
+    {
+      "default": "0",
+      "description": "Some WooCommerce payment gateways do not always set the 'Date Paid' field, which cause Payment Entries to not be created",
+      "fieldname": "ignore_date_paid",
+      "fieldtype": "Check",
+      "label": "Ignore empty 'Date Paid' field on WooCommerce Orders"
+    },
+    {
+      "default": "2",
+      "depends_on": "eval: doc.enable_price_list_sync",
+      "description": "In seconds. Increase if WC server can't handle the load.",
+      "fieldname": "price_list_delay_per_item",
+      "fieldtype": "Int",
+      "label": "Delay per POST Request"
+    },
+    {
+      "fieldname": "tab_details",
+      "fieldtype": "Tab Break",
+      "label": "Details"
+    },
+    {
+      "fieldname": "section_break_yuyb",
+      "fieldtype": "Section Break"
+    },
+    {
+      "fieldname": "column_break_ikke",
+      "fieldtype": "Column Break"
+    },
+    {
+      "fieldname": "section_details_defaults",
+      "fieldtype": "Section Break",
+      "label": "Defaults"
+    },
+    {
+      "depends_on": "eval: doc.enable_sync",
+      "fieldname": "tab_sales_orders",
+      "fieldtype": "Tab Break",
+      "label": "Sales Orders"
+    },
+    {
+      "fieldname": "section_so_defaults",
+      "fieldtype": "Section Break",
+      "label": "Defaults"
+    },
+    {
+      "fieldname": "column_break_xqqb",
+      "fieldtype": "Column Break"
+    },
+    {
+      "depends_on": "eval: doc.enable_sync",
+      "fieldname": "tab_items",
+      "fieldtype": "Tab Break",
+      "label": "Items"
+    },
+    {
+      "depends_on": "eval: doc.enable_sync",
+      "fieldname": "tab_plugins",
+      "fieldtype": "Tab Break",
+      "label": "WooCommerce Plugins"
+    },
+    {
+      "fieldname": "advanced_shipment_tracking_section",
+      "fieldtype": "Section Break",
+      "label": "Advanced Shipment Tracking"
+    },
+    {
+      "depends_on": "eval: doc.enable_sync",
+      "fieldname": "tab_price_list",
+      "fieldtype": "Tab Break",
+      "label": "Price List"
+    },
+    {
+      "default": "0",
+      "documentation_url": "https://woocommerce-fusion-docs.finfoot.tech/features/item-stock-levels.html",
+      "fieldname": "enable_stock_level_synchronisation",
+      "fieldtype": "Check",
+      "label": "Enable Stock Level Synchronisation"
+    },
+    {
+      "default": "WooCommerce ID",
+      "description": "How the item code should be determined when an item is created",
+      "fieldname": "name_by",
+      "fieldtype": "Select",
+      "label": "Default Item Code Naming Basis",
+      "mandatory_depends_on": "eval: doc.enable_stock_level_synchronisation",
+      "options": "WooCommerce ID\nProduct SKU"
+    },
+    {
+      "fieldname": "column_break_utsi",
+      "fieldtype": "Column Break"
+    },
+    {
+      "default": "0",
+      "description": "When set, adding/removing/changing Sales Order Lines will be synchronised back to the WooCommerce Order",
+      "fieldname": "sync_so_items_to_wc",
+      "fieldtype": "Check",
+      "label": "Synchronise Sales Order Line changes back"
+    },
+    {
+      "fieldname": "item_section",
+      "fieldtype": "Section Break"
+    },
+    {
+      "fieldname": "item_stock_section",
+      "fieldtype": "Section Break",
+      "label": "Item Stock Levels"
+    },
+    {
+      "depends_on": "eval: doc.enable_stock_level_synchronisation",
+      "description": "Select the Warehouses that should be taken into account when synchronising Item Stock Levels",
+      "fieldname": "warehouses",
+      "fieldtype": "Table MultiSelect",
+      "label": "Warehouses",
+      "options": "WooCommerce Server Warehouse"
+    },
+    {
+      "fieldname": "item_fields_section",
+      "fieldtype": "Section Break",
+      "label": "Item Fields"
+    },
+    {
+      "documentation_url": "https://woocommerce-fusion-docs.finfoot.tech/features/items.html#custom-fields-mapping",
+      "fieldname": "item_field_map",
+      "fieldtype": "Table",
+      "label": "Fields Mapping",
+      "options": "WooCommerce Server Item Field"
+    },
+    {
+      "fieldname": "item_fields_warning_html",
+      "fieldtype": "HTML",
+      "options": "<div class=\"alert alert-warning\">\nMapping item fields is recommended for advanced users only. Make sure to monitor Error Logs after adding field mappings.\n</div>"
+    },
+    {
+      "fieldname": "column_break_tefw",
+      "fieldtype": "Column Break"
+    },
+    {
+      "fieldname": "sync_sales_orders",
+      "fieldtype": "HTML",
+      "options": "\n\t\t\t<div class=\"checkbox\">\n\t\t\t\t<label>\n\t\t\t\t\t<span class=\"input-area\" style=\"display: none;\"></span>\n\t\t\t\t\t<span class=\"disp-area\"><input type=\"checkbox\" disabled class=\"disabled-selected\"></span>\n\t\t\t\t\t<span class=\"label-area\">Synchronise Sales Orders</span>\n\t\t\t\t\t<span class=\"ml-1 help\"></span>\n\t\t\t\t</label>\n\t\t\t\t<p class=\"help-box small text-muted\">Create new ERPNext Sales Orders for existing and new WooCommerce Sales Orders. This can not be turned off.</p>\n\t\t\t</div>\n\t\t<span class=\"tooltip-content\">enable_so_sync</span>"
+    },
+    {
+      "fieldname": "section_addresses",
+      "fieldtype": "Section Break",
+      "label": "Addresses Sync"
+    },
+    {
+      "description": "Customer ID with Address Type: <code>{customer.name}-{address_type}</code><br>\nCustomer Name only: \n<code>{customer.customer_name}</code>",
+      "fieldname": "address_title_convention",
+      "fieldtype": "Select",
+      "label": "Address Title Naming Convention",
+      "options": "Customer ID with Address Type\nCustomer Name only"
+    },
+    {
+      "fieldname": "shipping_methods_sync_section",
+      "fieldtype": "Section Break",
+      "label": "Shipping Methods Sync"
+    },
+    {
+      "default": "0",
+      "documentation_url": "https://woocommerce-fusion-docs.finfoot.tech/features/sales-order.html#shipping-rule-synchronisation",
+      "fieldname": "enable_shipping_methods_sync",
+      "fieldtype": "Check",
+      "label": "Enable Shipping Methods Sync"
+    },
+    {
+      "depends_on": "eval: doc.enable_shipping_methods_sync === 1",
+      "fieldname": "shipping_rule_map",
+      "fieldtype": "Table",
+      "label": "Map WooCommerce Shipping Methods to ERPNext Shipping Rules",
+      "options": "WooCommerce Server Shipping Rule"
+    },
+    {
+      "fieldname": "so_status_sync_section",
+      "fieldtype": "Section Break",
+      "label": "Sales Order Status Sync"
+    },
+    {
+      "default": "0",
+      "description": "When enabled the Order Status for both ERPNext and WooCommerce orders will be automatically updated if either changes",
+      "documentation_url": "https://woocommerce-fusion-docs.finfoot.tech/features/sales-order.html#automatic-order-status-synchronisation",
+      "fieldname": "enable_so_status_sync",
+      "fieldtype": "Check",
+      "label": "Keep the Status of ERPNext Sales Orders and WooCommerce Orders in sync"
+    },
+    {
+      "depends_on": "eval: doc.enable_so_status_sync",
+      "description": "For example, if you map the ERPNext status \"To Deliver\" to the WooCommerce status \"Processing\", as soon as the ERPNext Sales Order's status changes, an attempt will be made to update the linked WooCommerce Order status to \"Processing\"",
+      "fieldname": "sales_order_status_map",
+      "fieldtype": "Table",
+      "label": "Sales Order Status Map",
+      "options": "WooCommerce Server Order Status"
+    },
+    {
+      "depends_on": "eval: doc.enable_so_status_sync",
+      "fieldname": "enable_so_status_sync_warning_html",
+      "fieldtype": "HTML"
+    },
+    {
+      "default": "0",
+      "description": "Set the WooCommerce Product's first image's URL as the Image for the ERPNext Item",
+      "fieldname": "enable_image_sync",
+      "fieldtype": "Check",
+      "label": "Enable Image Sync"
+    },
+    {
+      "fieldname": "customers_sync_section",
+      "fieldtype": "Section Break",
+      "label": "Customers Sync"
+    },
+    {
+      "default": "0",
+      "description": "If two WooCommerce Customer records share the same email address but one is a Company they will be treated as separate entries",
+      "fieldname": "enable_dual_accounts",
+      "fieldtype": "Check",
+      "label": "Enable Dual Accounts for Same Email (Private/Company)"
+    },
+    {
+      "default": "0",
+      "depends_on": "eval: doc.enable_stock_level_synchronisation",
+      "description": "Adjusts stock levels sent to WooCommerce by subtracting reserved stock, ensuring only available stock is synced",
+      "fieldname": "subtract_reserved_stock",
+      "fieldtype": "Check",
+      "label": "Reserved Stock Adjustment"
+    }
+  ],
+  "index_web_pages_for_search": 1,
+  "links": [],
+  "modified": "2025-03-02 12:12:53.464419",
+  "modified_by": "Administrator",
+  "module": "WooCommerce",
+  "name": "WooCommerce Server",
+  "owner": "Administrator",
+  "permissions": [
+    {
+      "create": 1,
+      "delete": 1,
+      "email": 1,
+      "export": 1,
+      "print": 1,
+      "read": 1,
+      "report": 1,
+      "role": "System Manager",
+      "share": 1,
+      "write": 1
+    },
+    {
+      "email": 1,
+      "export": 1,
+      "print": 1,
+      "report": 1,
+      "role": "Sales User",
+      "select": 1,
+      "share": 1
+    },
+    {
+      "email": 1,
+      "export": 1,
+      "print": 1,
+      "report": 1,
+      "role": "Stock User",
+      "select": 1,
+      "share": 1
+    },
+    {
+      "email": 1,
+      "export": 1,
+      "print": 1,
+      "report": 1,
+      "role": "Item Manager",
+      "select": 1,
+      "share": 1
+    },
+    {
+      "email": 1,
+      "export": 1,
+      "print": 1,
+      "report": 1,
+      "role": "Sales Manager",
+      "select": 1,
+      "share": 1
+    },
+    {
+      "email": 1,
+      "export": 1,
+      "print": 1,
+      "report": 1,
+      "role": "Stock Manager",
+      "select": 1,
+      "share": 1
+    }
+  ],
+  "sort_field": "modified",
+  "sort_order": "DESC",
+  "states": []
 }
