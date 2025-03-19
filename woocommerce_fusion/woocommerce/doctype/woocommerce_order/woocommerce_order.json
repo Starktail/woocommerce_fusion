@@ -1,421 +1,417 @@
 {
- "actions": [],
- "creation": "2023-05-20 13:20:27.875085",
- "default_view": "List",
- "doctype": "DocType",
- "editable_grid": 1,
- "engine": "InnoDB",
- "field_order": [
-  "woocommerce_server",
-  "id",
-  "parent_id",
-  "number",
-  "order_key",
-  "created_via",
-  "version",
-  "status",
-  "currency",
-  "date_created",
-  "date_created_gmt",
-  "date_modified",
-  "date_modified_gmt",
-  "discount_total",
-  "discount_tax",
-  "shipping_total",
-  "shipping_tax",
-  "cart_tax",
-  "total",
-  "total_tax",
-  "prices_include_tax",
-  "customer_id",
-  "customer_ip_address",
-  "customer_user_agent",
-  "customer_note",
-  "billing",
-  "shipping",
-  "payment_method",
-  "payment_method_title",
-  "transaction_id",
-  "date_paid",
-  "date_paid_gmt",
-  "date_completed",
-  "date_completed_gmt",
-  "cart_hash",
-  "meta_data",
-  "line_items",
-  "tax_lines",
-  "shipping_lines",
-  "fee_lines",
-  "coupon_lines",
-  "refunds",
-  "set_paid",
-  "shipment_trackings"
- ],
- "fields": [
-  {
-   "description": "Unique identifier for the resource.",
-   "fieldname": "id",
-   "fieldtype": "Data",
-   "in_list_view": 1,
-   "label": "Id",
-   "read_only": 1
-  },
-  {
-   "description": "Parent order ID.",
-   "fieldname": "parent_id",
-   "fieldtype": "Data",
-   "label": "Parent Id",
-   "read_only": 1
-  },
-  {
-   "description": "Order number.",
-   "fieldname": "number",
-   "fieldtype": "Data",
-   "label": "Number",
-   "read_only": 1
-  },
-  {
-   "description": "Order key.",
-   "fieldname": "order_key",
-   "fieldtype": "Data",
-   "in_list_view": 1,
-   "label": "Order Key",
-   "read_only": 1
-  },
-  {
-   "description": "Shows where the order was created.",
-   "fieldname": "created_via",
-   "fieldtype": "Data",
-   "label": "Created Via",
-   "read_only": 1
-  },
-  {
-   "description": "Version of WooCommerce which last updated the order.",
-   "fieldname": "version",
-   "fieldtype": "Data",
-   "label": "Version",
-   "read_only": 1
-  },
-  {
-   "description": "Order status. Options: pending, processing, on-hold, completed, cancelled, refunded, failed and trash. Default is pending.",
-   "fieldname": "status",
-   "fieldtype": "Select",
-   "in_list_view": 1,
-   "label": "Status",
-   "options": "pending\non-hold\nfailed\ncancelled\nprocessing\nrefunded\ncompleted\nready-pickup\npickup\ndelivered\nprocessing-lp\ncheckout-draft\ngplsquote-req\ntrash"
-  },
-  {
-   "description": "Currency the order was created with, in ISO format.",
-   "fieldname": "currency",
-   "fieldtype": "Data",
-   "label": "Currency",
-   "read_only": 1
-  },
-  {
-   "description": "The date the order was created, in the site's timezone.",
-   "fieldname": "date_created",
-   "fieldtype": "Datetime",
-   "label": "Date Created",
-   "read_only": 1
-  },
-  {
-   "description": "The date the order was created, as GMT.",
-   "fieldname": "date_created_gmt",
-   "fieldtype": "Datetime",
-   "label": "Date Created GMT",
-   "read_only": 1
-  },
-  {
-   "description": "The date the order was last modified, in the site's timezone.",
-   "fieldname": "date_modified",
-   "fieldtype": "Datetime",
-   "label": "Date Modified",
-   "read_only": 1
-  },
-  {
-   "description": "The date the order was last modified, as GMT.",
-   "fieldname": "date_modified_gmt",
-   "fieldtype": "Datetime",
-   "label": "Date Modified GMT",
-   "read_only": 1
-  },
-  {
-   "description": "Total discount amount for the order.",
-   "fieldname": "discount_total",
-   "fieldtype": "Data",
-   "label": "Discount Total",
-   "read_only": 1
-  },
-  {
-   "description": "Total discount tax amount for the order.",
-   "fieldname": "discount_tax",
-   "fieldtype": "Data",
-   "label": "Discount Tax",
-   "read_only": 1
-  },
-  {
-   "description": "Total shipping amount for the order.",
-   "fieldname": "shipping_total",
-   "fieldtype": "Data",
-   "label": "Shipping Total",
-   "read_only": 1
-  },
-  {
-   "description": "Total shipping tax amount for the order.",
-   "fieldname": "shipping_tax",
-   "fieldtype": "Data",
-   "label": "Shipping Tax",
-   "read_only": 1
-  },
-  {
-   "description": "Sum of line item taxes only.",
-   "fieldname": "cart_tax",
-   "fieldtype": "Data",
-   "label": "Cart Tax",
-   "read_only": 1
-  },
-  {
-   "description": "Grand total.",
-   "fieldname": "total",
-   "fieldtype": "Data",
-   "label": "Total",
-   "read_only": 1
-  },
-  {
-   "description": "Sum of all taxes.",
-   "fieldname": "total_tax",
-   "fieldtype": "Data",
-   "label": "Total Tax",
-   "read_only": 1
-  },
-  {
-   "default": "0",
-   "description": "True the prices included tax during checkout.",
-   "fieldname": "prices_include_tax",
-   "fieldtype": "Check",
-   "label": "Prices Include Tax",
-   "read_only": 1
-  },
-  {
-   "description": "User ID who owns the order. 0 for guests. Default is 0.",
-   "fieldname": "customer_id",
-   "fieldtype": "Data",
-   "label": "Customer Id",
-   "read_only": 1
-  },
-  {
-   "description": "Customer's IP address.",
-   "fieldname": "customer_ip_address",
-   "fieldtype": "Data",
-   "label": "Customer Ip Address",
-   "read_only": 1
-  },
-  {
-   "description": "User agent of the customer.",
-   "fieldname": "customer_user_agent",
-   "fieldtype": "Long Text",
-   "label": "Customer User Agent",
-   "read_only": 1
-  },
-  {
-   "description": "Note left by customer during checkout.",
-   "fieldname": "customer_note",
-   "fieldtype": "Text",
-   "label": "Customer Note",
-   "read_only": 1
-  },
-  {
-   "description": "Billing address. See Order - Billing properties",
-   "fieldname": "billing",
-   "fieldtype": "JSON",
-   "label": "Billing",
-   "read_only": 1
-  },
-  {
-   "description": "Shipping address. See Order - Shipping properties",
-   "fieldname": "shipping",
-   "fieldtype": "JSON",
-   "label": "Shipping",
-   "read_only": 1
-  },
-  {
-   "description": "Payment method ID.",
-   "fieldname": "payment_method",
-   "fieldtype": "Data",
-   "label": "Payment Method",
-   "read_only": 1
-  },
-  {
-   "description": "Payment method title.",
-   "fieldname": "payment_method_title",
-   "fieldtype": "Long Text",
-   "label": "Payment Method Title",
-   "read_only": 1
-  },
-  {
-   "description": "Unique transaction ID.",
-   "fieldname": "transaction_id",
-   "fieldtype": "Data",
-   "label": "Transaction Id",
-   "read_only": 1
-  },
-  {
-   "description": "The date the order was paid, in the site's timezone.",
-   "fieldname": "date_paid",
-   "fieldtype": "Datetime",
-   "label": "Date Paid",
-   "read_only": 1
-  },
-  {
-   "description": "The date the order was paid, as GMT.",
-   "fieldname": "date_paid_gmt",
-   "fieldtype": "Datetime",
-   "label": "Date Paid GMT",
-   "read_only": 1
-  },
-  {
-   "description": "The date the order was completed, in the site's timezone.",
-   "fieldname": "date_completed",
-   "fieldtype": "Datetime",
-   "label": "Date Completed",
-   "read_only": 1
-  },
-  {
-   "description": "The date the order was completed, as GMT.",
-   "fieldname": "date_completed_gmt",
-   "fieldtype": "Datetime",
-   "label": "Date Completed GMT",
-   "read_only": 1
-  },
-  {
-   "description": "MD5 hash of cart items to ensure orders are not modified.",
-   "fieldname": "cart_hash",
-   "fieldtype": "Data",
-   "label": "Cart Hash",
-   "read_only": 1
-  },
-  {
-   "description": "Meta data. See Order - Meta data properties",
-   "fieldname": "meta_data",
-   "fieldtype": "JSON",
-   "label": "Meta Data",
-   "read_only": 1
-  },
-  {
-   "description": "Line items data. See Order - Line items properties",
-   "fieldname": "line_items",
-   "fieldtype": "JSON",
-   "label": "Line Items",
-   "read_only": 1
-  },
-  {
-   "description": "Tax lines data. See Order - Tax lines properties",
-   "fieldname": "tax_lines",
-   "fieldtype": "JSON",
-   "label": "Tax Lines",
-   "read_only": 1
-  },
-  {
-   "description": "Shipping lines data. See Order - Shipping lines properties",
-   "fieldname": "shipping_lines",
-   "fieldtype": "JSON",
-   "label": "Shipping Lines",
-   "read_only": 1
-  },
-  {
-   "description": "Fee lines data. See Order - Fee lines properties",
-   "fieldname": "fee_lines",
-   "fieldtype": "JSON",
-   "label": "Fee Lines",
-   "read_only": 1
-  },
-  {
-   "description": "Coupons line data. See Order - Coupon lines properties",
-   "fieldname": "coupon_lines",
-   "fieldtype": "JSON",
-   "label": "Coupon Lines",
-   "read_only": 1
-  },
-  {
-   "description": "List of refunds. See Order - Refunds properties",
-   "fieldname": "refunds",
-   "fieldtype": "JSON",
-   "label": "Refunds",
-   "read_only": 1
-  },
-  {
-   "default": "0",
-   "description": "Define if the order is paid. It will set the status to processing and reduce stock items. Default is false.",
-   "fieldname": "set_paid",
-   "fieldtype": "Check",
-   "label": "Set Paid",
-   "read_only": 1
-  },
-  {
-   "description": "Only relevant if you are using the 'Advanced Shipment Tracking for WooCommerce' plugin",
-   "fieldname": "shipment_trackings",
-   "fieldtype": "JSON",
-   "label": "Shipment Trackings",
-   "read_only": 1
-  },
-  {
-   "fieldname": "woocommerce_server",
-   "fieldtype": "Link",
-   "label": "Woocommerce Server",
-   "options": "WooCommerce Server",
-   "read_only": 1,
-   "reqd": 1
-  }
- ],
- "index_web_pages_for_search": 1,
- "is_virtual": 1,
- "links": [],
-<<<<<<< HEAD
- "modified": "2024-12-12 08:17:46.566425",
-=======
- "modified": "2024-07-01 09:02:14.658604",
->>>>>>> fix pre-commit formatting
- "modified_by": "Administrator",
- "module": "WooCommerce",
- "name": "WooCommerce Order",
- "owner": "Administrator",
- "permissions": [
-  {
-   "create": 1,
-   "delete": 1,
-   "email": 1,
-   "export": 1,
-   "print": 1,
-   "read": 1,
-   "report": 1,
-   "role": "System Manager",
-   "share": 1,
-   "write": 1
-  },
-  {
-   "email": 1,
-   "export": 1,
-   "print": 1,
-   "read": 1,
-   "report": 1,
-   "role": "Sales User",
-   "share": 1,
-   "write": 1
-  },
-  {
-   "create": 1,
-   "delete": 1,
-   "email": 1,
-   "export": 1,
-   "print": 1,
-   "read": 1,
-   "report": 1,
-   "role": "Sales Manager",
-   "share": 1,
-   "write": 1
-  }
- ],
- "sort_field": "modified",
- "sort_order": "DESC",
- "states": []
+  "actions": [],
+  "creation": "2023-05-20 13:20:27.875085",
+  "default_view": "List",
+  "doctype": "DocType",
+  "editable_grid": 1,
+  "engine": "InnoDB",
+  "field_order": [
+    "woocommerce_server",
+    "id",
+    "parent_id",
+    "number",
+    "order_key",
+    "created_via",
+    "version",
+    "status",
+    "currency",
+    "date_created",
+    "date_created_gmt",
+    "date_modified",
+    "date_modified_gmt",
+    "discount_total",
+    "discount_tax",
+    "shipping_total",
+    "shipping_tax",
+    "cart_tax",
+    "total",
+    "total_tax",
+    "prices_include_tax",
+    "customer_id",
+    "customer_ip_address",
+    "customer_user_agent",
+    "customer_note",
+    "billing",
+    "shipping",
+    "payment_method",
+    "payment_method_title",
+    "transaction_id",
+    "date_paid",
+    "date_paid_gmt",
+    "date_completed",
+    "date_completed_gmt",
+    "cart_hash",
+    "meta_data",
+    "line_items",
+    "tax_lines",
+    "shipping_lines",
+    "fee_lines",
+    "coupon_lines",
+    "refunds",
+    "set_paid",
+    "shipment_trackings"
+  ],
+  "fields": [
+    {
+      "description": "Unique identifier for the resource.",
+      "fieldname": "id",
+      "fieldtype": "Data",
+      "in_list_view": 1,
+      "label": "Id",
+      "read_only": 1
+    },
+    {
+      "description": "Parent order ID.",
+      "fieldname": "parent_id",
+      "fieldtype": "Data",
+      "label": "Parent Id",
+      "read_only": 1
+    },
+    {
+      "description": "Order number.",
+      "fieldname": "number",
+      "fieldtype": "Data",
+      "label": "Number",
+      "read_only": 1
+    },
+    {
+      "description": "Order key.",
+      "fieldname": "order_key",
+      "fieldtype": "Data",
+      "in_list_view": 1,
+      "label": "Order Key",
+      "read_only": 1
+    },
+    {
+      "description": "Shows where the order was created.",
+      "fieldname": "created_via",
+      "fieldtype": "Data",
+      "label": "Created Via",
+      "read_only": 1
+    },
+    {
+      "description": "Version of WooCommerce which last updated the order.",
+      "fieldname": "version",
+      "fieldtype": "Data",
+      "label": "Version",
+      "read_only": 1
+    },
+    {
+      "description": "Order status. Options: pending, processing, on-hold, completed, cancelled, refunded, failed and trash. Default is pending.",
+      "fieldname": "status",
+      "fieldtype": "Select",
+      "in_list_view": 1,
+      "label": "Status",
+      "options": "pending\non-hold\nfailed\ncancelled\nprocessing\nrefunded\ncompleted\nready-pickup\npickup\ndelivered\nprocessing-lp\ncheckout-draft\ngplsquote-req\ntrash"
+    },
+    {
+      "description": "Currency the order was created with, in ISO format.",
+      "fieldname": "currency",
+      "fieldtype": "Data",
+      "label": "Currency",
+      "read_only": 1
+    },
+    {
+      "description": "The date the order was created, in the site's timezone.",
+      "fieldname": "date_created",
+      "fieldtype": "Datetime",
+      "label": "Date Created",
+      "read_only": 1
+    },
+    {
+      "description": "The date the order was created, as GMT.",
+      "fieldname": "date_created_gmt",
+      "fieldtype": "Datetime",
+      "label": "Date Created GMT",
+      "read_only": 1
+    },
+    {
+      "description": "The date the order was last modified, in the site's timezone.",
+      "fieldname": "date_modified",
+      "fieldtype": "Datetime",
+      "label": "Date Modified",
+      "read_only": 1
+    },
+    {
+      "description": "The date the order was last modified, as GMT.",
+      "fieldname": "date_modified_gmt",
+      "fieldtype": "Datetime",
+      "label": "Date Modified GMT",
+      "read_only": 1
+    },
+    {
+      "description": "Total discount amount for the order.",
+      "fieldname": "discount_total",
+      "fieldtype": "Data",
+      "label": "Discount Total",
+      "read_only": 1
+    },
+    {
+      "description": "Total discount tax amount for the order.",
+      "fieldname": "discount_tax",
+      "fieldtype": "Data",
+      "label": "Discount Tax",
+      "read_only": 1
+    },
+    {
+      "description": "Total shipping amount for the order.",
+      "fieldname": "shipping_total",
+      "fieldtype": "Data",
+      "label": "Shipping Total",
+      "read_only": 1
+    },
+    {
+      "description": "Total shipping tax amount for the order.",
+      "fieldname": "shipping_tax",
+      "fieldtype": "Data",
+      "label": "Shipping Tax",
+      "read_only": 1
+    },
+    {
+      "description": "Sum of line item taxes only.",
+      "fieldname": "cart_tax",
+      "fieldtype": "Data",
+      "label": "Cart Tax",
+      "read_only": 1
+    },
+    {
+      "description": "Grand total.",
+      "fieldname": "total",
+      "fieldtype": "Data",
+      "label": "Total",
+      "read_only": 1
+    },
+    {
+      "description": "Sum of all taxes.",
+      "fieldname": "total_tax",
+      "fieldtype": "Data",
+      "label": "Total Tax",
+      "read_only": 1
+    },
+    {
+      "default": "0",
+      "description": "True the prices included tax during checkout.",
+      "fieldname": "prices_include_tax",
+      "fieldtype": "Check",
+      "label": "Prices Include Tax",
+      "read_only": 1
+    },
+    {
+      "description": "User ID who owns the order. 0 for guests. Default is 0.",
+      "fieldname": "customer_id",
+      "fieldtype": "Data",
+      "label": "Customer Id",
+      "read_only": 1
+    },
+    {
+      "description": "Customer's IP address.",
+      "fieldname": "customer_ip_address",
+      "fieldtype": "Data",
+      "label": "Customer Ip Address",
+      "read_only": 1
+    },
+    {
+      "description": "User agent of the customer.",
+      "fieldname": "customer_user_agent",
+      "fieldtype": "Long Text",
+      "label": "Customer User Agent",
+      "read_only": 1
+    },
+    {
+      "description": "Note left by customer during checkout.",
+      "fieldname": "customer_note",
+      "fieldtype": "Text",
+      "label": "Customer Note",
+      "read_only": 1
+    },
+    {
+      "description": "Billing address. See Order - Billing properties",
+      "fieldname": "billing",
+      "fieldtype": "JSON",
+      "label": "Billing",
+      "read_only": 1
+    },
+    {
+      "description": "Shipping address. See Order - Shipping properties",
+      "fieldname": "shipping",
+      "fieldtype": "JSON",
+      "label": "Shipping",
+      "read_only": 1
+    },
+    {
+      "description": "Payment method ID.",
+      "fieldname": "payment_method",
+      "fieldtype": "Data",
+      "label": "Payment Method",
+      "read_only": 1
+    },
+    {
+      "description": "Payment method title.",
+      "fieldname": "payment_method_title",
+      "fieldtype": "Long Text",
+      "label": "Payment Method Title",
+      "read_only": 1
+    },
+    {
+      "description": "Unique transaction ID.",
+      "fieldname": "transaction_id",
+      "fieldtype": "Data",
+      "label": "Transaction Id",
+      "read_only": 1
+    },
+    {
+      "description": "The date the order was paid, in the site's timezone.",
+      "fieldname": "date_paid",
+      "fieldtype": "Datetime",
+      "label": "Date Paid",
+      "read_only": 1
+    },
+    {
+      "description": "The date the order was paid, as GMT.",
+      "fieldname": "date_paid_gmt",
+      "fieldtype": "Datetime",
+      "label": "Date Paid GMT",
+      "read_only": 1
+    },
+    {
+      "description": "The date the order was completed, in the site's timezone.",
+      "fieldname": "date_completed",
+      "fieldtype": "Datetime",
+      "label": "Date Completed",
+      "read_only": 1
+    },
+    {
+      "description": "The date the order was completed, as GMT.",
+      "fieldname": "date_completed_gmt",
+      "fieldtype": "Datetime",
+      "label": "Date Completed GMT",
+      "read_only": 1
+    },
+    {
+      "description": "MD5 hash of cart items to ensure orders are not modified.",
+      "fieldname": "cart_hash",
+      "fieldtype": "Data",
+      "label": "Cart Hash",
+      "read_only": 1
+    },
+    {
+      "description": "Meta data. See Order - Meta data properties",
+      "fieldname": "meta_data",
+      "fieldtype": "JSON",
+      "label": "Meta Data",
+      "read_only": 1
+    },
+    {
+      "description": "Line items data. See Order - Line items properties",
+      "fieldname": "line_items",
+      "fieldtype": "JSON",
+      "label": "Line Items",
+      "read_only": 1
+    },
+    {
+      "description": "Tax lines data. See Order - Tax lines properties",
+      "fieldname": "tax_lines",
+      "fieldtype": "JSON",
+      "label": "Tax Lines",
+      "read_only": 1
+    },
+    {
+      "description": "Shipping lines data. See Order - Shipping lines properties",
+      "fieldname": "shipping_lines",
+      "fieldtype": "JSON",
+      "label": "Shipping Lines",
+      "read_only": 1
+    },
+    {
+      "description": "Fee lines data. See Order - Fee lines properties",
+      "fieldname": "fee_lines",
+      "fieldtype": "JSON",
+      "label": "Fee Lines",
+      "read_only": 1
+    },
+    {
+      "description": "Coupons line data. See Order - Coupon lines properties",
+      "fieldname": "coupon_lines",
+      "fieldtype": "JSON",
+      "label": "Coupon Lines",
+      "read_only": 1
+    },
+    {
+      "description": "List of refunds. See Order - Refunds properties",
+      "fieldname": "refunds",
+      "fieldtype": "JSON",
+      "label": "Refunds",
+      "read_only": 1
+    },
+    {
+      "default": "0",
+      "description": "Define if the order is paid. It will set the status to processing and reduce stock items. Default is false.",
+      "fieldname": "set_paid",
+      "fieldtype": "Check",
+      "label": "Set Paid",
+      "read_only": 1
+    },
+    {
+      "description": "Only relevant if you are using the 'Advanced Shipment Tracking for WooCommerce' plugin",
+      "fieldname": "shipment_trackings",
+      "fieldtype": "JSON",
+      "label": "Shipment Trackings",
+      "read_only": 1
+    },
+    {
+      "fieldname": "woocommerce_server",
+      "fieldtype": "Link",
+      "label": "Woocommerce Server",
+      "options": "WooCommerce Server",
+      "read_only": 1,
+      "reqd": 1
+    }
+  ],
+  "index_web_pages_for_search": 1,
+  "is_virtual": 1,
+  "links": [],
+  "modified": "2024-12-12 08:17:46.566425",
+  "modified_by": "Administrator",
+  "module": "WooCommerce",
+  "name": "WooCommerce Order",
+  "owner": "Administrator",
+  "permissions": [
+    {
+      "create": 1,
+      "delete": 1,
+      "email": 1,
+      "export": 1,
+      "print": 1,
+      "read": 1,
+      "report": 1,
+      "role": "System Manager",
+      "share": 1,
+      "write": 1
+    },
+    {
+      "email": 1,
+      "export": 1,
+      "print": 1,
+      "read": 1,
+      "report": 1,
+      "role": "Sales User",
+      "share": 1,
+      "write": 1
+    },
+    {
+      "create": 1,
+      "delete": 1,
+      "email": 1,
+      "export": 1,
+      "print": 1,
+      "read": 1,
+      "report": 1,
+      "role": "Sales Manager",
+      "share": 1,
+      "write": 1
+    }
+  ],
+  "sort_field": "modified",
+  "sort_order": "DESC",
+  "states": []
 }
