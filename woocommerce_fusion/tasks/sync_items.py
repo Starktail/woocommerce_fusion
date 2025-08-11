@@ -202,15 +202,17 @@ class SynchroniseItem(SynchroniseWooCommerce):
 	def get_erpnext_item(self):
 		"""
 		Get erpnext item for a WooCommerce Product
+		Primary match by (server, woocommerce_id).
+		If not found, fall back to SKU-based matching.
+		Also auto-corrects a wrong link in case a variation is linked to its parent product ID.
 		"""
-		if not all(
-			[self.woocommerce_product.woocommerce_server, self.woocommerce_product.woocommerce_id]
-		):
+		if not all([self.woocommerce_product.woocommerce_server, self.woocommerce_product.woocommerce_id]):
 			raise ValueError("Both woocommerce_server and woocommerce_id required")
 
 		iws = frappe.qb.DocType("Item WooCommerce Server")
 		itm = frappe.qb.DocType("Item")
-
+        
+		# 1) Primary match: exact match by (server, woocommerce_id)
 		and_conditions = [
 			iws.woocommerce_server == self.woocommerce_product.woocommerce_server,
 			iws.woocommerce_id == self.woocommerce_product.woocommerce_id,
@@ -233,6 +235,54 @@ class SynchroniseItem(SynchroniseWooCommerce):
 					server.idx for server in found_item.woocommerce_servers if server.name == item_codes[0].name
 				),
 			)
+			# 1a) If this is a VARIATION but the linked WooCommerce ID in ERPNext
+			#     is wrong (e.g., storing the parent product ID instead of the variation ID) → correct it
+			if self.woocommerce_product.get("type") == "variation":
+				iws_row = next((row for row in found_item.woocommerce_servers if row.name == item_codes[0].name), None)
+				if iws_row and iws_row.woocommerce_id != self.woocommerce_product.woocommerce_id:
+					# common case: iws_row.woocommerce_id == self.woocommerce_product.parent_id
+					iws_row.db_set("woocommerce_id", self.woocommerce_product.woocommerce_id, update_modified=False)
+			return
+
+		# 2) Fallback: try to match by SKU (in case Item Code = SKU)
+		sku = (self.woocommerce_product.sku or "").strip()
+
+		if not sku:
+			return  # no SKU available, nothing else to try
+
+		item_name = frappe.db.get_value("Item", {"item_code": sku}, "name")
+        
+		if not item_name:
+			return  # no match by SKU either
+
+		found_item = frappe.get_doc("Item", item_name)
+
+		# 2a) Ensure there is an Item WooCommerce Server row for this server
+		iws_row = next(
+			(row for row in found_item.woocommerce_servers
+			if row.woocommerce_server == self.woocommerce_product.woocommerce_server),
+			None
+		)
+
+		if not iws_row:
+			iws_row = found_item.append("woocommerce_servers", {})
+			iws_row.woocommerce_server = self.woocommerce_product.woocommerce_server
+
+		# 2b) If the linked WooCommerce ID differs from the actual product's ID → correct it
+		if iws_row.woocommerce_id != self.woocommerce_product.woocommerce_id:
+			iws_row.woocommerce_id = self.woocommerce_product.woocommerce_id
+			found_item.flags.ignore_mandatory = True
+			found_item.flags.created_by_sync = True
+			found_item.save()
+
+		# 2c) Wrap the found item into ERPNextItemToSync for further processing
+		self.item = ERPNextItemToSync(
+			item=found_item,
+			item_woocommerce_server_idx=next(
+				server.idx for server in found_item.woocommerce_servers
+				if server.woocommerce_server == self.woocommerce_product.woocommerce_server
+			),
+		)
 
 	def sync_wc_product_with_erpnext_item(self):
 		"""
@@ -507,9 +557,36 @@ class SynchroniseItem(SynchroniseWooCommerce):
 
 					# We expect woocommerce_field_name to be valid JSONPath
 					jsonpath_expr = parse(map.woocommerce_field_name)
-					woocommerce_product_field_matches = jsonpath_expr.find(woocommerce_product_dict)
+					matches = jsonpath_expr.find(woocommerce_product_dict)
 
-					setattr(item, erpnext_item_field_name[0], woocommerce_product_field_matches[0].value)
+					# Skip silently if the path yields nothing (prevents IndexError)
+					if not matches:
+						frappe.logger().info(
+							f"[WooFusion] JSONPath '{map.woocommerce_field_name}' empty on "
+							f"{self.woocommerce_product.get('name')}; skip '{erpnext_item_field_name[0]}'"
+						)
+						continue
+
+					# Do NOT set categories on WooCommerce variations (they belong to the parent)
+					if (self.woocommerce_product.get("type") == "variation"
+						and "categories" in map.woocommerce_field_name.lower()):
+						frappe.logger().info(
+							f"[WooFusion] Skip categories mapping for variation "
+							f"{self.woocommerce_product.get('name')}"
+						)
+						continue
+
+					value = matches[0].value
+
+					# Skip empty strings/lists to avoid writing junk
+					if value in (None, "", []):
+						continue
+
+					# Unescape HTML entities coming from WC (e.g. '&amp;')
+					if isinstance(value, str):
+						value = unescape(value)
+
+					setattr(item, erpnext_item_field_name[0], value)
 					item_dirty = True
 		return item_dirty, item
 
