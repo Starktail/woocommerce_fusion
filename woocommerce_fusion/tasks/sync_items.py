@@ -22,6 +22,7 @@ from woocommerce_fusion.woocommerce.woocommerce_api import (
 	generate_woocommerce_record_name_from_domain_and_id,
 )
 
+from html import unescape
 
 def run_item_sync_from_hook(doc, method):
 	"""
@@ -467,8 +468,8 @@ class SynchroniseItem(SynchroniseWooCommerce):
 			else str(wc_product.woocommerce_id)
 		)
 		item.stock_uom = wc_server.uom or _("Nos")
-		item.item_group = wc_server.item_group
-		item.item_name = wc_product.woocommerce_name
+		item.item_group = unescape(wc_server.item_group)
+		item.item_name = unescape(wc_product.woocommerce_name)
 		row = item.append("woocommerce_servers")
 		row.woocommerce_id = wc_product.woocommerce_id
 		row.woocommerce_server = wc_server.name
@@ -617,6 +618,17 @@ class SynchroniseItem(SynchroniseWooCommerce):
 					# We expect woocommerce_field_name to be valid JSONPath
 					jsonpath_expr = parse(map.woocommerce_field_name)
 					woocommerce_product_field_matches = jsonpath_expr.find(wc_product_with_deserialised_fields)
+
+					# Varianten haben keine eigenen Kategorien → Kategorie-Mapping überspringen
+					if (
+						woocommerce_product.get("type") == "variation"
+						and "categories" in map.woocommerce_field_name.lower()
+						):
+						frappe.logger().info(
+							f"[WooFusion] Skip categories mapping for variation "
+							f"{woocommerce_product.get('name')} (JSONPath: {map.woocommerce_field_name})"
+						)
+						continue
 
 					if len(woocommerce_product_field_matches) == 0:
 						if woocommerce_product.name:
