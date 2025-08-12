@@ -84,10 +84,41 @@ class WooCommerceOrder(WooCommerceResource):
 	# nosemgrep
 	@staticmethod
 	def get_list(args):
-		return WooCommerceOrder.get_list_of_records(args)
+		all_products = []
+		page = 1
 
-	def after_load_from_db(self, order: Dict):
-		return self.get_additional_order_attributes(order)
+		# Hole alle Seiten aus WooCommerce
+		while True:
+			args["params"] = args.get("params", {})
+			args["params"].update({"per_page": 100, "page": page})
+			products = WooCommerceProduct.get_list_of_records(args)
+
+			if not products:
+				break
+
+			all_products.extend(products)
+			page += 1
+
+		# Extend the list with product variants
+		products_with_variants = [
+			(product.get("id"), product.get("woocommerce_name"))
+			for product in all_products
+			if product.get("type") == "variable"
+		]
+		for id, woocommerce_name in products_with_variants:
+			args["endpoint"] = f"products/{id}/variations"
+			args["metadata"] = {"parent_woocommerce_name": woocommerce_name}
+
+			page = 1
+			while True:
+				args["params"] = {"per_page": 100, "page": page}
+				variants = WooCommerceProduct.get_list_of_records(args)
+				if not variants:
+					break
+				all_products.extend(variants)
+				page += 1
+
+		return all_products
 
 	# use "args" despite frappe-semgrep-rules.rules.overusing-args, following convention in ERPNext
 	# nosemgrep
