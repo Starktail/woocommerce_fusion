@@ -361,6 +361,37 @@ class SynchroniseItem(SynchroniseWooCommerce):
 			frappe.logger().info(f"[WooCommerce Fusion] Skipped saving variable parent product '{wc_product.name}' due to missing regular_price (expected for variable products).")
 			return
 		
+		# Sicherstellen, dass catalog_visibility einen gültigen Wert hat
+		valid_visibilities = {"visible", "catalog", "search", "hidden"}
+
+		def safe_visibility(current, parent_vis=None, ptype=None):
+			if current in valid_visibilities:
+				return current
+			# Für Variations: vom Parent erben oder Standard auf "visible"
+			if ptype == "variation":
+				return parent_vis or "visible"
+			return "visible"
+
+		parent_visibility = None
+		try:
+			if getattr(wc_product, "parent_id", None):
+				parent = frappe.get_all(
+					"WooCommerce Product",
+					filters={"woocommerce_id": wc_product.parent_id},
+					fields=["catalog_visibility"],
+					limit=1
+				)
+				if parent:
+					parent_visibility = parent[0].get("catalog_visibility")
+		except Exception:
+			pass
+
+		wc_product.catalog_visibility = safe_visibility(
+			getattr(wc_product, "catalog_visibility", None),
+			parent_vis=parent_visibility,
+			ptype=getattr(wc_product, "type", None)
+		)
+
 		if wc_product_dirty:
 			wc_product.save()
 
