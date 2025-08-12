@@ -5,6 +5,7 @@ import json
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Dict, List
+from frappe.utils import cint
 
 import frappe
 
@@ -80,45 +81,113 @@ class WooCommerceOrder(WooCommerceResource):
 
 		return wc_api_list
 
-	# use "args" despite frappe-semgrep-rules.rules.overusing-args, following convention in ERPNext
-	# nosemgrep
-	@staticmethod
-	def get_list(args):
-		all_products = []
+	def _fetch_wc_page(args, endpoint, page, per_page=100, metadata=None):
+		a = {**args}
+		a["endpoint"] = endpoint
+		a["params"] = {**a.get("params", {}), "per_page": per_page, "page": page}
+		if metadata:
+			a["metadata"] = metadata
+		return WooCommerceProduct.get_list_of_records(a)
+
+	def _iter_flat_products(args, per_page=100):
+		"""
+		Generator: liefert eine flache Sequenz aus Produkten UND ihren Variationen
+		in der Reihenfolge: Produkt, dann dessen Variationen (falls 'variable').
+		"""
 		page = 1
-
-		# Hole alle Seiten aus WooCommerce
 		while True:
-			args["params"] = args.get("params", {})
-			args["params"].update({"per_page": 100, "page": page})
-			products = WooCommerceProduct.get_list_of_records(args)
-
+			products = _fetch_wc_page(args, "products", page, per_page=per_page)
 			if not products:
 				break
 
-			all_products.extend(products)
+			for p in products:
+				yield p
+				if p.get("type") == "variable":
+					# Variationen seitenweise nachladen
+					vpage = 1
+					while True:
+						variants = _fetch_wc_page(
+							args,
+							f"products/{p.get('id')}/variations",
+							vpage,
+							per_page=per_page,
+							metadata={"parent_woocommerce_name": p.get("woocommerce_name")},
+						)
+						if not variants:
+							break
+						for v in variants:
+							yield v
+						if len(variants) < per_page:
+							break
+						vpage += 1
+
+			if len(products) < per_page:
+				break
 			page += 1
 
-		# Extend the list with product variants
-		products_with_variants = [
-			(product.get("id"), product.get("woocommerce_name"))
-			for product in all_products
-			if product.get("type") == "variable"
-		]
-		for id, woocommerce_name in products_with_variants:
-			args["endpoint"] = f"products/{id}/variations"
-			args["metadata"] = {"parent_woocommerce_name": woocommerce_name}
+	@staticmethod
+	def get_list(args):
+		# gewünschtes Fenster aus der flachen Sequenz schneiden
+		start = cint(args.get("limit_start") or args.get("start") or 0)
+		page_len = cint(args.get("limit_page_length") or args.get("page_length") or 20)
+		want_until = start + page_len
 
-			page = 1
-			while True:
-				args["params"] = {"per_page": 100, "page": page}
-				variants = WooCommerceProduct.get_list_of_records(args)
-				if not variants:
-					break
-				all_products.extend(variants)
-				page += 1
+		results = []
+		seen = set()  # zur Deduplizierung (server/id/type)
+		for row in _iter_flat_products(args, per_page=100):
+			# Key für Duplikatserkennung
+			key = (row.get("woocommerce_server"), row.get("id"), row.get("type") or row.get("resource_type"))
+			if key in seen:
+				continue
+			seen.add(key)
+			results.append(row)
+			if len(results) >= want_until:
+				break
 
-		return all_products
+		# endgültiges Slice fürs UI
+		return results[start:want_until]
+
+	@staticmethod
+	def get_count(args) -> int:
+		"""
+		Zählt Produkte + Variationen. Achtung: macht mehrere Requests.
+		Für große Kataloge evtl. cachen (frappe.cache) und z. B. 5–15 min gültig lassen.
+		"""
+		cache_key = "woofusion:count:products+variants"
+		cached = frappe.cache.hget(cache_key, "v1")
+		if cached is not None:
+			try:
+				return int(cached)
+			except Exception:
+				pass
+
+		# 1) Gesamtzahl der Hauptprodukte (per Header von /products)
+		# get_count_of_records(args) sollte 'per_page'/'page' selbst handhaben;
+		# falls nicht, ein Mini-Wrapper wie oben verwenden und Header X-WP-Total auslesen.
+		total_products = WooCommerceProduct.get_count_of_records({**args, "endpoint": "products"})
+
+		# 2) Variationen zählen: alle variable Produkte iterieren, je Produkt Variations-Count addieren
+		#   => nutzt get_count_of_records auf dem Variations-Endpoint
+		variants_total = 0
+		page = 1
+		per_page = 100
+		while True:
+			products = _fetch_wc_page(args, "products", page, per_page=per_page)
+			if not products:
+				break
+			for p in products:
+				if p.get("type") == "variable":
+					vcount = WooCommerceProduct.get_count_of_records(
+						{**args, "endpoint": f"products/{p.get('id')}/variations"}
+					)
+					variants_total += int(vcount or 0)
+			if len(products) < per_page:
+				break
+			page += 1
+
+		total = int(total_products or 0) + variants_total
+		frappe.cache.hset(cache_key, "v1", total, expires_in_sec=600)  # 10 min Cache
+		return total
 
 	# use "args" despite frappe-semgrep-rules.rules.overusing-args, following convention in ERPNext
 	# nosemgrep
