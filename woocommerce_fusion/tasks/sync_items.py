@@ -212,7 +212,7 @@ class SynchroniseItem(SynchroniseWooCommerce):
 
 		iws = frappe.qb.DocType("Item WooCommerce Server")
 		itm = frappe.qb.DocType("Item")
-        
+		
 		# 1) Primary match: exact match by (server, woocommerce_id)
 		and_conditions = [
 			iws.woocommerce_server == self.woocommerce_product.woocommerce_server,
@@ -237,7 +237,7 @@ class SynchroniseItem(SynchroniseWooCommerce):
 				),
 			)
 			# 1a) If this is a VARIATION but the linked WooCommerce ID in ERPNext
-			#     is wrong (e.g., storing the parent product ID instead of the variation ID) → correct it
+			#	 is wrong (e.g., storing the parent product ID instead of the variation ID) → correct it
 			if self.woocommerce_product.get("type") == "variation":
 				iws_row = next((row for row in found_item.woocommerce_servers if row.name == item_codes[0].name), None)
 				if iws_row and iws_row.woocommerce_id != self.woocommerce_product.woocommerce_id:
@@ -252,7 +252,7 @@ class SynchroniseItem(SynchroniseWooCommerce):
 			return  # no SKU available, nothing else to try
 
 		item_name = frappe.db.get_value("Item", {"item_code": sku}, "name")
-        
+		
 		if not item_name:
 			return  # no match by SKU either
 
@@ -335,6 +335,15 @@ class SynchroniseItem(SynchroniseWooCommerce):
 
 		self.set_sync_hash()
 
+	@staticmethod
+	def _missing_regular_price(doc) -> bool:
+		val = doc.get("regular_price")
+		try:
+			# consider None, "", "0", 0, 0.0 as missing
+			return val is None or float(val) == 0.0
+		except Exception:
+			return not bool(val)
+
 	def update_woocommerce_product(
 		self, wc_product: WooCommerceProduct, item: ERPNextItemToSync
 	) -> None:
@@ -352,11 +361,11 @@ class SynchroniseItem(SynchroniseWooCommerce):
 		if product_fields_changed:
 			wc_product_dirty = True
 
-		# Skip saving variable parent products without regular_price
+		# Skip saving variable parent products when regular_price is missing/zero (expected)
 		if (
-			wc_product.regular_price is None and
-			wc_product.type == "variable" and
-			not wc_product.get("__islocal")
+			wc_product.get("type") == "variable"
+			and not wc_product.get("__islocal")
+			and self._missing_regular_price(wc_product)
 		):
 			frappe.logger().info(f"[WooCommerce Fusion] Skipped saving variable parent product '{wc_product.name}' due to missing regular_price (expected for variable products).")
 			return
@@ -608,11 +617,13 @@ class SynchroniseItem(SynchroniseWooCommerce):
 						)
 						continue
 
-					# Do NOT set categories on WooCommerce variations (they belong to the parent)
-					if (self.woocommerce_product.get("type") == "variation"
-						and "categories" in map.woocommerce_field_name.lower()):
+					# Do NOT set categories/tags on WooCommerce variations (they belong to the parent)
+					if (
+						self.woocommerce_product.get("type") == "variation"
+						and any(k in map.woocommerce_field_name.lower() for k in ("categories", "tags"))
+					):
 						frappe.logger().info(
-							f"[WooFusion] Skip categories mapping for variation "
+							f"[WooFusion] Skip categories/tags mapping for variation "
 							f"{self.woocommerce_product.get('name')}"
 						)
 						continue
@@ -655,32 +666,40 @@ class SynchroniseItem(SynchroniseWooCommerce):
 					erpnext_item_field_name = map.erpnext_field_name.split(" | ")
 					erpnext_item_field_value = getattr(item.item, erpnext_item_field_name[0])
 
-					# We expect woocommerce_field_name to be valid JSONPath
-					jsonpath_expr = parse(map.woocommerce_field_name)
-					woocommerce_product_field_matches = jsonpath_expr.find(wc_product_with_deserialised_fields)
+					# Determine mapping traits once
+					is_variation = woocommerce_product.get("type") == "variation"
+					path_lower = (map.woocommerce_field_name or "").lower()
+					is_parent_only = ("categories" in path_lower) or ("tags" in path_lower)
 
-					# Varianten haben keine eigenen Kategorien → Kategorie-Mapping überspringen
-					if (
-						woocommerce_product.get("type") == "variation"
-						and "categories" in map.woocommerce_field_name.lower()
-						):
+					# Variations never carry categories/tags in WooCommerce → skip early
+					if is_variation and is_parent_only:
 						frappe.logger().info(
-							f"[WooFusion] Skip categories mapping for variation "
-							f"{woocommerce_product.get('name')} (JSONPath: {map.woocommerce_field_name})"
+							f"[WooFusion] Skipping mapping '{map.woocommerce_field_name}' for variation "
+							f"{woocommerce_product.get('name')} (parent-only in WooCommerce)"
 						)
 						continue
 
+					# Parse JSONPath and find matches
+					jsonpath_expr = parse(map.woocommerce_field_name)
+					woocommerce_product_field_matches = jsonpath_expr.find(wc_product_with_deserialised_fields)
+
+					# Missing fields: allow absence for new docs and for categories/tags on existing docs
 					if len(woocommerce_product_field_matches) == 0:
-						if woocommerce_product.name:
-							# We're strict about existing WooCommerce Products, the field should exist
-							raise ValueError(
-								_("Field <code>{0}</code> not found in WooCommerce Product {1}").format(
-									map.woocommerce_field_name, woocommerce_product.name
-								)
-							)
-						else:
-							# For new WooCommerce Products, the nested field may not exist yet, so don't stop the sync
+						if not woocommerce_product.name:
+							# New product; nested path may not exist yet
 							continue
+						if is_parent_only:
+							frappe.logger().info(
+								f"[WooFusion] JSONPath '{map.woocommerce_field_name}' not present on "
+								f"{woocommerce_product.get('name')} — skipping (parent-only/optional)."
+							)
+							continue
+						# For all other fields stay strict on existing products
+						raise ValueError(
+							_("Field <code>{0}</code> not found in WooCommerce Product {1}").format(
+								map.woocommerce_field_name, woocommerce_product.name
+							)
+						)
 
 					# JSONPath parsing typically returns a list, we'll only take the first value
 					woocommerce_product_field_value = woocommerce_product_field_matches[0].value
@@ -744,7 +763,8 @@ def get_list_of_wc_products(
 	if date_time_from:
 		filters.append(["WooCommerce Product", "date_modified", ">", date_time_from])
 	if item:
-		filters.append(["WooCommerce Product", "id", "=", item.item_woocommerce_server.woocommerce_id])
+		# Filter must use 'woocommerce_id' (the external WC id), not the DocType's database 'name/id'
+		filters.append(["WooCommerce Product", "woocommerce_id", "=", item.item_woocommerce_server.woocommerce_id])
 		servers = [item.item_woocommerce_server.woocommerce_server]
 
 	while new_results:
