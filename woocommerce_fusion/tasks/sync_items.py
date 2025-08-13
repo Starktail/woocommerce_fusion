@@ -339,10 +339,34 @@ class SynchroniseItem(SynchroniseWooCommerce):
 	def _missing_regular_price(doc) -> bool:
 		val = doc.get("regular_price")
 		try:
-			# consider None, "", "0", 0, 0.0 as missing
+			# treat None, "", "0", 0, 0.0 as missing
 			return val is None or float(val) == 0.0
 		except Exception:
 			return not bool(val)
+
+	def _ensure_regular_price(self, wc_product: WooCommerceProduct, item: ERPNextItemToSync) -> bool:
+		"""
+		Ensure regular_price is non-zero for simple/variation before saving.
+		Returns True if it's safe to save, False if we should skip saving.
+		"""
+		ptype = wc_product.get("type")
+		if ptype == "variable":
+			return True  # parent variable products are allowed to have no price
+		if not self._missing_regular_price(wc_product):
+			return True
+
+		# Try derive from ERPNext price list
+		price = get_item_price_rate(item)
+		if price:
+			wc_product.regular_price = str(price)
+			return True
+
+		# No price available -> skip save to avoid MandatoryError
+		frappe.logger().info(
+			f"[WooFusion] Skipping save for {wc_product.get('name')} (type={ptype}) because regular_price is missing "
+			f"and no Item Price could be derived."
+		)
+		return False
 
 	def update_woocommerce_product(
 		self, wc_product: WooCommerceProduct, item: ERPNextItemToSync
@@ -400,6 +424,21 @@ class SynchroniseItem(SynchroniseWooCommerce):
 			parent_vis=parent_visibility,
 			ptype=getattr(wc_product, "type", None)
 		)
+
+		# variable parent ohne Preis -> speichern überspringen (erwartet)
+		if (
+			wc_product.get("type") == "variable"
+			and not wc_product.get("__islocal")
+			and self._missing_regular_price(wc_product)
+		):
+			frappe.logger().info(
+				f"[WooCommerce Fusion] Skipped save for variable parent '{wc_product.name}' (no regular_price, expected)."
+			)
+			return
+
+		# simple/variation: Preis MUSS vorhanden sein -> sonst versuchen zu setzen, ggf. Save skippen
+		if not self._ensure_regular_price(wc_product, item):
+			return
 
 		if wc_product_dirty:
 			wc_product.save()
@@ -700,6 +739,18 @@ class SynchroniseItem(SynchroniseWooCommerce):
 								map.woocommerce_field_name, woocommerce_product.name
 							)
 						)
+					
+					# Do not overwrite regular_price with empty/zero from ERPNext
+					if "regular_price" in (map.woocommerce_field_name or "").lower():
+						try:
+							v = float(erpnext_item_field_value) if erpnext_item_field_value not in (None, "", []) else 0.0
+						except Exception:
+							v = 0.0
+						if v <= 0.0:
+							frappe.logger().info(
+								f"[WooFusion] Skip regular_price update (empty/zero) for {woocommerce_product.get('name')}"
+							)
+							continue
 
 					# JSONPath parsing typically returns a list, we'll only take the first value
 					woocommerce_product_field_value = woocommerce_product_field_matches[0].value
