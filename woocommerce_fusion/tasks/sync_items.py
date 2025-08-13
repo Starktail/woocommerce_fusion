@@ -344,29 +344,37 @@ class SynchroniseItem(SynchroniseWooCommerce):
 		except Exception:
 			return not bool(val)
 
-	def _ensure_regular_price(self, wc_product: WooCommerceProduct, item: ERPNextItemToSync) -> bool:
+	def _ensure_regular_price(self, wc_product: WooCommerceProduct, item: ERPNextItemToSync) -> tuple[bool, bool]:
 		"""
 		Ensure regular_price is non-zero for simple/variation before saving.
 		Returns True if it's safe to save, False if we should skip saving.
 		"""
+		
 		ptype = wc_product.get("type")
+		
 		if ptype == "variable":
-			return True  # parent variable products are allowed to have no price
+			return True, False  # parent variable products are allowed to have no price
 		if not self._missing_regular_price(wc_product):
-			return True
+			return True, False
 
 		# Try derive from ERPNext price list
 		price = get_item_price_rate(item)
-		if price:
-			wc_product.regular_price = str(price)
-			return True
-
-		# No price available -> skip save to avoid MandatoryError
+		# akzeptiere nur > 0.0
+		if isinstance(price, (int, float)) and float(price) > 0.0:
+			wc_product.regular_price = f"{float(price):.2f}"
+			# optional auch 'price' angleichen, wenn euer Doctype das erwartet:
+			try:
+				wc_product.price = wc_product.regular_price
+			except Exception:
+				pass
+			return True, True
+			# No price available -> skip save to avoid MandatoryError
 		frappe.logger().info(
 			f"[WooFusion] Skipping save for {wc_product.get('name')} (type={ptype}) because regular_price is missing "
 			f"and no Item Price could be derived."
 		)
-		return False
+		
+		return False, False
 
 	def update_woocommerce_product(
 		self, wc_product: WooCommerceProduct, item: ERPNextItemToSync
@@ -437,8 +445,11 @@ class SynchroniseItem(SynchroniseWooCommerce):
 			return
 
 		# simple/variation: Preis MUSS vorhanden sein -> sonst versuchen zu setzen, ggf. Save skippen
-		if not self._ensure_regular_price(wc_product, item):
+		ok_to_save, price_set = self._ensure_regular_price(wc_product, item)
+		if not ok_to_save:
 			return
+		if price_set:
+			wc_product_dirty = True
 
 		if wc_product_dirty:
 			wc_product.save()
@@ -846,20 +857,34 @@ def get_item_price_rate(item: ERPNextItemToSync):
 	wc_server = frappe.get_cached_doc(
 		"WooCommerce Server", item.item_woocommerce_server.woocommerce_server
 	)
+
 	if wc_server.enable_price_list_sync:
+		# primary: by item_code (korrekt)
 		item_prices = frappe.get_all(
 			"Item Price",
-			filters={"item_code": item.item.item_name, "price_list": wc_server.price_list},
+			filters={"item_code": item.item.item_code, "price_list": wc_server.price_list},
 			fields=["price_list_rate", "valid_upto"],
 		)
-		return next(
+		# fallback: falls manche Preise (historisch) auf item_name liegen
+		if not item_prices:
+			item_prices = frappe.get_all(
+				"Item Price",
+				filters={"item_code": item.item.item_name, "price_list": wc_server.price_list},
+				fields=["price_list_rate", "valid_upto"],
+			)
+		rate = next(
 			(
-				price.price_list_rate
-				for price in item_prices
-				if not price.valid_upto or price.valid_upto > now()
+				p.price_list_rate
+				for p in item_prices
+				if not p.valid_upto or p.valid_upto > now()
 			),
 			None,
 		)
+		try:
+			return float(rate) if rate is not None else None
+		except Exception:
+			return None
+
 
 
 def clear_sync_hash_and_run_item_sync(item_code: str):
