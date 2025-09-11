@@ -914,7 +914,7 @@ def get_list_of_wc_orders(
 	while new_results:
 		woocommerce_order = frappe.get_doc({"doctype": "WooCommerce Order"})
 		new_results = woocommerce_order.get_list(
-			args={"filters": filters, "page_lenth": page_length, "start": start, "as_doc": True}
+			args={"filters": filters, "page_length": page_length, "start": start, "as_doc": True}
 		)
 		for wc_order in new_results:
 			wc_orders.append(wc_order)
