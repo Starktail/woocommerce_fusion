@@ -365,6 +365,10 @@ class SynchroniseSalesOrder(SynchroniseWooCommerce):
 		"""
 		Update the WooCommerce Order with fields from it's corresponding ERPNext Sales Order
 		"""
+		wc_server = frappe.get_cached_doc("WooCommerce Server", wc_order.woocommerce_server)
+		if not wc_server.enable_so_status_sync:
+		    return  # Don't update status upstream if sync is disabled
+		
 		wc_order_dirty = False
 
 		# Update the woocommerce_status field if necessary
