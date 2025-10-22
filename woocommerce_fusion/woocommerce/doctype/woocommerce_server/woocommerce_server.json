@@ -64,6 +64,7 @@
   "order_fees_section",
   "enable_order_fees_sync",
   "account_for_order_fee_lines",
+  "account_for_negative_order_fee_lines",
   "tax_account_for_order_fee_lines",
   "tab_items",
   "item_section",
@@ -85,6 +86,8 @@
   "advanced_shipment_tracking_section",
   "wc_plugin_advanced_shipment_tracking",
   "wc_ast_shipment_providers",
+  "germanized_for_woocommerce_section",
+  "html_emjq",
   "tab_logs",
   "enable_woocommerce_request_logs"
  ],
@@ -593,12 +596,30 @@
    "label": "Freight and Forwarding Tax Account",
    "options": "Account",
    "reqd": 1
+  },
+  {
+   "fieldname": "germanized_for_woocommerce_section",
+   "fieldtype": "Section Break",
+   "label": "Germanized for WooCommerce"
+  },
+  {
+   "fieldname": "html_emjq",
+   "fieldtype": "HTML",
+   "options": "<p class=\"help-box small text-muted\">'Germanized for WooCommerce' handles Coupons marked as 'Vouchers' as Negative Fees. Enable \"Order Fee Lines Sync\" on the Sales Order tab to handle this functionality</p>"
+  },
+  {
+   "depends_on": "eval: doc.enable_order_fees_sync",
+   "fieldname": "account_for_negative_order_fee_lines",
+   "fieldtype": "Link",
+   "label": "Account for Negative Order Fee Lines",
+   "mandatory_depends_on": "eval: doc.enable_order_fees_sync",
+   "options": "Account"
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2025-10-03 10:52:27.751479",
+ "modified": "2025-10-22 09:36:31.805564",
  "modified_by": "Administrator",
  "module": "WooCommerce",
  "name": "WooCommerce Server",

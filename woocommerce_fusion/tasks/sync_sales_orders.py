@@ -728,6 +728,8 @@ class SynchroniseSalesOrder(SynchroniseWooCommerce):
 		if wc_server.enable_order_fees_sync:
 			if not wc_server.account_for_order_fee_lines:
 				frappe.throw(_("Please set 'Account for Order Fee Lines' in WooCommerce Server"))
+			if not wc_server.account_for_negative_order_fee_lines:
+				frappe.throw(_("Please set 'Account for Negative Order Fee Lines' in WooCommerce Server"))
 			if not wc_order.fee_lines:
 				return
 			for fee_line in json.loads(wc_order.fee_lines):
@@ -737,7 +739,9 @@ class SynchroniseSalesOrder(SynchroniseWooCommerce):
 					"taxes",
 					{
 						"charge_type": "Actual",
-						"account_head": wc_server.account_for_order_fee_lines,
+						"account_head": wc_server.account_for_order_fee_lines
+						if float(fee_line["total"]) > 0
+						else wc_server.account_for_negative_order_fee_lines,
 						"tax_amount": fee_line["total"],
 						"description": fee_line["name"],
 					},
