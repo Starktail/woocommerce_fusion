@@ -50,6 +50,7 @@ class TestIntegrationWooCommerce(FrappeTestCase):
 		wc_server.use_actual_tax_type = 1
 		wc_server.tax_account = "VAT - SC"
 		wc_server.f_n_f_account = "Freight and Forwarding Charges - SC"
+		wc_server.f_n_f_tax_account = "VAT - SC"
 		wc_server.creation_user = "test@erpnext.com"
 		wc_server.company = "Some Company (Pty) Ltd"
 		wc_server.item_group = "Products"

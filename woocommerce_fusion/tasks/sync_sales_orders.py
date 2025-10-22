@@ -707,7 +707,9 @@ class SynchroniseSalesOrder(SynchroniseWooCommerce):
 		# If a Shipping Rule is added, shipping charges will be determined by the Shipping Rule. If not, then
 		# get it from the WooCommerce Order
 		if not new_sales_order.shipping_rule:
-			add_tax_details(new_sales_order, wc_order.shipping_tax, "Shipping Tax", wc_server.tax_account)
+			add_tax_details(
+				new_sales_order, wc_order.shipping_tax, "Shipping Tax", wc_server.f_n_f_tax_account
+			)
 			add_tax_details(
 				new_sales_order,
 				wc_order.shipping_total,
@@ -730,6 +732,8 @@ class SynchroniseSalesOrder(SynchroniseWooCommerce):
 		if wc_server.enable_order_fees_sync:
 			if not wc_server.account_for_order_fee_lines:
 				frappe.throw(_("Please set 'Account for Order Fee Lines' in WooCommerce Server"))
+			if not wc_server.account_for_negative_order_fee_lines:
+				frappe.throw(_("Please set 'Account for Negative Order Fee Lines' in WooCommerce Server"))
 			if not wc_order.fee_lines:
 				return
 			for fee_line in json.loads(wc_order.fee_lines):
@@ -739,7 +743,9 @@ class SynchroniseSalesOrder(SynchroniseWooCommerce):
 					"taxes",
 					{
 						"charge_type": "Actual",
-						"account_head": wc_server.account_for_order_fee_lines,
+						"account_head": wc_server.account_for_order_fee_lines
+						if float(fee_line["total"]) > 0
+						else wc_server.account_for_negative_order_fee_lines,
 						"tax_amount": fee_line["total"],
 						"description": fee_line["name"],
 					},

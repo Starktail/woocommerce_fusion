@@ -7,3 +7,4 @@ woocommerce_fusion.patches.v1.migrate_woocommerce_settings_v1_4
 woocommerce_fusion.patches.v1.update_woocommerce_identifiers
 woocommerce_fusion.patches.v1.update_woocommerce_server_item_map
 woocommerce_fusion.patches.v1.enable_woocommerce_server_tax_settings
+woocommerce_fusion.patches.v1.set_shipping_tax_account
