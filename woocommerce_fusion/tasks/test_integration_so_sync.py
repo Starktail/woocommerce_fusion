@@ -902,6 +902,7 @@ class TestIntegrationWooCommerceSync(TestIntegrationWooCommerce):
 		wc_server = frappe.get_doc("WooCommerce Server", self.wc_server.name)
 		wc_server.enable_order_fees_sync = 1
 		wc_server.account_for_order_fee_lines = "Sales Expenses - SC"
+		wc_server.account_for_negative_order_fee_lines = "Marketing Expenses - SC"
 		wc_server.tax_account_for_order_fee_lines = "VAT - SC"
 		wc_server.submit_sales_orders = 0
 		wc_server.flags.ignore_mandatory = True
