@@ -844,6 +844,8 @@ class TestIntegrationWooCommerceSync(TestIntegrationWooCommerce):
 
 		# Delete order in WooCommerce
 		self.delete_woocommerce_order(wc_order_id=wc_order_id)
+
+	def test_sync_so_with_coupon(self, mock_log_error):
 		"""
 		Test that the Sales Order Synchronisation method creates a new Sales order when there is a new
 		WooCommerce order, and that coupons are taken into account
@@ -900,6 +902,7 @@ class TestIntegrationWooCommerceSync(TestIntegrationWooCommerce):
 		wc_server = frappe.get_doc("WooCommerce Server", self.wc_server.name)
 		wc_server.enable_order_fees_sync = 1
 		wc_server.account_for_order_fee_lines = "Sales Expenses - SC"
+		wc_server.account_for_negative_order_fee_lines = "Marketing Expenses - SC"
 		wc_server.tax_account_for_order_fee_lines = "VAT - SC"
 		wc_server.submit_sales_orders = 0
 		wc_server.flags.ignore_mandatory = True
@@ -950,3 +953,63 @@ class TestIntegrationWooCommerceSync(TestIntegrationWooCommerce):
 
 		# Delete order in WooCommerce
 		self.delete_woocommerce_order(wc_order_id=wc_order_id)
+
+	def test_order_negative_fee_lines_are_synced_when_enabled(self, mock_log_error):
+		"""
+		Test that Negative Order Fee Lines are synchronised when enabled
+		"""
+		# Setup
+		wc_server = frappe.get_doc("WooCommerce Server", self.wc_server.name)
+		wc_server.enable_order_fees_sync = 1
+		wc_server.account_for_order_fee_lines = "Sales Expenses - SC"
+		wc_server.account_for_negative_order_fee_lines = "Marketing Expenses - SC"
+		wc_server.tax_account_for_order_fee_lines = "VAT - SC"
+		wc_server.submit_sales_orders = 0
+		wc_server.flags.ignore_mandatory = True
+		wc_server.save()
+
+		# Create a new order in WooCommerce with fee lines
+		wc_order_id, wc_order_name = self.post_woocommerce_order(
+			payment_method_title="Doge",
+			item_price=20,
+			item_qty=1,
+			# WooCommerce REST API always applies taxes when setting fee_lines (despite setting "tax_status" to "none")
+			# So we'll test with "tax_status": "taxable"
+			# https://github.com/woocommerce/woocommerce/issues/25719
+			fee_lines=[
+				{
+					"name": "Voucher - New Launch",
+					"tax_status": "taxable",
+					"amount": "-10",
+					"total": "-10.00",
+					"meta_data": [],
+				}
+			],
+		)
+
+		# Run synchronisation for the ERPNext Sales Order to be created
+		run_sales_order_sync(woocommerce_order_name=wc_order_name)
+
+		# Expect no errors logged
+		mock_log_error.assert_not_called()
+
+		# Expect newly created Sales Order in ERPNext
+		sales_order_name = frappe.get_value("Sales Order", {"woocommerce_id": wc_order_id}, "name")
+		self.assertIsNotNone(sales_order_name)
+		sales_order = frappe.get_doc("Sales Order", sales_order_name)
+
+		# Expect correct taxes and charges row for fee in Sales Order
+		self.assertEqual(sales_order.taxes[-2].charge_type, "Actual")
+		self.assertEqual(sales_order.taxes[-2].rate, 0)
+		self.assertEqual(sales_order.taxes[-2].tax_amount, -10)
+		self.assertEqual(sales_order.taxes[-2].account_head, "Marketing Expenses - SC")
+		self.assertEqual(sales_order.taxes[-2].description, "Voucher - New Launch")
+
+		# Expect correct taxes and charges row for fee tax in Sales Order
+		self.assertEqual(sales_order.taxes[-1].charge_type, "Actual")
+		self.assertEqual(sales_order.taxes[-1].rate, 0)
+		self.assertEqual(sales_order.taxes[-1].tax_amount, -1.5)
+		self.assertEqual(sales_order.taxes[-1].account_head, "VAT - SC")
+
+		# Delete order in WooCommerce
+		# self.delete_woocommerce_order(wc_order_id=wc_order_id)

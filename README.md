@@ -64,6 +64,8 @@ npx @wp-playground/cli server --blueprint wp_woo_blueprint.json  --site-url=http
 caddy run --config wp_woo_caddy --adapter caddyfile
 ```
 
+*Should you want to check out the locally running wordpress instance, navigate to [https://woo-test.localhost](https://woo-test.localhost) in your browser. The default login details are `admin` and `password`*
+
 4. Set the correct environment variables and run the tests
 ```shell
 export WOO_INTEGRATION_TESTS_WEBSERVER="https://woo-test.localhost"

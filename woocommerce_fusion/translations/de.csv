@@ -277,3 +277,9 @@ Enable WooCommerce Request Logs,WooCommerce-Anforderungsprotokolle aktivieren,
 Log every request to your WooCommerce Server,Protokollieren Sie jede Anfrage an Ihren WooCommerce-Server,
 Field <code>{0}</code> not found in Item Line of WooCommerce Order {1},Feld <code>{0}</code> nicht in der Artikelzeile der WooCommerce-Bestellung {1} gefunden,
 Open in WooCommerce,Im WooCommerce öffnen,
+Please set 'Account for Order Fee Lines' in WooCommerce Server,Bitte legen Sie im WooCommerce-Server „Konto für Bestellgebührenzeilen“ fest
+Please set 'Account for Negative Order Fee Lines' in WooCommerce Server,Bitte legen Sie im WooCommerce-Server „Konto für negative Bestellgebührenzeilen“ fest
+Please set 'Tax Account for Order Fee Lines' in WooCommerce Server,Bitte legen Sie im WooCommerce-Server das „Steuerkonto für Bestellgebührenzeilen“ fest
+Account for Order Fee Lines,Konto für Bestellgebührenzeilen
+Account for Negative Order Fee Lines,Konto für negative Bestellgebührenzeilen
+Tax Account for Order Fee Lines,Steuerkonto für Bestellgebührenzeilen
