@@ -379,3 +379,127 @@ class TestWooCommerceSync(FrappeTestCase):
 
 		self.assertEqual(wc_product_mock.type, "variable")
 		item_mock.item.save.assert_called_once()
+
+	@patch("woocommerce_fusion.tasks.sync_items.frappe")
+	@patch.object(SynchroniseItem, "update_item")
+	def test_sync_direction_woocommerce_to_erp_only_should_not_update_wc(
+		self, mock_update_item, mock_frappe, mock_set_sync_hash, mock_run_item_sync
+	):
+		"""
+		Test that when sync direction is 'WooCommerce to ERP Only',
+		ERPNext changes should NOT update WooCommerce
+		"""
+		# Initialise class
+		sync = SynchroniseItem(servers=Mock())
+
+		# Mock WooCommerce Server with sync direction
+		mock_wc_server = frappe._dict(sync_direction="WooCommerce to ERP Only")
+		mock_frappe.get_cached_doc.return_value = mock_wc_server
+
+		woocommerce_server = "site1.example.com"
+		woocommerce_id = 1
+
+		# Create dummy Item (newer)
+		item = frappe.get_doc({"doctype": "Item"})
+		item.name = "ITEM-0001"
+		row = item.append("woocommerce_servers")
+		row.woocommerce_id = woocommerce_id
+		row.woocommerce_server = woocommerce_server
+		item.modified = "2023-12-25"
+		sync.item = ERPNextItemToSync(item, 0)
+
+		# Create dummy WooCommerce Product (older)
+		wc_product = frappe.get_doc({"doctype": "WooCommerce Product"})
+		wc_product.woocommerce_server = woocommerce_server
+		wc_product.id = woocommerce_id
+		wc_product.name = generate_woocommerce_record_name_from_domain_and_id(
+			woocommerce_server, woocommerce_id
+		)
+		wc_product.woocommerce_date_modified = "2023-01-01"
+		sync.woocommerce_product = wc_product
+
+		# Call the method under test
+		with patch.object(SynchroniseItem, "update_woocommerce_product") as mock_update_wc:
+			sync.sync_wc_product_with_erpnext_item()
+			# Assert WooCommerce should NOT be updated
+			mock_update_wc.assert_not_called()
+
+	@patch("woocommerce_fusion.tasks.sync_items.frappe")
+	@patch.object(SynchroniseItem, "update_woocommerce_product")
+	def test_sync_direction_erp_to_woocommerce_only_should_not_update_erp(
+		self, mock_update_woocommerce_product, mock_frappe, mock_set_sync_hash, mock_run_item_sync
+	):
+		"""
+		Test that when sync direction is 'ERP to WooCommerce Only',
+		WooCommerce changes should NOT update ERPNext
+		"""
+		# Initialise class
+		sync = SynchroniseItem(servers=Mock())
+
+		# Mock WooCommerce Server with sync direction
+		mock_wc_server = frappe._dict(sync_direction="ERP to WooCommerce Only")
+		mock_frappe.get_cached_doc.return_value = mock_wc_server
+
+		woocommerce_server = "site1.example.com"
+		woocommerce_id = 1
+
+		# Create dummy Item (older)
+		item = frappe.get_doc({"doctype": "Item"})
+		item.name = "ITEM-0001"
+		row = item.append("woocommerce_servers")
+		row.woocommerce_id = woocommerce_id
+		row.woocommerce_server = woocommerce_server
+		item.modified = "2023-01-01"
+		sync.item = ERPNextItemToSync(item, 0)
+
+		# Create dummy WooCommerce Product (newer)
+		wc_product = frappe.get_doc({"doctype": "WooCommerce Product"})
+		wc_product.woocommerce_server = woocommerce_server
+		wc_product.id = woocommerce_id
+		wc_product.name = generate_woocommerce_record_name_from_domain_and_id(
+			woocommerce_server, woocommerce_id
+		)
+		wc_product.woocommerce_date_modified = "2023-12-31"
+		sync.woocommerce_product = wc_product
+
+		# Call the method under test
+		with patch.object(SynchroniseItem, "update_item") as mock_update_item:
+			sync.sync_wc_product_with_erpnext_item()
+			# Assert ERPNext should NOT be updated
+			mock_update_item.assert_not_called()
+
+	@patch("woocommerce_fusion.tasks.sync_items.frappe")
+	@patch.object(SynchroniseItem, "create_item")
+	def test_sync_direction_erp_to_woocommerce_only_should_not_create_erp_item(
+		self, mock_create_item, mock_frappe, mock_set_sync_hash, mock_run_item_sync
+	):
+		"""
+		Test that when sync direction is 'ERP to WooCommerce Only',
+		WooCommerce products should NOT create ERPNext items
+		"""
+		# Initialise class
+		sync = SynchroniseItem(servers=Mock())
+
+		# Mock WooCommerce Server with sync direction
+		mock_wc_server = frappe._dict(sync_direction="ERP to WooCommerce Only")
+		mock_frappe.get_cached_doc.return_value = mock_wc_server
+		mock_frappe.get_doc.return_value = Mock()
+		mock_frappe.get_single.return_value = Mock()
+
+		woocommerce_server = "site1.example.com"
+		woocommerce_id = 1
+
+		# Create dummy WooCommerce Product (no ERPNext item)
+		wc_product = frappe.get_doc({"doctype": "WooCommerce Product"})
+		wc_product.woocommerce_server = woocommerce_server
+		wc_product.id = woocommerce_id
+		wc_product.name = generate_woocommerce_record_name_from_domain_and_id(
+			woocommerce_server, woocommerce_id
+		)
+		sync.woocommerce_product = wc_product
+
+		# Call the method under test
+		sync.sync_wc_product_with_erpnext_item()
+
+		# Assert that ERPNext item should NOT be created
+		mock_create_item.assert_not_called()
