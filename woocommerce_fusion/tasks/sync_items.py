@@ -427,11 +427,19 @@ class SynchroniseItem(SynchroniseWooCommerce):
 			)
 			item.variant_of = parent_item.item_code
 
-		item.item_code = (
+		# Determine base item code from SKU or WooCommerce ID
+		base_item_code = (
 			wc_product.sku
 			if wc_server.name_by == "Product SKU" and wc_product.sku
 			else str(wc_product.woocommerce_id)
 		)
+
+		# Add server abbreviation prefix if configured
+		server_abbr = getattr(wc_server, 'server_abbreviation', None)
+		if server_abbr:
+			item.item_code = f"{server_abbr}-{base_item_code}"
+		else:
+			item.item_code = base_item_code
 		item.stock_uom = wc_server.uom or _("Nos")
 		item.item_group = wc_server.item_group
 		item.item_name = wc_product.woocommerce_name

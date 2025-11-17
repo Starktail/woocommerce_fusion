@@ -465,11 +465,11 @@
    "options": "<div class=\"alert alert-info\"><strong>Note:</strong> Order sync direction is controlled by the main Sync Direction field above. Only orders with the selected statuses below will be synced from WooCommerce to ERPNext.</div>"
   },
   {
-   "default": "[\"processing\",\"shipped\",\"completed\"]",
-   "description": "Select which WooCommerce order statuses should be synced to ERPNext (default: processing, shipped, completed)",
+   "description": "Select which WooCommerce order statuses should be synced to ERPNext. If empty, defaults to: processing, shipped, completed",
    "fieldname": "order_status_filter",
-   "fieldtype": "JSON",
-   "label": "Order Status Filter"
+   "fieldtype": "Table",
+   "label": "Order Status Filter",
+   "options": "WooCommerce Server Order Status Filter"
   },
   {
    "fieldname": "column_break_tefw",

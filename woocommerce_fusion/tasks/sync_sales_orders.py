@@ -107,12 +107,19 @@ def sync_woocommerce_orders_modified_since(date_time_from=None):
 	wc_orders = []
 
 	for wc_server in wc_servers:
-		# Get order status filter for this server (default: processing, shipped, completed)
-		import json
-		order_status_filter = json.loads(getattr(wc_server, 'order_status_filter', '["processing","shipped","completed"]'))
+		# Get order status filter for this server from child table
+		# Default to: processing, shipped, completed if no filters configured
+		order_status_filter = getattr(wc_server, 'order_status_filter', [])
+
+		if order_status_filter and len(order_status_filter) > 0:
+			# Use configured statuses from child table
+			statuses_to_sync = [row.woocommerce_order_status for row in order_status_filter]
+		else:
+			# Use defaults if no filter configured
+			statuses_to_sync = ["processing", "shipped", "completed"]
 
 		# Fetch orders for each status in the filter
-		for status in order_status_filter:
+		for status in statuses_to_sync:
 			wc_orders += get_list_of_wc_orders(date_time_from=date_time_from, status=status)
 
 		# Always fetch trash status orders to handle deletions
