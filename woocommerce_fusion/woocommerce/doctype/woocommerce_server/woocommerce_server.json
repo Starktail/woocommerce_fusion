@@ -10,7 +10,9 @@
   "warning_html",
   "section_break_yuyb",
   "enable_sync",
+  "sync_direction",
   "woocommerce_server_url",
+  "server_abbreviation",
   "column_break_ikke",
   "api_consumer_key",
   "api_consumer_secret",
@@ -21,6 +23,9 @@
   "secret",
   "view_webhook_config",
   "tab_sales_orders",
+  "sync_direction_orders_section",
+  "order_sync_direction_info",
+  "order_status_filter",
   "column_break_tefw",
   "sync_sales_orders",
   "column_break_utsi",
@@ -225,6 +230,14 @@
    "label": "Enable Sync"
   },
   {
+   "default": "Bidirectional",
+   "description": "Control the direction of item/product synchronization. Note: Stock sync always goes from ERP to WooCommerce regardless of this setting.",
+   "fieldname": "sync_direction",
+   "fieldtype": "Select",
+   "label": "Sync Direction",
+   "options": "Bidirectional\nERP to WooCommerce Only\nWooCommerce to ERP Only"
+  },
+  {
    "description": "e.g. https://mysite.woocommerce.com",
    "fieldname": "woocommerce_server_url",
    "fieldtype": "Data",
@@ -232,6 +245,13 @@
    "label": "WooCommerce Server URL",
    "reqd": 1,
    "set_only_once": 1
+  },
+  {
+   "description": "Abbreviation used in order naming (e.g., 'SHOP1'). Order format will be: [Abbr]-[WC Order ID]",
+   "fieldname": "server_abbreviation",
+   "fieldtype": "Data",
+   "label": "Server Abbreviation",
+   "length": 20
   },
   {
    "fieldname": "api_consumer_key",
@@ -433,6 +453,23 @@
    "fieldname": "item_fields_warning_html",
    "fieldtype": "HTML",
    "options": "<div class=\"alert alert-warning\">\nMapping item fields is recommended for advanced users only. Make sure to monitor Error Logs after adding field mappings.\n</div>"
+  },
+  {
+   "fieldname": "sync_direction_orders_section",
+   "fieldtype": "Section Break",
+   "label": "Order Sync Configuration"
+  },
+  {
+   "fieldname": "order_sync_direction_info",
+   "fieldtype": "HTML",
+   "options": "<div class=\"alert alert-info\"><strong>Note:</strong> Order sync direction is controlled by the main Sync Direction field above. Only orders with the selected statuses below will be synced from WooCommerce to ERPNext.</div>"
+  },
+  {
+   "default": "[\"processing\",\"shipped\",\"completed\"]",
+   "description": "Select which WooCommerce order statuses should be synced to ERPNext (default: processing, shipped, completed)",
+   "fieldname": "order_status_filter",
+   "fieldtype": "JSON",
+   "label": "Order Status Filter"
   },
   {
    "fieldname": "column_break_tefw",
