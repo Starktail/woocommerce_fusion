@@ -16,6 +16,11 @@
   "column_break_ikke",
   "api_consumer_key",
   "api_consumer_secret",
+  "section_sync_actions",
+  "test_connection",
+  "column_break_actions",
+  "sync_all_items_now",
+  "push_all_erp_items_to_wc",
   "section_details_defaults",
   "creation_user",
   "column_break_14",
@@ -39,6 +44,7 @@
   "sales_order_series",
   "delivery_after_days",
   "uom",
+  "sales_price_list",
   "section_break_accounting",
   "enable_tax_lines_sync",
   "tax_account",
@@ -174,6 +180,13 @@
    "options": "UOM"
   },
   {
+   "description": "Price list to use for Sales Orders created from WooCommerce. If not set, uses the default customer price list.",
+   "fieldname": "sales_price_list",
+   "fieldtype": "Link",
+   "label": "Sales Price List",
+   "options": "Price List"
+  },
+  {
    "fieldname": "section_break_endpoints",
    "fieldtype": "Section Break",
    "label": "Endpoints"
@@ -264,6 +277,33 @@
    "fieldtype": "Data",
    "label": "API consumer secret",
    "reqd": 1
+  },
+  {
+   "fieldname": "section_sync_actions",
+   "fieldtype": "Section Break",
+   "label": "Sync Actions"
+  },
+  {
+   "depends_on": "eval: !doc.__islocal",
+   "fieldname": "test_connection",
+   "fieldtype": "Button",
+   "label": "Test Connection"
+  },
+  {
+   "fieldname": "column_break_actions",
+   "fieldtype": "Column Break"
+  },
+  {
+   "depends_on": "eval: !doc.__islocal && doc.enable_sync",
+   "fieldname": "sync_all_items_now",
+   "fieldtype": "Button",
+   "label": "Sync All Items Now"
+  },
+  {
+   "depends_on": "eval: !doc.__islocal && doc.enable_sync",
+   "fieldname": "push_all_erp_items_to_wc",
+   "fieldtype": "Button",
+   "label": "Push All ERP Items to WooCommerce"
   },
   {
    "default": "0",

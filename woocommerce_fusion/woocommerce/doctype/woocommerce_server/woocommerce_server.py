@@ -150,6 +150,145 @@ class WooCommerceServer(Document):
 		"""
 		return [key for key in WC_ORDER_STATUS_MAPPING.keys()]
 
+	@frappe.whitelist()
+	def test_connection(self):
+		"""
+		Test connection to WooCommerce server
+		"""
+		try:
+			wc_api = API(
+				url=self.woocommerce_server_url,
+				consumer_key=self.api_consumer_key,
+				consumer_secret=self.api_consumer_secret,
+				version="wc/v3",
+				timeout=40,
+				verify_ssl=verify_ssl,
+			)
+			# Try to get system status
+			response = wc_api.get("system_status")
+			if response.status_code == 200:
+				frappe.msgprint(
+					_("Connection successful! WooCommerce server is reachable."),
+					title=_("Success"),
+					indicator="green",
+				)
+			else:
+				frappe.msgprint(
+					_("Connection failed. Status code: {0}").format(response.status_code),
+					title=_("Error"),
+					indicator="red",
+				)
+		except Exception as e:
+			frappe.msgprint(
+				_("Connection failed: {0}").format(str(e)), title=_("Error"), indicator="red"
+			)
+
+	@frappe.whitelist()
+	def sync_all_items_now(self):
+		"""
+		Sync all items/products immediately respecting sync direction
+		"""
+		from woocommerce_fusion.tasks.sync_items import run_item_sync
+
+		sync_direction = getattr(self, "sync_direction", "Bidirectional")
+
+		# Count items to sync
+		items_synced = 0
+		errors = []
+
+		if sync_direction in ["Bidirectional", "ERP to WooCommerce Only"]:
+			# Sync items from ERPNext to WooCommerce
+			items = frappe.get_all(
+				"Item",
+				filters={"disabled": 0},
+				fields=["name"],
+			)
+
+			frappe.msgprint(
+				_("Starting sync of {0} items from ERPNext to WooCommerce...").format(len(items)),
+				title=_("Sync Started"),
+			)
+
+			for item in items:
+				try:
+					frappe.enqueue(
+						run_item_sync,
+						queue="long",
+						item_code=item.name,
+						enqueue_after_commit=True,
+					)
+					items_synced += 1
+				except Exception as e:
+					errors.append(f"Item {item.name}: {str(e)}")
+
+		if sync_direction in ["Bidirectional", "WooCommerce to ERP Only"]:
+			# Sync products from WooCommerce to ERPNext
+			from woocommerce_fusion.tasks.sync_items import sync_woocommerce_products_modified_since
+
+			frappe.enqueue(
+				sync_woocommerce_products_modified_since,
+				queue="long",
+				date_time_from=None,  # Sync all
+			)
+
+		if errors:
+			frappe.msgprint(
+				_("Sync queued with {0} errors. Check Error Log for details.").format(len(errors)),
+				title=_("Sync Queued"),
+				indicator="orange",
+			)
+		else:
+			frappe.msgprint(
+				_("Successfully queued {0} items for sync. Check background jobs for progress.").format(
+					items_synced
+				),
+				title=_("Success"),
+				indicator="green",
+			)
+
+	@frappe.whitelist()
+	def push_all_erp_items_to_wc(self):
+		"""
+		Push all ERPNext items to WooCommerce (creates/updates products)
+		"""
+		from woocommerce_fusion.tasks.sync_items import run_item_sync
+
+		# Get all active items
+		items = frappe.get_all(
+			"Item",
+			filters={"disabled": 0, "is_stock_item": 1},
+			fields=["name"],
+		)
+
+		frappe.msgprint(
+			_("Starting push of {0} items to WooCommerce. This may take a while...").format(len(items)),
+			title=_("Push Started"),
+		)
+
+		items_queued = 0
+		for item in items:
+			try:
+				frappe.enqueue(
+					run_item_sync,
+					queue="long",
+					item_code=item.name,
+					enqueue_after_commit=True,
+				)
+				items_queued += 1
+			except Exception as e:
+				frappe.log_error(
+					message=f"Failed to queue item {item.name}: {str(e)}",
+					title="Push Items to WooCommerce Error",
+				)
+
+		frappe.msgprint(
+			_("Successfully queued {0} items to push to WooCommerce. Check background jobs for progress.").format(
+				items_queued
+			),
+			title=_("Success"),
+			indicator="green",
+		)
+
 
 @frappe.whitelist()
 def get_woocommerce_shipment_providers(woocommerce_server):
