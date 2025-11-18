@@ -215,25 +215,15 @@ class SynchroniseSalesOrder(SynchroniseWooCommerce):
 	def sync_wc_order_with_erpnext_order(self):
 		"""
 		Syncronise Sales Order between ERPNext and WooCommerce
-		Respects sync direction setting
+		Note: Orders always sync from WooCommerce to ERPNext, regardless of sync direction setting
 		"""
-		# Get sync direction from WooCommerce Server
-		wc_server_name = (
-			self.woocommerce_order.woocommerce_server
-			if self.woocommerce_order
-			else self.sales_order.woocommerce_server
-		)
-		wc_server = frappe.get_cached_doc("WooCommerce Server", wc_server_name)
-		sync_direction = getattr(wc_server, 'sync_direction', 'Bidirectional')
-
 		if self.sales_order and not self.woocommerce_order:
 			# create missing order in WooCommerce
 			# Note: Creating WC orders from ERP is typically not done, keeping as pass
 			pass
 		elif self.woocommerce_order and not self.sales_order:
-			# create missing order in ERPNext
-			if sync_direction in ["Bidirectional", "WooCommerce to ERP Only"]:
-				self.create_sales_order(self.woocommerce_order)
+			# create missing order in ERPNext - always create from WooCommerce
+			self.create_sales_order(self.woocommerce_order)
 		elif self.sales_order and self.woocommerce_order:
 			# both exist, check sync hash
 			if (
@@ -243,15 +233,14 @@ class SynchroniseSalesOrder(SynchroniseWooCommerce):
 				if get_datetime(self.woocommerce_order.woocommerce_date_modified) > get_datetime(
 					self.sales_order.modified
 				):
-					# WooCommerce changed more recently - update ERPNext
-					if sync_direction in ["Bidirectional", "WooCommerce to ERP Only"]:
-						self.update_sales_order(self.woocommerce_order, self.sales_order)
+					# WooCommerce changed more recently - always update ERPNext from WooCommerce
+					self.update_sales_order(self.woocommerce_order, self.sales_order)
 				if get_datetime(self.woocommerce_order.woocommerce_date_modified) < get_datetime(
 					self.sales_order.modified
 				):
-					# ERPNext changed more recently - update WooCommerce
-					if sync_direction in ["Bidirectional", "ERP to WooCommerce Only"]:
-						self.update_woocommerce_order(self.woocommerce_order, self.sales_order)
+					# ERPNext changed more recently - do not update WooCommerce from ERPNext
+					# Orders are not synced back to WooCommerce
+					pass
 
 			# If the Sales Order exists and has been submitted in the mean time, sync Payment Entries
 			if (

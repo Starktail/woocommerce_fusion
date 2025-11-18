@@ -244,7 +244,7 @@
   },
   {
    "default": "Bidirectional",
-   "description": "Control the direction of item/product synchronization. Note: Stock sync always goes from ERP to WooCommerce regardless of this setting.",
+   "description": "Control the direction of item/product synchronization only. Note: Stock sync always goes from ERP to WooCommerce, and orders always sync from WooCommerce to ERP, regardless of this setting.",
    "fieldname": "sync_direction",
    "fieldtype": "Select",
    "label": "Sync Direction",
@@ -502,7 +502,7 @@
   {
    "fieldname": "order_sync_direction_info",
    "fieldtype": "HTML",
-   "options": "<div class=\"alert alert-info\"><strong>Note:</strong> Order sync direction is controlled by the main Sync Direction field above. Only orders with the selected statuses below will be synced from WooCommerce to ERPNext.</div>"
+   "options": "<div class=\"alert alert-info\"><strong>Note:</strong> Orders always sync from WooCommerce to ERPNext, regardless of the Sync Direction setting above. Only orders with the selected statuses below will be synced.</div>"
   },
   {
    "description": "Select which WooCommerce order statuses should be synced to ERPNext. If empty, defaults to: processing, shipped, completed",
