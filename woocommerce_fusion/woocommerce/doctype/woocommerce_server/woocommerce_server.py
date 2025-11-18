@@ -155,6 +155,10 @@ class WooCommerceServer(Document):
 		"""
 		Test connection to WooCommerce server
 		"""
+		frappe.publish_realtime(
+			"msgprint", _("Testing connection to WooCommerce server..."), user=frappe.session.user
+		)
+
 		try:
 			wc_api = API(
 				url=self.woocommerce_server_url,
@@ -168,19 +172,25 @@ class WooCommerceServer(Document):
 			response = wc_api.get("system_status")
 			if response.status_code == 200:
 				frappe.msgprint(
-					_("Connection successful! WooCommerce server is reachable."),
+					_("Connection successful! WooCommerce server is reachable and API credentials are valid."),
 					title=_("Success"),
 					indicator="green",
 				)
 			else:
 				frappe.msgprint(
-					_("Connection failed. Status code: {0}").format(response.status_code),
+					_("Connection failed. Status code: {0}<br><br>Please check your API credentials.").format(
+						response.status_code
+					),
 					title=_("Error"),
 					indicator="red",
 				)
 		except Exception as e:
 			frappe.msgprint(
-				_("Connection failed: {0}").format(str(e)), title=_("Error"), indicator="red"
+				_("Connection failed: {0}<br><br>Please verify:<br>1. WooCommerce Server URL is correct<br>2. API credentials are valid<br>3. WooCommerce REST API is enabled").format(
+					str(e)
+				),
+				title=_("Error"),
+				indicator="red",
 			)
 
 	@frappe.whitelist()
@@ -192,6 +202,16 @@ class WooCommerceServer(Document):
 
 		sync_direction = getattr(self, "sync_direction", "Bidirectional")
 
+		# Show initial toast notification
+		frappe.publish_realtime(
+			"show_alert",
+			{
+				"message": _("Starting item sync... This will run in the background."),
+				"indicator": "blue",
+			},
+			user=frappe.session.user,
+		)
+
 		# Count items to sync
 		items_synced = 0
 		errors = []
@@ -202,11 +222,6 @@ class WooCommerceServer(Document):
 				"Item",
 				filters={"disabled": 0},
 				fields=["name"],
-			)
-
-			frappe.msgprint(
-				_("Starting sync of {0} items from ERPNext to WooCommerce...").format(len(items)),
-				title=_("Sync Started"),
 			)
 
 			for item in items:
@@ -231,20 +246,37 @@ class WooCommerceServer(Document):
 				date_time_from=None,  # Sync all
 			)
 
+		# Show detailed results
 		if errors:
-			frappe.msgprint(
-				_("Sync queued with {0} errors. Check Error Log for details.").format(len(errors)),
-				title=_("Sync Queued"),
-				indicator="orange",
-			)
+			message = _(
+				"<b>{0} items queued for sync</b> with {1} errors.<br><br>"
+				"<b>Sync Direction:</b> {2}<br><br>"
+				"<b>Check progress:</b><br>"
+				"• Go to <b>Background Jobs</b> (search in awesome bar)<br>"
+				"• Monitor <b>Error Log</b> for any issues<br><br>"
+				"Sync is running in the background and may take several minutes."
+			).format(items_synced, len(errors), sync_direction)
+			frappe.msgprint(message, title=_("Sync Started"), indicator="orange")
 		else:
-			frappe.msgprint(
-				_("Successfully queued {0} items for sync. Check background jobs for progress.").format(
-					items_synced
-				),
-				title=_("Success"),
-				indicator="green",
-			)
+			message = _(
+				"<b>{0} items queued for sync!</b><br><br>"
+				"<b>Sync Direction:</b> {2}<br><br>"
+				"<b>Check progress:</b><br>"
+				"• Go to <b>Background Jobs</b> (search in awesome bar)<br>"
+				"• Or check <b>RQ Console</b> for job status<br><br>"
+				"Sync is running in the background and may take several minutes."
+			).format(items_synced, sync_direction, sync_direction)
+			frappe.msgprint(message, title=_("Sync Started"), indicator="green")
+
+		# Show final toast
+		frappe.publish_realtime(
+			"show_alert",
+			{
+				"message": _("{0} items queued. Check Background Jobs for progress.").format(items_synced),
+				"indicator": "green",
+			},
+			user=frappe.session.user,
+		)
 
 	@frappe.whitelist()
 	def push_all_erp_items_to_wc(self):
@@ -253,16 +285,21 @@ class WooCommerceServer(Document):
 		"""
 		from woocommerce_fusion.tasks.sync_items import run_item_sync
 
+		# Show initial toast notification
+		frappe.publish_realtime(
+			"show_alert",
+			{
+				"message": _("Starting to push items to WooCommerce... Please wait."),
+				"indicator": "blue",
+			},
+			user=frappe.session.user,
+		)
+
 		# Get all active items
 		items = frappe.get_all(
 			"Item",
 			filters={"disabled": 0, "is_stock_item": 1},
 			fields=["name"],
-		)
-
-		frappe.msgprint(
-			_("Starting push of {0} items to WooCommerce. This may take a while...").format(len(items)),
-			title=_("Push Started"),
 		)
 
 		items_queued = 0
@@ -281,12 +318,27 @@ class WooCommerceServer(Document):
 					title="Push Items to WooCommerce Error",
 				)
 
-		frappe.msgprint(
-			_("Successfully queued {0} items to push to WooCommerce. Check background jobs for progress.").format(
-				items_queued
-			),
-			title=_("Success"),
-			indicator="green",
+		# Show detailed results
+		message = _(
+			"<b>{0} items queued to push to WooCommerce!</b><br><br>"
+			"This will create new products or update existing ones in WooCommerce.<br><br>"
+			"<b>Check progress:</b><br>"
+			"• Go to <b>Background Jobs</b> (search in awesome bar)<br>"
+			"• Or check <b>RQ Console</b> for job status<br>"
+			"• Monitor <b>Error Log</b> for any issues<br><br>"
+			"Push is running in the background and may take several minutes depending on the number of items."
+		).format(items_queued)
+
+		frappe.msgprint(message, title=_("Push Started"), indicator="green")
+
+		# Show final toast
+		frappe.publish_realtime(
+			"show_alert",
+			{
+				"message": _("{0} items queued. Check Background Jobs for progress.").format(items_queued),
+				"indicator": "green",
+			},
+			user=frappe.session.user,
 		)
 
 
