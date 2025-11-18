@@ -155,8 +155,14 @@ class WooCommerceServer(Document):
 		"""
 		Test connection to WooCommerce server
 		"""
+		# Show initial toast notification
 		frappe.publish_realtime(
-			"msgprint", _("Testing connection to WooCommerce server..."), user=frappe.session.user
+			"show_alert",
+			{
+				"message": _("Testing connection to WooCommerce server..."),
+				"indicator": "blue",
+			},
+			user=frappe.session.user,
 		)
 
 		try:
@@ -171,12 +177,30 @@ class WooCommerceServer(Document):
 			# Try to get system status
 			response = wc_api.get("system_status")
 			if response.status_code == 200:
+				# Show success toast
+				frappe.publish_realtime(
+					"show_alert",
+					{
+						"message": _("Connection successful! WooCommerce server is reachable."),
+						"indicator": "green",
+					},
+					user=frappe.session.user,
+				)
 				frappe.msgprint(
 					_("Connection successful! WooCommerce server is reachable and API credentials are valid."),
 					title=_("Success"),
 					indicator="green",
 				)
 			else:
+				# Show error toast
+				frappe.publish_realtime(
+					"show_alert",
+					{
+						"message": _("Connection failed. Status code: {0}").format(response.status_code),
+						"indicator": "red",
+					},
+					user=frappe.session.user,
+				)
 				frappe.msgprint(
 					_("Connection failed. Status code: {0}<br><br>Please check your API credentials.").format(
 						response.status_code
@@ -185,6 +209,15 @@ class WooCommerceServer(Document):
 					indicator="red",
 				)
 		except Exception as e:
+			# Show error toast
+			frappe.publish_realtime(
+				"show_alert",
+				{
+					"message": _("Connection failed. Please check your settings."),
+					"indicator": "red",
+				},
+				user=frappe.session.user,
+			)
 			frappe.msgprint(
 				_("Connection failed: {0}<br><br>Please verify:<br>1. WooCommerce Server URL is correct<br>2. API credentials are valid<br>3. WooCommerce REST API is enabled").format(
 					str(e)
@@ -282,6 +315,7 @@ class WooCommerceServer(Document):
 	def push_all_erp_items_to_wc(self):
 		"""
 		Push all ERPNext items to WooCommerce (creates/updates products)
+		This will add the WooCommerce server to all items and then sync them
 		"""
 		from woocommerce_fusion.tasks.sync_items import run_item_sync
 
@@ -289,7 +323,7 @@ class WooCommerceServer(Document):
 		frappe.publish_realtime(
 			"show_alert",
 			{
-				"message": _("Starting to push items to WooCommerce... Please wait."),
+				"message": _("Starting to add WooCommerce server to items and sync..."),
 				"indicator": "blue",
 			},
 			user=frappe.session.user,
@@ -302,7 +336,63 @@ class WooCommerceServer(Document):
 			fields=["name"],
 		)
 
+		items_updated = 0
 		items_queued = 0
+		items_already_linked = 0
+		errors = []
+
+		# First, add this WooCommerce server to all items
+		for item in items:
+			try:
+				item_doc = frappe.get_doc("Item", item.name)
+
+				# Check if this server is already in the woocommerce_servers table
+				server_exists = False
+				for server_row in item_doc.get("woocommerce_servers", []):
+					if server_row.woocommerce_server == self.name:
+						server_exists = True
+						items_already_linked += 1
+						break
+
+				# Add the server if it doesn't exist
+				if not server_exists:
+					item_doc.append("woocommerce_servers", {
+						"woocommerce_server": self.name,
+						"enabled": 1,
+					})
+					item_doc.save(ignore_permissions=True)
+					items_updated += 1
+
+					# Show progress notification every 10 items
+					if items_updated % 10 == 0:
+						frappe.publish_realtime(
+							"show_alert",
+							{
+								"message": _("Added server to {0} items...").format(items_updated),
+								"indicator": "blue",
+							},
+							user=frappe.session.user,
+						)
+
+			except Exception as e:
+				errors.append(f"Item {item.name}: {str(e)}")
+				frappe.log_error(
+					message=f"Failed to add WooCommerce server to item {item.name}: {str(e)}",
+					title="Add WooCommerce Server to Item Error",
+				)
+
+		# Show update completion notification
+		if items_updated > 0:
+			frappe.publish_realtime(
+				"show_alert",
+				{
+					"message": _("Added WooCommerce server to {0} items. Starting sync...").format(items_updated),
+					"indicator": "blue",
+				},
+				user=frappe.session.user,
+			)
+
+		# Now queue all items for sync
 		for item in items:
 			try:
 				frappe.enqueue(
@@ -313,29 +403,48 @@ class WooCommerceServer(Document):
 				)
 				items_queued += 1
 			except Exception as e:
+				errors.append(f"Queue {item.name}: {str(e)}")
 				frappe.log_error(
 					message=f"Failed to queue item {item.name}: {str(e)}",
 					title="Push Items to WooCommerce Error",
 				)
 
 		# Show detailed results
-		message = _(
-			"<b>{0} items queued to push to WooCommerce!</b><br><br>"
-			"This will create new products or update existing ones in WooCommerce.<br><br>"
-			"<b>Check progress:</b><br>"
-			"• Go to <b>Background Jobs</b> (search in awesome bar)<br>"
-			"• Or check <b>RQ Console</b> for job status<br>"
-			"• Monitor <b>Error Log</b> for any issues<br><br>"
-			"Push is running in the background and may take several minutes depending on the number of items."
-		).format(items_queued)
-
-		frappe.msgprint(message, title=_("Push Started"), indicator="green")
+		if errors:
+			message = _(
+				"<b>WooCommerce Server Added and Sync Started!</b><br><br>"
+				"<b>Items with server added:</b> {0}<br>"
+				"<b>Items already linked:</b> {1}<br>"
+				"<b>Items queued for sync:</b> {2}<br>"
+				"<b>Errors:</b> {3}<br><br>"
+				"This will create new products or update existing ones in WooCommerce.<br><br>"
+				"<b>Check progress:</b><br>"
+				"• Go to <b>Background Jobs</b> (search in awesome bar)<br>"
+				"• Or check <b>RQ Console</b> for job status<br>"
+				"• Monitor <b>Error Log</b> for any issues<br><br>"
+				"Sync is running in the background and may take several minutes depending on the number of items."
+			).format(items_updated, items_already_linked, items_queued, len(errors))
+			frappe.msgprint(message, title=_("Sync Started with Warnings"), indicator="orange")
+		else:
+			message = _(
+				"<b>WooCommerce Server Added and Sync Started!</b><br><br>"
+				"<b>Items with server added:</b> {0}<br>"
+				"<b>Items already linked:</b> {1}<br>"
+				"<b>Items queued for sync:</b> {2}<br><br>"
+				"This will create new products or update existing ones in WooCommerce.<br><br>"
+				"<b>Check progress:</b><br>"
+				"• Go to <b>Background Jobs</b> (search in awesome bar)<br>"
+				"• Or check <b>RQ Console</b> for job status<br>"
+				"• Monitor <b>Error Log</b> for any issues<br><br>"
+				"Sync is running in the background and may take several minutes depending on the number of items."
+			).format(items_updated, items_already_linked, items_queued)
+			frappe.msgprint(message, title=_("Sync Started Successfully"), indicator="green")
 
 		# Show final toast
 		frappe.publish_realtime(
 			"show_alert",
 			{
-				"message": _("{0} items queued. Check Background Jobs for progress.").format(items_queued),
+				"message": _("{0} items queued. Server added to {1} items.").format(items_queued, items_updated),
 				"indicator": "green",
 			},
 			user=frappe.session.user,
