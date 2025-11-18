@@ -28,11 +28,11 @@ def validate_request() -> Tuple[bool, Optional[HTTPStatus], Optional[str]]:
 	sig = base64.b64encode(
 		hmac.new(wc_server.secret.encode("utf8"), frappe.request.data, hashlib.sha256).digest()
 	)
-	# if (
-	# 	frappe.request.data
-	# 	and not sig == frappe.get_request_header("x-wc-webhook-signature", "").encode()
-	# ):
-	# 	return False, HTTPStatus.UNAUTHORIZED, _("Unauthorized")
+	if (
+		frappe.request.data
+		and not sig == frappe.get_request_header("x-wc-webhook-signature", "").encode()
+	):
+		return False, HTTPStatus.UNAUTHORIZED, _("Unauthorized")
 
 	frappe.set_user(wc_server.creation_user)
 	return True, None, None

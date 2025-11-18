@@ -123,7 +123,7 @@ def sync_woocommerce_products_modified_since(date_time_from=None):
 		except Exception:
 			pass
 
-	frappe.db.set_single_value("WooCommerce Settings", "wc_last_sync_date_items", now())
+	frappe.db.set_single_value("WooCommerce Integration Settings", "wc_last_sync_date_items", now())
 
 
 @dataclass
@@ -237,13 +237,25 @@ class SynchroniseItem(SynchroniseWooCommerce):
 	def sync_wc_product_with_erpnext_item(self):
 		"""
 		Syncronise Item between ERPNext and WooCommerce
+		Respects sync direction setting
 		"""
+		# Get sync direction from WooCommerce Server
+		wc_server_name = (
+			self.woocommerce_product.woocommerce_server
+			if self.woocommerce_product
+			else self.item.item_woocommerce_server.woocommerce_server
+		)
+		wc_server = frappe.get_cached_doc("WooCommerce Server", wc_server_name)
+		sync_direction = getattr(wc_server, 'sync_direction', 'Bidirectional')
+
 		if self.item and not self.woocommerce_product:
 			# create missing product in WooCommerce
-			self.create_woocommerce_product(self.item)
+			if sync_direction in ["Bidirectional", "ERP to WooCommerce Only"]:
+				self.create_woocommerce_product(self.item)
 		elif self.woocommerce_product and not self.item:
 			# create missing item in ERPNext
-			self.create_item(self.woocommerce_product)
+			if sync_direction in ["Bidirectional", "WooCommerce to ERP Only"]:
+				self.create_item(self.woocommerce_product)
 		elif self.item and self.woocommerce_product:
 			# both exist, check sync hash
 			if (
@@ -253,11 +265,15 @@ class SynchroniseItem(SynchroniseWooCommerce):
 				if get_datetime(self.woocommerce_product.woocommerce_date_modified) > get_datetime(
 					self.item.item.modified
 				):
-					self.update_item(self.woocommerce_product, self.item)
+					# WooCommerce changed more recently - update ERPNext
+					if sync_direction in ["Bidirectional", "WooCommerce to ERP Only"]:
+						self.update_item(self.woocommerce_product, self.item)
 				if get_datetime(self.woocommerce_product.woocommerce_date_modified) < get_datetime(
 					self.item.item.modified
 				):
-					self.update_woocommerce_product(self.woocommerce_product, self.item)
+					# ERPNext changed more recently - update WooCommerce
+					if sync_direction in ["Bidirectional", "ERP to WooCommerce Only"]:
+						self.update_woocommerce_product(self.woocommerce_product, self.item)
 
 	def update_item(self, woocommerce_product: WooCommerceProduct, item: ERPNextItemToSync):
 		"""
@@ -411,11 +427,19 @@ class SynchroniseItem(SynchroniseWooCommerce):
 			)
 			item.variant_of = parent_item.item_code
 
-		item.item_code = (
+		# Determine base item code from SKU or WooCommerce ID
+		base_item_code = (
 			wc_product.sku
 			if wc_server.name_by == "Product SKU" and wc_product.sku
 			else str(wc_product.woocommerce_id)
 		)
+
+		# Add server abbreviation prefix if configured
+		server_abbr = getattr(wc_server, 'server_abbreviation', None)
+		if server_abbr:
+			item.item_code = f"{server_abbr}-{base_item_code}"
+		else:
+			item.item_code = base_item_code
 		item.stock_uom = wc_server.uom or _("Nos")
 		item.item_group = wc_server.item_group
 		item.item_name = wc_product.woocommerce_name
@@ -649,7 +673,7 @@ def get_item_price_rate(item: ERPNextItemToSync):
 	if wc_server.enable_price_list_sync:
 		item_prices = frappe.get_all(
 			"Item Price",
-			filters={"item_code": item.item.item_name, "price_list": wc_server.price_list},
+			filters={"item_code": item.item.item_code, "price_list": wc_server.price_list},
 			fields=["price_list_rate", "valid_upto"],
 		)
 		return next(

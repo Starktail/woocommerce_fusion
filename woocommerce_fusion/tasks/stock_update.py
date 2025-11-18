@@ -101,20 +101,32 @@ def update_stock_levels_on_woocommerce_site(item_code):
 				)
 
 				# Sum all quantities from select warehouses and round the total down (WooCommerce API doesn't accept float values)
-				data_to_post = {
-					"stock_quantity": math.floor(
-						sum(
-							bin.actual_qty
-							if not wc_server.subtract_reserved_stock
-							else bin.actual_qty - bin.reserved_qty
-							for bin in bins
-							if bin.warehouse in [row.warehouse for row in wc_server.warehouses]
-						)
+				stock_quantity = math.floor(
+					sum(
+						bin.actual_qty
+						if not wc_server.subtract_reserved_stock
+						else bin.actual_qty - bin.reserved_qty
+						for bin in bins
+						if bin.warehouse in [row.warehouse for row in wc_server.warehouses]
 					)
+				)
+
+				# Determine backorders setting based on EOL status
+				# If item is not EOL (end_of_life is None or in the future), allow backorders
+				is_eol = False
+				if item.end_of_life:
+					from frappe.utils import getdate, nowdate
+					is_eol = getdate(item.end_of_life) <= getdate(nowdate())
+
+				data_to_post = {
+					"stock_quantity": stock_quantity,
+					"manage_stock": True,
+					"backorders": "no" if is_eol else "yes"
 				}
 
 				try:
 					parent_item_id = item.variant_of
+					parent_woocommerce_id = None
 					if parent_item_id:
 						parent_item = frappe.get_doc("Item", parent_item_id)
 						# Get the parent item's woocommerce_id

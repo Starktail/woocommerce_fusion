@@ -163,3 +163,97 @@ class TestWooCommerceStockSync(FrappeTestCase):
 			"woocommerce_fusion.tasks.stock_update.update_stock_levels_on_woocommerce_site",
 			item_code="Item-2-499",  # Here we'd check for the last `item_code` being passed.
 		)
+
+	@patch("woocommerce_fusion.tasks.stock_update.frappe")
+	@patch("woocommerce_fusion.tasks.stock_update.APIWithRequestLogging", autospec=True)
+	def test_backorders_enabled_for_non_eol_items(self, mock_wc_api, mock_frappe):
+		"""
+		Test that backorders are set to 'yes' for items that are not EOL
+		"""
+		# Set up a dummy item without EOL date
+		some_item = frappe._dict(
+			woocommerce_servers=[
+				frappe._dict(woocommerce_id=1, woocommerce_server="woo1.example.com", enabled=1),
+			],
+			is_stock_item=1,
+			disabled=0,
+			end_of_life=None,  # Not EOL
+		)
+		mock_frappe.get_doc.return_value = some_item
+
+		# Set up a dummy bin list
+		bin_list = [frappe._dict(warehouse="Warehouse A", actual_qty=10, reserved_qty=0)]
+		mock_frappe.get_list.return_value = bin_list
+
+		# Set up mock WooCommerce server
+		mock_frappe.get_cached_doc.return_value = frappe._dict(
+			woocommerce_server="woo1.example.com",
+			enable_sync=1,
+			enable_stock_level_synchronisation=1,
+			warehouses=[frappe._dict(warehouse="Warehouse A")],
+			subtract_reserved_stock=False,
+		)
+
+		# Mock WooCommerce API
+		mock_put_response = Mock()
+		mock_put_response.status_code = 200
+		mock_api_instance = MagicMock()
+		mock_api_instance.put.return_value = mock_put_response
+		mock_wc_api.return_value = mock_api_instance
+
+		# Call function under test
+		update_stock_levels_on_woocommerce_site("some_item_code")
+
+		# Assert backorders is set to 'yes'
+		actual_put_data = mock_api_instance.put.call_args.kwargs["data"]
+		self.assertEqual(actual_put_data["backorders"], "yes")
+		self.assertEqual(actual_put_data["manage_stock"], True)
+
+	@patch("woocommerce_fusion.tasks.stock_update.frappe")
+	@patch("woocommerce_fusion.tasks.stock_update.APIWithRequestLogging", autospec=True)
+	def test_backorders_disabled_for_eol_items(self, mock_wc_api, mock_frappe):
+		"""
+		Test that backorders are set to 'no' for items that are EOL
+		"""
+		from frappe.utils import add_days, nowdate
+
+		# Set up a dummy item with EOL date in the past
+		some_item = frappe._dict(
+			woocommerce_servers=[
+				frappe._dict(woocommerce_id=1, woocommerce_server="woo1.example.com", enabled=1),
+			],
+			is_stock_item=1,
+			disabled=0,
+			end_of_life=add_days(nowdate(), -10),  # EOL 10 days ago
+		)
+		mock_frappe.get_doc.return_value = some_item
+		mock_frappe.utils.getdate.side_effect = lambda x: frappe.utils.getdate(x)
+		mock_frappe.utils.nowdate.return_value = nowdate()
+
+		# Set up a dummy bin list
+		bin_list = [frappe._dict(warehouse="Warehouse A", actual_qty=10, reserved_qty=0)]
+		mock_frappe.get_list.return_value = bin_list
+
+		# Set up mock WooCommerce server
+		mock_frappe.get_cached_doc.return_value = frappe._dict(
+			woocommerce_server="woo1.example.com",
+			enable_sync=1,
+			enable_stock_level_synchronisation=1,
+			warehouses=[frappe._dict(warehouse="Warehouse A")],
+			subtract_reserved_stock=False,
+		)
+
+		# Mock WooCommerce API
+		mock_put_response = Mock()
+		mock_put_response.status_code = 200
+		mock_api_instance = MagicMock()
+		mock_api_instance.put.return_value = mock_put_response
+		mock_wc_api.return_value = mock_api_instance
+
+		# Call function under test
+		update_stock_levels_on_woocommerce_site("some_item_code")
+
+		# Assert backorders is set to 'no'
+		actual_put_data = mock_api_instance.put.call_args.kwargs["data"]
+		self.assertEqual(actual_put_data["backorders"], "no")
+		self.assertEqual(actual_put_data["manage_stock"], True)

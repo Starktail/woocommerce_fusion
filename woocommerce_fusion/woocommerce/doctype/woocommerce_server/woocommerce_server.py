@@ -150,6 +150,197 @@ class WooCommerceServer(Document):
 		"""
 		return [key for key in WC_ORDER_STATUS_MAPPING.keys()]
 
+	@frappe.whitelist()
+	def test_connection(self):
+		"""
+		Test connection to WooCommerce server
+		"""
+		frappe.publish_realtime(
+			"msgprint", _("Testing connection to WooCommerce server..."), user=frappe.session.user
+		)
+
+		try:
+			wc_api = API(
+				url=self.woocommerce_server_url,
+				consumer_key=self.api_consumer_key,
+				consumer_secret=self.api_consumer_secret,
+				version="wc/v3",
+				timeout=40,
+				verify_ssl=verify_ssl,
+			)
+			# Try to get system status
+			response = wc_api.get("system_status")
+			if response.status_code == 200:
+				frappe.msgprint(
+					_("Connection successful! WooCommerce server is reachable and API credentials are valid."),
+					title=_("Success"),
+					indicator="green",
+				)
+			else:
+				frappe.msgprint(
+					_("Connection failed. Status code: {0}<br><br>Please check your API credentials.").format(
+						response.status_code
+					),
+					title=_("Error"),
+					indicator="red",
+				)
+		except Exception as e:
+			frappe.msgprint(
+				_("Connection failed: {0}<br><br>Please verify:<br>1. WooCommerce Server URL is correct<br>2. API credentials are valid<br>3. WooCommerce REST API is enabled").format(
+					str(e)
+				),
+				title=_("Error"),
+				indicator="red",
+			)
+
+	@frappe.whitelist()
+	def sync_all_items_now(self):
+		"""
+		Sync all items/products immediately respecting sync direction
+		"""
+		from woocommerce_fusion.tasks.sync_items import run_item_sync
+
+		sync_direction = getattr(self, "sync_direction", "Bidirectional")
+
+		# Show initial toast notification
+		frappe.publish_realtime(
+			"show_alert",
+			{
+				"message": _("Starting item sync... This will run in the background."),
+				"indicator": "blue",
+			},
+			user=frappe.session.user,
+		)
+
+		# Count items to sync
+		items_synced = 0
+		errors = []
+
+		if sync_direction in ["Bidirectional", "ERP to WooCommerce Only"]:
+			# Sync items from ERPNext to WooCommerce
+			items = frappe.get_all(
+				"Item",
+				filters={"disabled": 0},
+				fields=["name"],
+			)
+
+			for item in items:
+				try:
+					frappe.enqueue(
+						run_item_sync,
+						queue="long",
+						item_code=item.name,
+						enqueue_after_commit=True,
+					)
+					items_synced += 1
+				except Exception as e:
+					errors.append(f"Item {item.name}: {str(e)}")
+
+		if sync_direction in ["Bidirectional", "WooCommerce to ERP Only"]:
+			# Sync products from WooCommerce to ERPNext
+			from woocommerce_fusion.tasks.sync_items import sync_woocommerce_products_modified_since
+
+			frappe.enqueue(
+				sync_woocommerce_products_modified_since,
+				queue="long",
+				date_time_from=None,  # Sync all
+			)
+
+		# Show detailed results
+		if errors:
+			message = _(
+				"<b>{0} items queued for sync</b> with {1} errors.<br><br>"
+				"<b>Sync Direction:</b> {2}<br><br>"
+				"<b>Check progress:</b><br>"
+				"• Go to <b>Background Jobs</b> (search in awesome bar)<br>"
+				"• Monitor <b>Error Log</b> for any issues<br><br>"
+				"Sync is running in the background and may take several minutes."
+			).format(items_synced, len(errors), sync_direction)
+			frappe.msgprint(message, title=_("Sync Started"), indicator="orange")
+		else:
+			message = _(
+				"<b>{0} items queued for sync!</b><br><br>"
+				"<b>Sync Direction:</b> {2}<br><br>"
+				"<b>Check progress:</b><br>"
+				"• Go to <b>Background Jobs</b> (search in awesome bar)<br>"
+				"• Or check <b>RQ Console</b> for job status<br><br>"
+				"Sync is running in the background and may take several minutes."
+			).format(items_synced, sync_direction, sync_direction)
+			frappe.msgprint(message, title=_("Sync Started"), indicator="green")
+
+		# Show final toast
+		frappe.publish_realtime(
+			"show_alert",
+			{
+				"message": _("{0} items queued. Check Background Jobs for progress.").format(items_synced),
+				"indicator": "green",
+			},
+			user=frappe.session.user,
+		)
+
+	@frappe.whitelist()
+	def push_all_erp_items_to_wc(self):
+		"""
+		Push all ERPNext items to WooCommerce (creates/updates products)
+		"""
+		from woocommerce_fusion.tasks.sync_items import run_item_sync
+
+		# Show initial toast notification
+		frappe.publish_realtime(
+			"show_alert",
+			{
+				"message": _("Starting to push items to WooCommerce... Please wait."),
+				"indicator": "blue",
+			},
+			user=frappe.session.user,
+		)
+
+		# Get all active items
+		items = frappe.get_all(
+			"Item",
+			filters={"disabled": 0, "is_stock_item": 1},
+			fields=["name"],
+		)
+
+		items_queued = 0
+		for item in items:
+			try:
+				frappe.enqueue(
+					run_item_sync,
+					queue="long",
+					item_code=item.name,
+					enqueue_after_commit=True,
+				)
+				items_queued += 1
+			except Exception as e:
+				frappe.log_error(
+					message=f"Failed to queue item {item.name}: {str(e)}",
+					title="Push Items to WooCommerce Error",
+				)
+
+		# Show detailed results
+		message = _(
+			"<b>{0} items queued to push to WooCommerce!</b><br><br>"
+			"This will create new products or update existing ones in WooCommerce.<br><br>"
+			"<b>Check progress:</b><br>"
+			"• Go to <b>Background Jobs</b> (search in awesome bar)<br>"
+			"• Or check <b>RQ Console</b> for job status<br>"
+			"• Monitor <b>Error Log</b> for any issues<br><br>"
+			"Push is running in the background and may take several minutes depending on the number of items."
+		).format(items_queued)
+
+		frappe.msgprint(message, title=_("Push Started"), indicator="green")
+
+		# Show final toast
+		frappe.publish_realtime(
+			"show_alert",
+			{
+				"message": _("{0} items queued. Check Background Jobs for progress.").format(items_queued),
+				"indicator": "green",
+			},
+			user=frappe.session.user,
+		)
+
 
 @frappe.whitelist()
 def get_woocommerce_shipment_providers(woocommerce_server):

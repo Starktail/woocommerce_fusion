@@ -102,8 +102,29 @@ def sync_woocommerce_orders_modified_since(date_time_from=None):
 		)
 		raise ValueError(error_text)
 
-	wc_orders = get_list_of_wc_orders(date_time_from=date_time_from)
-	wc_orders += get_list_of_wc_orders(date_time_from=date_time_from, status="trash")
+	# Get enabled WooCommerce servers and fetch orders with status filter
+	wc_servers = SynchroniseWooCommerce.get_wc_servers()
+	wc_orders = []
+
+	for wc_server in wc_servers:
+		# Get order status filter for this server from child table
+		# Default to: processing, shipped, completed if no filters configured
+		order_status_filter = getattr(wc_server, 'order_status_filter', [])
+
+		if order_status_filter and len(order_status_filter) > 0:
+			# Use configured statuses from child table
+			statuses_to_sync = [row.woocommerce_order_status for row in order_status_filter]
+		else:
+			# Use defaults if no filter configured
+			statuses_to_sync = ["processing", "shipped", "completed"]
+
+		# Fetch orders for each status in the filter
+		for status in statuses_to_sync:
+			wc_orders += get_list_of_wc_orders(date_time_from=date_time_from, status=status)
+
+		# Always fetch trash status orders to handle deletions
+		wc_orders += get_list_of_wc_orders(date_time_from=date_time_from, status="trash")
+
 	for wc_order in wc_orders:
 		try:
 			run_sales_order_sync(woocommerce_order=wc_order, enqueue=True)
@@ -111,7 +132,7 @@ def sync_woocommerce_orders_modified_since(date_time_from=None):
 		except Exception:
 			pass
 
-	frappe.db.set_single_value("WooCommerce Settings", "wc_last_sync_date_items", now())
+	frappe.db.set_single_value("WooCommerce Integration Settings", "wc_last_sync_date", now())
 
 
 class SynchroniseSalesOrder(SynchroniseWooCommerce):
@@ -194,12 +215,14 @@ class SynchroniseSalesOrder(SynchroniseWooCommerce):
 	def sync_wc_order_with_erpnext_order(self):
 		"""
 		Syncronise Sales Order between ERPNext and WooCommerce
+		Note: Orders always sync from WooCommerce to ERPNext, regardless of sync direction setting
 		"""
 		if self.sales_order and not self.woocommerce_order:
 			# create missing order in WooCommerce
+			# Note: Creating WC orders from ERP is typically not done, keeping as pass
 			pass
 		elif self.woocommerce_order and not self.sales_order:
-			# create missing order in ERPNext
+			# create missing order in ERPNext - always create from WooCommerce
 			self.create_sales_order(self.woocommerce_order)
 		elif self.sales_order and self.woocommerce_order:
 			# both exist, check sync hash
@@ -210,11 +233,14 @@ class SynchroniseSalesOrder(SynchroniseWooCommerce):
 				if get_datetime(self.woocommerce_order.woocommerce_date_modified) > get_datetime(
 					self.sales_order.modified
 				):
+					# WooCommerce changed more recently - always update ERPNext from WooCommerce
 					self.update_sales_order(self.woocommerce_order, self.sales_order)
 				if get_datetime(self.woocommerce_order.woocommerce_date_modified) < get_datetime(
 					self.sales_order.modified
 				):
-					self.update_woocommerce_order(self.woocommerce_order, self.sales_order)
+					# ERPNext changed more recently - do not update WooCommerce from ERPNext
+					# Orders are not synced back to WooCommerce
+					pass
 
 			# If the Sales Order exists and has been submitted in the mean time, sync Payment Entries
 			if (
@@ -281,7 +307,7 @@ class SynchroniseSalesOrder(SynchroniseWooCommerce):
 			and sales_order.docstatus == 1
 		):
 			# If the grand total is 0, skip payment entry creation
-			if sales_order.grand_total == None or float(sales_order.grand_total) == 0:
+			if sales_order.grand_total is None or float(sales_order.grand_total) == 0:
 				return True
 
 			# Get Company Bank Account for this Payment Method
@@ -482,11 +508,19 @@ class SynchroniseSalesOrder(SynchroniseWooCommerce):
 		new_sales_order = frappe.new_doc("Sales Order")
 		self.sales_order = new_sales_order
 		new_sales_order.customer = customer_docname
-		new_sales_order.po_no = new_sales_order.woocommerce_id = wc_order.id
-		new_sales_order.custom_woocommerce_customer_note = wc_order.customer_note
+		new_sales_order.woocommerce_id = wc_order.id
 
-		new_sales_order.woocommerce_status = WC_ORDER_STATUS_MAPPING_REVERSE[wc_order.status]
 		wc_server = frappe.get_cached_doc("WooCommerce Server", wc_order.woocommerce_server)
+
+		# Set PO number with server abbreviation if available
+		server_abbr = getattr(wc_server, 'server_abbreviation', None)
+		if server_abbr:
+			new_sales_order.po_no = f"{server_abbr}-{wc_order.id}"
+		else:
+			new_sales_order.po_no = str(wc_order.id)
+
+		new_sales_order.custom_woocommerce_customer_note = wc_order.customer_note
+		new_sales_order.woocommerce_status = WC_ORDER_STATUS_MAPPING_REVERSE[wc_order.status]
 
 		new_sales_order.woocommerce_server = wc_order.woocommerce_server
 		# Set the payment_method_title field if necessary, use the payment method ID if the title field is too long
@@ -508,7 +542,7 @@ class SynchroniseSalesOrder(SynchroniseWooCommerce):
 			and (shipping_lines := json.loads(wc_order.shipping_lines))
 			and len(wc_server.shipping_rule_map) > 0
 		):
-			if len(wc_order.shipping_lines) > 0:
+			if len(shipping_lines) > 0:
 				shipping_rule_mapping = next(
 					(
 						rule
@@ -517,7 +551,8 @@ class SynchroniseSalesOrder(SynchroniseWooCommerce):
 					),
 					None,
 				)
-				new_sales_order.shipping_rule = shipping_rule_mapping.shipping_rule
+				if shipping_rule_mapping:
+					new_sales_order.shipping_rule = shipping_rule_mapping.shipping_rule
 
 		self.set_items_in_sales_order(new_sales_order, wc_order)
 		self.set_fee_lines_in_sales_order(new_sales_order, wc_order)
@@ -913,7 +948,7 @@ class SynchroniseSalesOrder(SynchroniseWooCommerce):
 		address.pincode = raw_data.get("postcode")
 		address.phone = raw_data.get("phone")
 		address.address_title = (
-			{customer.customer_name}
+			customer.customer_name
 			if title_convention == "Customer Name only"
 			else f"{customer.name}-{address.address_type}"
 		)
@@ -1037,8 +1072,8 @@ def create_placeholder_item(sales_order: SalesOrder):
 	if not frappe.db.exists("Item", "DELETED_WOOCOMMERCE_PRODUCT"):
 		item = frappe.new_doc("Item")
 		item.item_code = "DELETED_WOOCOMMERCE_PRODUCT"
-		item.item_name = "Deletet WooCommerce Product"
-		item.description = "Deletet WooCommerce Product"
+		item.item_name = "Deleted WooCommerce Product"
+		item.description = "Deleted WooCommerce Product"
 		item.item_group = "All Item Groups"
 		item.stock_uom = wc_server.uom
 		item.is_stock_item = 0
