@@ -505,7 +505,7 @@
    "options": "<div class=\"alert alert-info\"><strong>Note:</strong> Orders always sync from WooCommerce to ERPNext, regardless of the Sync Direction setting above. Only orders with the selected statuses below will be synced.</div>"
   },
   {
-   "description": "Select which WooCommerce order statuses should be synced to ERPNext. If empty, defaults to: processing, shipped, completed",
+   "description": "Select which WooCommerce order statuses should be synced to ERPNext. If empty, defaults to: processing, completed",
    "fieldname": "order_status_filter",
    "fieldtype": "Table",
    "label": "Order Status Filter",
