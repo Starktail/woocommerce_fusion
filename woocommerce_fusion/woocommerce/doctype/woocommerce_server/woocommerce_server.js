@@ -162,5 +162,23 @@ frappe.ui.form.on('WooCommerce Server', {
 
 		d.show();
 
+	},
+	// Test Connection button handler
+	test_connection: function(frm) {
+		frappe.call({
+			method: "test_connection",
+			doc: frm.doc,
+			freeze: true,
+			freeze_message: __('Testing connection to WooCommerce server...')
+		});
+	},
+	// Sync All Items Now button handler
+	sync_all_items_now: function(frm) {
+		frappe.call({
+			method: "sync_all_items_now",
+			doc: frm.doc,
+			freeze: true,
+			freeze_message: __('Starting item sync...')
+		});
 	}
 });
