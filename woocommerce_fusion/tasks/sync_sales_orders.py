@@ -108,7 +108,7 @@ def sync_woocommerce_orders_modified_since(date_time_from=None):
 
 	for wc_server in wc_servers:
 		# Get order status filter for this server from child table
-		# Default to: processing, shipped, completed if no filters configured
+		# Default to: processing, completed if no filters configured
 		order_status_filter = getattr(wc_server, 'order_status_filter', [])
 
 		if order_status_filter and len(order_status_filter) > 0:
@@ -116,7 +116,7 @@ def sync_woocommerce_orders_modified_since(date_time_from=None):
 			statuses_to_sync = [row.woocommerce_order_status for row in order_status_filter]
 		else:
 			# Use defaults if no filter configured
-			statuses_to_sync = ["processing", "shipped", "completed"]
+			statuses_to_sync = ["processing", "completed"]
 
 		# Fetch orders for each status in the filter
 		for status in statuses_to_sync:

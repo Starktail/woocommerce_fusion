@@ -19,7 +19,6 @@ class WooCommerceServerOrderStatusFilter(Document):
 			"processing",
 			"on-hold",
 			"completed",
-			"shipped",
 			"cancelled",
 			"refunded",
 			"failed",

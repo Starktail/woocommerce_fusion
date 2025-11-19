@@ -25,8 +25,8 @@ def execute():
 
 			# Set default order_status_filter child table rows if not already set
 			if not wc_server_doc.order_status_filter or len(wc_server_doc.order_status_filter) == 0:
-				# Add default statuses: processing, shipped, completed
-				for status in ["processing", "shipped", "completed"]:
+				# Add default statuses: processing, completed
+				for status in ["processing", "completed"]:
 					wc_server_doc.append("order_status_filter", {"woocommerce_order_status": status})
 
 			wc_server_doc.save()
