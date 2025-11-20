@@ -14,7 +14,7 @@
    "fieldtype": "Select",
    "in_list_view": 1,
    "label": "WooCommerce Order Status",
-   "options": "any\nauto-draft\npending\nprocessing\non-hold\ncompleted\ncancelled\nrefunded\nfailed\ncheckout-draft\ntrash",
+   "options": "any\nauto-draft\npending\nprocessing\non-hold\ncompleted\ncancelled\nrefunded\nfailed\ncheckout-draft\ntrash\nshipped",
    "reqd": 1
   }
  ],
