@@ -120,10 +120,34 @@ def sync_woocommerce_orders_modified_since(date_time_from=None):
 
 		# Fetch orders for each status in the filter
 		for status in statuses_to_sync:
-			wc_orders += get_list_of_wc_orders(date_time_from=date_time_from, status=status)
+			try:
+				wc_orders += get_list_of_wc_orders(date_time_from=date_time_from, status=status)
+			except Exception as e:
+				# If the status is not supported by a WooCommerce server, log and continue
+				error_message = str(e)
+				if "rest_invalid_param" in error_message or "not one of" in error_message:
+					frappe.log_error(
+						title=_("WooCommerce Order Status Not Supported"),
+						message=_(
+							"Status '{0}' configured in WooCommerce Server '{1}' is not supported by one or more WooCommerce sites. "
+							"This status will be skipped. "
+							"Please verify that custom order statuses are registered on all WooCommerce sites that use them.\n\n"
+							"Error: {2}"
+						).format(status, wc_server.name, error_message)
+					)
+				else:
+					# Re-raise if it's a different error
+					raise
 
 		# Always fetch trash status orders to handle deletions
-		wc_orders += get_list_of_wc_orders(date_time_from=date_time_from, status="trash")
+		try:
+			wc_orders += get_list_of_wc_orders(date_time_from=date_time_from, status="trash")
+		except Exception as e:
+			# Log error but don't fail the entire sync
+			frappe.log_error(
+				title=_("WooCommerce Trash Orders Sync Error"),
+				message=_("Failed to fetch trash orders: {0}").format(str(e))
+			)
 
 	for wc_order in wc_orders:
 		try:
