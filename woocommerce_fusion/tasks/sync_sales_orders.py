@@ -118,20 +118,32 @@ def sync_woocommerce_orders_modified_since(date_time_from=None):
 			# Use defaults if no filter configured
 			statuses_to_sync = ["processing", "completed"]
 
+		# Get unsupported statuses for this server
+		unsupported_statuses = json.loads(wc_server.unsupported_order_statuses or "{}")
+
 		# Fetch orders for each status in the filter
 		for status in statuses_to_sync:
+			# Skip if this status is known to be unsupported
+			if status in unsupported_statuses:
+				frappe.logger().info(
+					f"Skipping status '{status}' for server '{wc_server.name}' as it is marked as unsupported"
+				)
+				continue
 			try:
 				wc_orders += get_list_of_wc_orders(date_time_from=date_time_from, status=status)
 			except Exception as e:
 				# If the status is not supported by a WooCommerce server, log and continue
 				error_message = str(e)
 				if "rest_invalid_param" in error_message or "not one of" in error_message:
+					# Mark this status as unsupported for this server
+					mark_status_as_unsupported(wc_server.name, status)
+
 					frappe.log_error(
 						title=_("WooCommerce Order Status Not Supported"),
 						message=_(
-							"Status '{0}' configured in WooCommerce Server '{1}' is not supported by one or more WooCommerce sites. "
-							"This status will be skipped. "
-							"Please verify that custom order statuses are registered on all WooCommerce sites that use them.\n\n"
+							"Status '{0}' configured in WooCommerce Server '{1}' is not supported by this WooCommerce site. "
+							"This status has been marked as unsupported and will be skipped in future syncs. "
+							"Please verify that custom order statuses are registered on the WooCommerce site if you want to use them.\n\n"
 							"Error: {2}"
 						).format(status, wc_server.name, error_message)
 					)
@@ -1120,3 +1132,39 @@ def get_addresses_linking_to(doctype, docname, fields=None):
 			["Dynamic Link", "link_name", "=", docname],
 		],
 	)
+
+
+def mark_status_as_unsupported(wc_server_name: str, status: str):
+	"""
+	Mark a WooCommerce order status as unsupported for a specific server.
+	This stores the information in the WooCommerce Server document.
+	"""
+	try:
+		wc_server = frappe.get_doc("WooCommerce Server", wc_server_name)
+
+		# Get existing unsupported statuses
+		unsupported_statuses = json.loads(wc_server.unsupported_order_statuses or "{}")
+
+		# Add the new unsupported status if not already present
+		if status not in unsupported_statuses:
+			unsupported_statuses[status] = {
+				"first_detected": now(),
+				"last_attempted": now()
+			}
+		else:
+			# Update last_attempted timestamp
+			unsupported_statuses[status]["last_attempted"] = now()
+
+		# Save back to the document
+		wc_server.unsupported_order_statuses = json.dumps(unsupported_statuses)
+		wc_server.save(ignore_permissions=True)
+		frappe.db.commit()
+
+	except Exception as e:
+		# Log but don't fail the sync if we can't update the server doc
+		frappe.log_error(
+			title=_("Failed to Mark Status as Unsupported"),
+			message=_("Could not update WooCommerce Server '{0}' to mark status '{1}' as unsupported.\n\nError: {2}").format(
+				wc_server_name, status, str(e)
+			)
+		)
