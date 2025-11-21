@@ -1,6 +1,7 @@
 # Copyright (c) 2023, Dirk van der Laarse and contributors
 # For license information, please see license.txt
 
+import json
 from typing import List
 from urllib.parse import urlparse
 
@@ -42,6 +43,7 @@ class WooCommerceServer(Document):
 		self.validate_so_status_map()
 		self.validate_item_map()
 		self.validate_reserved_stock_setting()
+		self.update_unsupported_statuses_html()
 
 	def validate_so_status_map(self):
 		"""
@@ -91,6 +93,24 @@ class WooCommerceServer(Document):
 						"In order to enable 'Reserved Stock Adjustment', please enable 'Enable Stock Reservation' in 'ERPNext > Stock Settings > Stock Reservation'"
 					)
 				)
+
+	def update_unsupported_statuses_html(self):
+		"""
+		Update the HTML field to show unsupported order statuses
+		"""
+		unsupported_statuses = json.loads(self.unsupported_order_statuses or "{}")
+
+		if unsupported_statuses:
+			status_list = ", ".join([f"<strong>{status}</strong>" for status in unsupported_statuses.keys()])
+			self.unsupported_statuses_html = (
+				f'<div class="alert alert-warning">'
+				f'<strong>Warning:</strong> This WooCommerce server does not support the following order statuses: {status_list}. '
+				f'These statuses will be automatically skipped during synchronization. '
+				f'To use these statuses, please register them as custom order statuses in your WooCommerce site.'
+				f'</div>'
+			)
+		else:
+			self.unsupported_statuses_html = ""
 
 	def get_shipment_providers(self):
 		"""
@@ -309,6 +329,21 @@ class WooCommerceServer(Document):
 				"indicator": "green",
 			},
 			user=frappe.session.user,
+		)
+
+	@frappe.whitelist()
+	def clear_unsupported_statuses(self):
+		"""
+		Clear the list of unsupported order statuses.
+		Use this if you've added custom order status support to your WooCommerce site.
+		"""
+		self.unsupported_order_statuses = "{}"
+		self.save()
+
+		frappe.msgprint(
+			_("Unsupported statuses list has been cleared. The system will attempt to sync all configured statuses on the next sync."),
+			title=_("Success"),
+			indicator="green",
 		)
 
 	@frappe.whitelist()

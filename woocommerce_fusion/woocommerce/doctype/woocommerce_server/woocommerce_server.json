@@ -8,6 +8,7 @@
  "field_order": [
   "tab_details",
   "warning_html",
+  "unsupported_order_statuses",
   "section_break_yuyb",
   "enable_sync",
   "sync_direction",
@@ -31,6 +32,8 @@
   "sync_direction_orders_section",
   "order_sync_direction_info",
   "order_status_filter",
+  "unsupported_statuses_html",
+  "clear_unsupported_statuses",
   "column_break_tefw",
   "sync_sales_orders",
   "column_break_utsi",
@@ -108,6 +111,14 @@
    "fieldtype": "HTML",
    "label": "Warning HTML",
    "options": "<div class=\"form-message red\">\n\t<div>{{__(\"Enabling Sync for WooCommerce Sites allows ERPNext to modify Stock Levels and Order Statuses on these Sites\")}}</div>\n</div>"
+  },
+  {
+   "default": "{}",
+   "fieldname": "unsupported_order_statuses",
+   "fieldtype": "JSON",
+   "hidden": 1,
+   "label": "Unsupported Order Statuses",
+   "read_only": 1
   },
   {
    "default": "1",
@@ -510,6 +521,17 @@
    "fieldtype": "Table",
    "label": "Order Status Filter",
    "options": "WooCommerce Server Order Status Filter"
+  },
+  {
+   "fieldname": "unsupported_statuses_html",
+   "fieldtype": "HTML",
+   "label": "Unsupported Statuses"
+  },
+  {
+   "depends_on": "eval: doc.unsupported_order_statuses && doc.unsupported_order_statuses != '{}'",
+   "fieldname": "clear_unsupported_statuses",
+   "fieldtype": "Button",
+   "label": "Clear Unsupported Statuses"
   },
   {
    "fieldname": "column_break_tefw",
