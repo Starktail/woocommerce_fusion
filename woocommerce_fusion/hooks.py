@@ -93,7 +93,7 @@ doctype_list_js = {"Sales Order": "public/js/selling/sales_order_list.js"}
 # Override standard doctype classes
 
 override_doctype_class = {
-	"Sales Order": "woocommerce_fusion.overrides.selling.sales_order.CustomSalesOrder",
+    "Sales Order": "woocommerce_fusion.overrides.selling.sales_order.CustomSalesOrder",
 }
 
 # Document Events
@@ -108,55 +108,55 @@ override_doctype_class = {
 # 	}
 # }
 doc_events = {
-	"Stock Entry": {
-		"on_submit": "woocommerce_fusion.tasks.stock_update.update_stock_levels_for_woocommerce_item",
-		"on_cancel": "woocommerce_fusion.tasks.stock_update.update_stock_levels_for_woocommerce_item",
-	},
-	"Stock Reconciliation": {
-		"on_submit": "woocommerce_fusion.tasks.stock_update.update_stock_levels_for_woocommerce_item",
-		"on_cancel": "woocommerce_fusion.tasks.stock_update.update_stock_levels_for_woocommerce_item",
-	},
-	"Sales Invoice": {
-		"on_submit": "woocommerce_fusion.tasks.stock_update.update_stock_levels_for_woocommerce_item",
-		"on_cancel": "woocommerce_fusion.tasks.stock_update.update_stock_levels_for_woocommerce_item",
-	},
-	"Delivery Note": {
-		"on_submit": "woocommerce_fusion.tasks.stock_update.update_stock_levels_for_woocommerce_item",
-		"on_cancel": "woocommerce_fusion.tasks.stock_update.update_stock_levels_for_woocommerce_item",
-	},
-	"Item Price": {
-		"on_update": "woocommerce_fusion.tasks.sync_item_prices.update_item_price_for_woocommerce_item_from_hook"
-	},
-	"Sales Order": {
-		"on_submit": "woocommerce_fusion.tasks.sync_sales_orders.run_sales_order_sync_from_hook"
-	},
-	"Item": {
-		"on_update": "woocommerce_fusion.tasks.sync_items.run_item_sync_from_hook",
-		"after_insert": "woocommerce_fusion.tasks.sync_items.run_item_sync_from_hook",
-	},
+    "Stock Entry": {
+        "on_submit": "woocommerce_fusion.tasks.stock_update.update_stock_levels_for_woocommerce_item",
+        "on_cancel": "woocommerce_fusion.tasks.stock_update.update_stock_levels_for_woocommerce_item",
+    },
+    "Stock Reconciliation": {
+        "on_submit": "woocommerce_fusion.tasks.stock_update.update_stock_levels_for_woocommerce_item",
+        "on_cancel": "woocommerce_fusion.tasks.stock_update.update_stock_levels_for_woocommerce_item",
+    },
+    "Sales Invoice": {
+        "on_submit": "woocommerce_fusion.tasks.stock_update.update_stock_levels_for_woocommerce_item",
+        "on_cancel": "woocommerce_fusion.tasks.stock_update.update_stock_levels_for_woocommerce_item",
+    },
+    "Delivery Note": {
+        "on_submit": "woocommerce_fusion.tasks.stock_update.update_stock_levels_for_woocommerce_item",
+        "on_cancel": "woocommerce_fusion.tasks.stock_update.update_stock_levels_for_woocommerce_item",
+    },
+    "Item Price": {
+        "on_update": "woocommerce_fusion.tasks.sync_item_prices.update_item_price_for_woocommerce_item_from_hook"
+    },
+    "Sales Order": {
+        "on_submit": "woocommerce_fusion.tasks.sync_sales_orders.run_sales_order_sync_from_hook"
+    },
+    "Item": {
+        "on_update": "woocommerce_fusion.tasks.sync_items.run_item_sync_from_hook",
+        "after_insert": "woocommerce_fusion.tasks.sync_items.run_item_sync_from_hook",
+    },
 }
 
 # Scheduled Tasks
 # ---------------
 
 scheduler_events = {
-	# 	"all": [
-	# 		"woocommerce_fusion.tasks.all"
-	# 	],
-	# 	"weekly": [
-	# 		"woocommerce_fusion.tasks.daily"
-	# 	],
-	"hourly_long": [
-		"woocommerce_fusion.tasks.sync_sales_orders.sync_woocommerce_orders_modified_since",
-		"woocommerce_fusion.tasks.sync_items.sync_woocommerce_products_modified_since",
-	],
-	"daily_long": [
-		"woocommerce_fusion.tasks.stock_update.update_stock_levels_for_all_enabled_items_in_background",
-		"woocommerce_fusion.tasks.sync_item_prices.run_item_price_sync_in_background",
-	],
-	# 	"monthly": [
-	# 		"woocommerce_fusion.tasks.monthly"
-	# 	],
+    # 	"all": [
+    # 		"woocommerce_fusion.tasks.all"
+    # 	],
+    # 	"weekly": [
+    # 		"woocommerce_fusion.tasks.daily"
+    # 	],
+    "hourly_long": [
+        "woocommerce_fusion.tasks.sync_sales_orders.sync_woocommerce_orders_modified_since",
+        "woocommerce_fusion.tasks.sync_items.sync_woocommerce_products_modified_since",
+    ],
+    "daily_long": [
+        "woocommerce_fusion.tasks.stock_update.update_stock_levels_for_all_enabled_items_in_background",
+        "woocommerce_fusion.tasks.sync_item_prices.run_item_price_sync_in_background",
+    ],
+    # 	"monthly": [
+    # 		"woocommerce_fusion.tasks.monthly"
+    # 	],
 }
 
 # Testing
@@ -185,7 +185,7 @@ before_tests = "woocommerce_fusion.setup.utils.before_tests"
 # -----------------------------------------------------------
 
 ignore_links_on_delete = [
-	"WooCommerce Request Log",
+    "WooCommerce Request Log",
 ]
 
 # Request Events
@@ -231,34 +231,34 @@ ignore_links_on_delete = [
 
 
 fixtures = [
-	{
-		"dt": "Custom Field",
-		"filters": [
-			[
-				"name",
-				"in",
-				(
-					"Customer-woocommerce_server",
-					"Customer-woocommerce_identifier",
-					"Customer-woocommerce_is_guest",
-					"Sales Order-woocommerce_id",
-					"Sales Order-woocommerce_server",
-					"Sales Order-woocommerce_status",
-					"Sales Order-woocommerce_payment_method",
-					"Sales Order-woocommerce_shipment_tracking_html",
-					"Sales Order-woocommerce_payment_entry",
-					"Sales Order-custom_attempted_woocommerce_auto_payment_entry",
-					"Sales Order-custom_woocommerce_last_sync_hash",
-					"Sales Order-custom_woocommerce_customer_note",
-					"Address-woocommerce_identifier",
-					"Item-woocommerce_servers",
-					"Item-custom_woocommerce_tab",
-				),
-			]
-		],
-	}
+    {
+        "dt": "Custom Field",
+        "filters": [
+            [
+                "name",
+                "in",
+                (
+                    "Customer-woocommerce_server",
+                    "Customer-woocommerce_identifier",
+                    "Customer-woocommerce_is_guest",
+                    "Sales Order-woocommerce_id",
+                    "Sales Order-woocommerce_server",
+                    "Sales Order-woocommerce_status",
+                    "Sales Order-woocommerce_payment_method",
+                    "Sales Order-woocommerce_shipment_tracking_html",
+                    "Sales Order-woocommerce_payment_entry",
+                    "Sales Order-custom_attempted_woocommerce_auto_payment_entry",
+                    "Sales Order-custom_woocommerce_last_sync_hash",
+                    "Sales Order-custom_woocommerce_customer_note",
+                    "Address-woocommerce_identifier",
+                    "Item-woocommerce_servers",
+                    "Item-custom_woocommerce_tab",
+                ),
+            ]
+        ],
+    }
 ]
 
 default_log_clearing_doctypes = {
-	"WooCommerce Request Log": 7,
+    "WooCommerce Request Log": 7,
 }

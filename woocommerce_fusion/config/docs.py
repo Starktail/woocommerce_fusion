@@ -8,4 +8,4 @@ Configuration for docs
 
 
 def get_context(context):
-	context.brand_html = "WooCommerce Fusion"
+    context.brand_html = "WooCommerce Fusion"

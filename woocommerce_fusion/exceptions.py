@@ -2,8 +2,8 @@ from frappe.exceptions import ValidationError
 
 
 class SyncDisabledError(ValidationError):
-	pass
+    pass
 
 
 class WooCommerceOrderNotFoundError(ValidationError):
-	pass
+    pass
