@@ -187,6 +187,24 @@ class WooCommerceResource(Document):
 					response = wc_server.api.get(endpoint, params=params)
 				except Exception as err:
 					log_and_raise_error(err, error_text="get_list failed")
+
+				# Handle unsupported status parameter gracefully
+				if response.status_code == 400:
+					try:
+						error_data = response.json()
+						# Check if this is an invalid status parameter error
+						if (error_data.get("code") == "rest_invalid_param" and
+							"status" in error_data.get("data", {}).get("params", {})):
+							# This server doesn't support the requested status - skip it gracefully
+							frappe.logger().info(
+								f"Server {wc_server.woocommerce_server} does not support status parameter value. "
+								f"Skipping this server. Response: {response.text}"
+							)
+							continue
+					except (ValueError, AttributeError):
+						# If we can't parse the response, fall through to standard error handling
+						pass
+
 				if response.status_code != 200:
 					log_and_raise_error(error_text="get_list failed", response=response)
 
@@ -241,6 +259,22 @@ class WooCommerceResource(Document):
 						response = wc_server.api.get(cls.resource, params=params)
 					except Exception as err:
 						log_and_raise_error(err, error_text="get_list failed")
+
+					# Handle unsupported status parameter gracefully during pagination
+					if response.status_code == 400:
+						try:
+							error_data = response.json()
+							if (error_data.get("code") == "rest_invalid_param" and
+								"status" in error_data.get("data", {}).get("params", {})):
+								# Server doesn't support this status - break pagination for this server
+								frappe.logger().info(
+									f"Server {wc_server.woocommerce_server} does not support status parameter value during pagination. "
+									f"Skipping remaining results from this server."
+								)
+								break
+						except (ValueError, AttributeError):
+							pass
+
 					if response.status_code != 200:
 						log_and_raise_error(error_text="get_list failed", response=response)
 					results = response.json()
@@ -271,6 +305,22 @@ class WooCommerceResource(Document):
 				response = wc_server.api.get(cls.resource)
 			except Exception as err:
 				log_and_raise_error(err, error_text="get_count failed")
+
+			# Handle unsupported status parameter gracefully
+			if response.status_code == 400:
+				try:
+					error_data = response.json()
+					if (error_data.get("code") == "rest_invalid_param" and
+						"status" in error_data.get("data", {}).get("params", {})):
+						# Server doesn't support this status - skip it
+						frappe.logger().info(
+							f"Server {wc_server.woocommerce_server} does not support status parameter value. "
+							f"Skipping count for this server."
+						)
+						continue
+				except (ValueError, AttributeError):
+					pass
+
 			if response.status_code != 200:
 				log_and_raise_error(error_text="get_count failed", response=response)
 
