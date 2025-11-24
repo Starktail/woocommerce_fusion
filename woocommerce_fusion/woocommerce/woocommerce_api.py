@@ -613,6 +613,8 @@ def get_wc_parameters_from_filters(filters):
 		"status",
 		"woocommerce_server",
 		"customer_id",
+		"title",
+		"woocommerce_name",
 	]
 
 	params = {}
@@ -672,6 +674,14 @@ def get_wc_parameters_from_filters(filters):
 			continue
 		if filter[1] == "customer_id" and filter[2] == "like":
 			# e.g. ['WooCommerce Order', 'customer_id', 'like', '%11%']
+			params["search"] = filter[3].strip("%")
+			continue
+		if filter[1] == "title" and filter[2] == "like":
+			# e.g. ['WooCommerce Product', 'title', 'like', '%Product Name%']
+			params["search"] = filter[3].strip("%")
+			continue
+		if filter[1] == "woocommerce_name" and filter[2] == "like":
+			# e.g. ['WooCommerce Product', 'woocommerce_name', 'like', '%Product Name%']
 			params["search"] = filter[3].strip("%")
 			continue
 		if filter[1] == "status" and filter[2] == "=":
