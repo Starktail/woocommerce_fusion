@@ -485,6 +485,228 @@ class WooCommerceServer(Document):
 			user=frappe.session.user,
 		)
 
+	@frappe.whitelist()
+	def import_new_wc_products(self):
+		"""
+		Import products from WooCommerce that are not already linked to ERPNext items
+		"""
+		from woocommerce import API
+
+		from woocommerce_fusion.tasks.sync_items import run_item_sync
+
+		# Show initial toast notification
+		frappe.publish_realtime(
+			"show_alert",
+			{
+				"message": _("Fetching products from WooCommerce..."),
+				"indicator": "blue",
+			},
+			user=frappe.session.user,
+		)
+
+		try:
+			# Create WooCommerce API connection
+			wc_api = API(
+				url=self.woocommerce_server_url,
+				consumer_key=self.api_consumer_key,
+				consumer_secret=self.api_consumer_secret,
+				version="wc/v3",
+				timeout=40,
+				verify_ssl=verify_ssl,
+			)
+
+			# Get all products from WooCommerce (paginated)
+			all_products = []
+			page = 1
+			per_page = 100
+
+			while True:
+				products = wc_api.get("products", params={"per_page": per_page, "page": page}).json()
+				if not products:
+					break
+				all_products.extend(products)
+				page += 1
+
+				# Update progress every 100 products
+				if len(all_products) % 100 == 0:
+					frappe.publish_realtime(
+						"show_alert",
+						{
+							"message": _("Fetched {0} products...").format(len(all_products)),
+							"indicator": "blue",
+						},
+						user=frappe.session.user,
+					)
+
+			# Show total products fetched
+			frappe.publish_realtime(
+				"show_alert",
+				{
+					"message": _("Fetched {0} products. Checking which are new...").format(len(all_products)),
+					"indicator": "blue",
+				},
+				user=frappe.session.user,
+			)
+
+			# Get all existing product IDs for this server
+			existing_product_ids = set()
+			existing_links = frappe.get_all(
+				"Item WooCommerce Server",
+				filters={"woocommerce_server": self.name},
+				fields=["woocommerce_id"],
+			)
+			for link in existing_links:
+				if link.woocommerce_id:
+					existing_product_ids.add(str(link.woocommerce_id))
+
+			# Find products that are not linked to items
+			new_products = []
+			for product in all_products:
+				product_id = str(product.get("id"))
+				if product_id not in existing_product_ids:
+					new_products.append(product)
+
+			# Show how many new products found
+			if not new_products:
+				frappe.msgprint(
+					_("No new products found to import. All {0} products from WooCommerce are already linked to items.").format(
+						len(all_products)
+					),
+					title=_("No New Products"),
+					indicator="blue",
+				)
+				frappe.publish_realtime(
+					"show_alert",
+					{
+						"message": _("No new products to import."),
+						"indicator": "blue",
+					},
+					user=frappe.session.user,
+				)
+				return
+
+			frappe.publish_realtime(
+				"show_alert",
+				{
+					"message": _("Found {0} new products. Starting import...").format(len(new_products)),
+					"indicator": "blue",
+				},
+				user=frappe.session.user,
+			)
+
+			# Queue the new products for sync
+			from woocommerce_fusion.woocommerce.woocommerce_api import (
+				generate_woocommerce_record_name_from_domain_and_id,
+			)
+
+			products_queued = 0
+			errors = []
+
+			for product in new_products:
+				try:
+					# Generate WooCommerce Product virtual doctype name
+					wc_product_name = generate_woocommerce_record_name_from_domain_and_id(
+						self.name, product.get("id")
+					)
+
+					# Queue for sync
+					frappe.enqueue(
+						run_item_sync,
+						queue="long",
+						woocommerce_product_name=wc_product_name,
+						enqueue_after_commit=True,
+					)
+					products_queued += 1
+
+					# Show progress notification every 10 products
+					if products_queued % 10 == 0:
+						frappe.publish_realtime(
+							"show_alert",
+							{
+								"message": _("Queued {0} products...").format(products_queued),
+								"indicator": "blue",
+							},
+							user=frappe.session.user,
+						)
+
+				except Exception as e:
+					errors.append(f"Product {product.get('id')} ({product.get('name', 'Unknown')}): {str(e)}")
+					frappe.log_error(
+						message=f"Failed to queue product {product.get('id')}: {str(e)}",
+						title="Import New WooCommerce Products Error",
+					)
+
+			# Show detailed results
+			if errors:
+				message = _(
+					"<b>Import Started with Warnings!</b><br><br>"
+					"<b>Total products on WooCommerce:</b> {0}<br>"
+					"<b>Already linked to items:</b> {1}<br>"
+					"<b>New products found:</b> {2}<br>"
+					"<b>Products queued for import:</b> {3}<br>"
+					"<b>Errors:</b> {4}<br><br>"
+					"New products will be created as items in ERPNext.<br><br>"
+					"<b>Check progress:</b><br>"
+					"• Go to <b>Background Jobs</b> (search in awesome bar)<br>"
+					"• Or check <b>RQ Console</b> for job status<br>"
+					"• Monitor <b>Error Log</b> for any issues<br><br>"
+					"Import is running in the background and may take several minutes."
+				).format(
+					len(all_products),
+					len(existing_product_ids),
+					len(new_products),
+					products_queued,
+					len(errors),
+				)
+				frappe.msgprint(message, title=_("Import Started with Warnings"), indicator="orange")
+			else:
+				message = _(
+					"<b>Import Started Successfully!</b><br><br>"
+					"<b>Total products on WooCommerce:</b> {0}<br>"
+					"<b>Already linked to items:</b> {1}<br>"
+					"<b>New products found:</b> {2}<br>"
+					"<b>Products queued for import:</b> {3}<br><br>"
+					"New products will be created as items in ERPNext.<br><br>"
+					"<b>Check progress:</b><br>"
+					"• Go to <b>Background Jobs</b> (search in awesome bar)<br>"
+					"• Or check <b>RQ Console</b> for job status<br>"
+					"• Monitor <b>Error Log</b> for any issues<br><br>"
+					"Import is running in the background and may take several minutes."
+				).format(len(all_products), len(existing_product_ids), len(new_products), products_queued)
+				frappe.msgprint(message, title=_("Import Started Successfully"), indicator="green")
+
+			# Show final toast
+			frappe.publish_realtime(
+				"show_alert",
+				{
+					"message": _("{0} new products queued for import.").format(products_queued),
+					"indicator": "green",
+				},
+				user=frappe.session.user,
+			)
+
+		except Exception as e:
+			# Show error toast
+			frappe.publish_realtime(
+				"show_alert",
+				{
+					"message": _("Failed to fetch products from WooCommerce."),
+					"indicator": "red",
+				},
+				user=frappe.session.user,
+			)
+			frappe.msgprint(
+				_("Failed to fetch products from WooCommerce: {0}<br><br>Please check your WooCommerce server settings.").format(
+					str(e)
+				),
+				title=_("Error"),
+				indicator="red",
+			)
+			frappe.log_error(
+				message=f"Failed to import new WooCommerce products: {str(e)}",
+				title="Import New WooCommerce Products Error",
+			)
+
 
 @frappe.whitelist()
 def get_woocommerce_shipment_providers(woocommerce_server):
