@@ -126,7 +126,7 @@ class WooCommerceServer(Document):
 			consumer_key=self.api_consumer_key,
 			consumer_secret=self.api_consumer_secret,
 			version="wc/v3",
-			timeout=40,
+			timeout=(10, 40),  # (connect_timeout, read_timeout) - prevents SSL handshake hangs
 			verify_ssl=verify_ssl,
 		)
 		all_providers = wc_api.get("orders/1/shipment-trackings/providers").json()
@@ -191,7 +191,7 @@ class WooCommerceServer(Document):
 				consumer_key=self.api_consumer_key,
 				consumer_secret=self.api_consumer_secret,
 				version="wc/v3",
-				timeout=40,
+				timeout=(10, 40),  # (connect_timeout, read_timeout) - prevents SSL handshake hangs
 				verify_ssl=verify_ssl,
 			)
 			# Try to get system status
@@ -511,7 +511,7 @@ class WooCommerceServer(Document):
 				consumer_key=self.api_consumer_key,
 				consumer_secret=self.api_consumer_secret,
 				version="wc/v3",
-				timeout=40,
+				timeout=(10, 40),  # (connect_timeout, read_timeout) - prevents SSL handshake hangs
 				verify_ssl=verify_ssl,
 			)
 
