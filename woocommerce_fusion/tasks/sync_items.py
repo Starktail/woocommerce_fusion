@@ -692,7 +692,7 @@ def get_list_of_wc_products(
 		new_results = woocommerce_product.get_list(
 			args={
 				"filters": filters,
-				"page_lenth": page_length,
+				"page_length": page_length,
 				"start": start,
 				"servers": servers,
 				"as_doc": True,
