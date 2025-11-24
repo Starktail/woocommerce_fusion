@@ -49,9 +49,14 @@ def run_item_sync(
     woocommerce_product_name: Optional[str] = None,
     woocommerce_product: Optional[WooCommerceProduct] = None,
     enqueue=False,
+    sync_variants: bool = True,
 ) -> Tuple[Item, WooCommerceProduct]:
     """
     Helper funtion that prepares arguments for item sync
+
+    Args:
+        sync_variants: If True, when syncing a variable product/template item,
+                      also sync all its variants. Default is True.
     """
     # Validate inputs, at least one of the parameters should be provided
     if not any([item_code, item, woocommerce_product_name, woocommerce_product]):
@@ -86,6 +91,10 @@ def run_item_sync(
         else:
             sync.run()
 
+        # If this is a variable product, sync all its variants
+        if sync_variants and woocommerce_product.type == "variable":
+            sync_all_variants_for_product(woocommerce_product, enqueue=enqueue)
+
     elif item or item_code:
         if not item:
             item = frappe.get_doc("Item", item_code)
@@ -111,10 +120,99 @@ def run_item_sync(
             else:
                 sync.run()
 
+            # If this is a template item (has variants), sync all its variants
+            if sync_variants and item.has_variants:
+                sync_all_variants_for_item(item, wc_server, enqueue=enqueue)
+
     return (
         sync.item.item if sync and sync.item else None,
         sync.woocommerce_product if sync else None,
     )
+
+
+def sync_all_variants_for_product(
+    woocommerce_product: WooCommerceProduct, enqueue: bool = False
+) -> None:
+    """
+    Sync all variants for a given WooCommerce variable product
+
+    Args:
+        woocommerce_product: The parent/variable WooCommerce product
+        enqueue: Whether to enqueue the sync tasks
+    """
+    if woocommerce_product.type != "variable":
+        return
+
+    try:
+        # Fetch all variants for this product using the same pattern as get_list_of_wc_products
+        wc_product_doc = frappe.get_doc({"doctype": "WooCommerce Product"})
+        variants = wc_product_doc.get_list(
+            args={
+                "endpoint": f"products/{woocommerce_product.woocommerce_id}/variations",
+                "metadata": {"parent_woocommerce_name": woocommerce_product.woocommerce_name},
+                "servers": [woocommerce_product.woocommerce_server],
+                "as_doc": True,
+            }
+        )
+
+        # Sync each variant
+        for variant in variants:
+            try:
+                # Sync the variant (disable recursive variant syncing to avoid infinite loops)
+                run_item_sync(woocommerce_product=variant, enqueue=enqueue, sync_variants=False)
+            except Exception as e:
+                frappe.log_error(
+                    f"Error syncing variant {variant.woocommerce_id} for product {woocommerce_product.woocommerce_id}",
+                    str(e),
+                )
+    except Exception as e:
+        frappe.log_error(
+            f"Error fetching variants for product {woocommerce_product.woocommerce_id}", str(e)
+        )
+
+
+def sync_all_variants_for_item(item: Item, wc_server_link, enqueue: bool = False) -> None:
+    """
+    Sync all variants for a given ERPNext template item
+
+    Args:
+        item: The parent/template Item
+        wc_server_link: The WooCommerce server link from item.woocommerce_servers
+        enqueue: Whether to enqueue the sync tasks
+    """
+    if not item.has_variants:
+        return
+
+    try:
+        # Get all variant items for this template
+        variant_items = frappe.get_all("Item", filters={"variant_of": item.item_code}, fields=["name"])
+
+        # Sync each variant
+        for variant_item_data in variant_items:
+            try:
+                variant_item = frappe.get_doc("Item", variant_item_data.name)
+                # Check if this variant is linked to the same WooCommerce server
+                variant_wc_server = next(
+                    (
+                        ws
+                        for ws in variant_item.woocommerce_servers
+                        if ws.woocommerce_server == wc_server_link.woocommerce_server
+                    ),
+                    None,
+                )
+                if variant_wc_server:
+                    # Sync the variant (disable recursive variant syncing to avoid infinite loops)
+                    run_item_sync(item=variant_item, enqueue=enqueue, sync_variants=False)
+            except Exception as e:
+                frappe.log_error(
+                    f"Error syncing variant item {variant_item_data.name} for template {item.item_code}",
+                    str(e),
+                )
+    except Exception as e:
+        frappe.log_error(
+            f"Error fetching variant items for template {item.item_code}",
+            str(e),
+        )
 
 
 def sync_woocommerce_products_modified_since(date_time_from=None):
@@ -399,9 +497,36 @@ class SynchroniseItem(SynchroniseWooCommerce):
                 wc_product.attributes = json.dumps(wc_product_attributes)
 
             if item.item.variant_of:
-                # Check if parent exists
+                # Validate parent exists and is a template item
+                if not frappe.db.exists("Item", item.item.variant_of):
+                    error_msg = f"Parent item {item.item.variant_of} does not exist for variant {item.item.item_code}"
+                    frappe.log_error("WooCommerce Variant Sync Error", error_msg)
+                    raise ValueError(error_msg)
+
                 parent_item = frappe.get_doc("Item", item.item.variant_of)
-                parent_item, parent_wc_product = run_item_sync(item_code=parent_item.item_code)
+
+                # Validate parent is a template item
+                if not parent_item.has_variants:
+                    error_msg = f"Parent item {item.item.variant_of} is not a template item (has_variants=0) for variant {item.item.item_code}"
+                    frappe.log_error("WooCommerce Variant Sync Error", error_msg)
+                    raise ValueError(error_msg)
+
+                # Sync parent to get WooCommerce product, disable variant syncing to avoid recursion
+                parent_item, parent_wc_product = run_item_sync(
+                    item_code=parent_item.item_code, sync_variants=False
+                )
+
+                # Validate parent WooCommerce product exists and is variable type
+                if not parent_wc_product:
+                    error_msg = f"Parent WooCommerce product not found for parent item {item.item.variant_of}"
+                    frappe.log_error("WooCommerce Variant Sync Error", error_msg)
+                    raise ValueError(error_msg)
+
+                if parent_wc_product.type != "variable":
+                    error_msg = f"Parent WooCommerce product {parent_wc_product.woocommerce_id} is not a variable product (type={parent_wc_product.type})"
+                    frappe.log_error("WooCommerce Variant Sync Error", error_msg)
+                    raise ValueError(error_msg)
+
                 wc_product.parent_id = parent_wc_product.woocommerce_id
                 wc_product.type = "variation"
 
@@ -460,13 +585,35 @@ class SynchroniseItem(SynchroniseWooCommerce):
             item.has_variants = 1
 
         if wc_product.type == "variation":
-            # Check if parent exists
+            # Validate that the variant has a parent_id
+            if not wc_product.parent_id:
+                error_msg = (
+                    f"WooCommerce variation {wc_product.woocommerce_id} is missing parent_id"
+                )
+                frappe.log_error("WooCommerce Variant Sync Error", error_msg)
+                raise ValueError(error_msg)
+
+            # Fetch or sync parent product
             woocommerce_product_name = generate_woocommerce_record_name_from_domain_and_id(
                 wc_product.woocommerce_server, wc_product.parent_id
             )
             parent_item, parent_wc_product = run_item_sync(
-                woocommerce_product_name=woocommerce_product_name
+                woocommerce_product_name=woocommerce_product_name,
+                sync_variants=False,  # Disable variant syncing to avoid recursion
             )
+
+            # Validate parent item was created/found
+            if not parent_item:
+                error_msg = f"Failed to sync parent WooCommerce product {wc_product.parent_id} for variation {wc_product.woocommerce_id}"
+                frappe.log_error("WooCommerce Variant Sync Error", error_msg)
+                raise ValueError(error_msg)
+
+            # Validate parent is a template item
+            if not parent_item.has_variants:
+                error_msg = f"Parent item {parent_item.item_code} is not a template item (has_variants=0) for WooCommerce variation {wc_product.woocommerce_id}"
+                frappe.log_error("WooCommerce Variant Sync Error", error_msg)
+                raise ValueError(error_msg)
+
             item.variant_of = parent_item.item_code
 
         # Determine base item code from SKU or WooCommerce ID
