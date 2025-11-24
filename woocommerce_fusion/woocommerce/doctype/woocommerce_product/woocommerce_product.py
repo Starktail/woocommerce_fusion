@@ -31,7 +31,10 @@ class WooCommerceProduct(WooCommerceResource):
 	def get_list(args):
 		products = WooCommerceProduct.get_list_of_records(args)
 
-		# Extend the list with product variants
+		# Track which parent IDs we've already fetched variants for
+		processed_parent_ids = set()
+
+		# Extend the list with product variants for variable products
 		products_with_variants = [
 			(product.get("id"), product.get("woocommerce_name"))
 			for product in products
@@ -42,6 +45,40 @@ class WooCommerceProduct(WooCommerceResource):
 			args["metadata"] = {"parent_woocommerce_name": woocommerce_name}
 			variants = WooCommerceProduct.get_list_of_records(args)
 			products.extend(variants)
+			processed_parent_ids.add(id)
+
+		# Check if any products are variations (have a parent_id)
+		# For each variation, ensure we fetch all sibling variations from the parent
+		variations_with_parents = [
+			(product.get("parent_id"), product.get("id"))
+			for product in products
+			if product.get("parent_id") and product.get("parent_id") not in processed_parent_ids
+		]
+
+		# Group by parent_id to avoid duplicate API calls
+		parent_ids_to_fetch = {}
+		for parent_id, variant_id in variations_with_parents:
+			if parent_id not in parent_ids_to_fetch:
+				parent_ids_to_fetch[parent_id] = variant_id
+
+		# Fetch all variations for each parent that wasn't already processed
+		for parent_id in parent_ids_to_fetch.keys():
+			# First, fetch the parent product to get its name
+			parent_endpoint = f"products/{parent_id}"
+			parent_args = args.copy()
+			parent_args["endpoint"] = parent_endpoint
+			parent_products = WooCommerceProduct.get_list_of_records(parent_args)
+
+			if parent_products:
+				parent_product = parent_products[0]
+				parent_woocommerce_name = parent_product.get("woocommerce_name") or parent_product.get("name")
+
+				# Now fetch all variations for this parent
+				args["endpoint"] = f"products/{parent_id}/variations"
+				args["metadata"] = {"parent_woocommerce_name": parent_woocommerce_name}
+				variants = WooCommerceProduct.get_list_of_records(args)
+				products.extend(variants)
+				processed_parent_ids.add(parent_id)
 
 		return products
 
