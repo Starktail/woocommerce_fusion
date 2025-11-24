@@ -280,9 +280,12 @@ class SynchroniseItem(SynchroniseWooCommerce):
 		Update the ERPNext Item with fields from it's corresponding WooCommerce Product
 		"""
 		item_dirty = False
-		if item.item.item_name != woocommerce_product.woocommerce_name:
-			item.item.item_name = woocommerce_product.woocommerce_name
-			item_dirty = True
+		# Don't sync variant names back to ERP as variant naming differs between WooCommerce and ERPNext
+		# WooCommerce formats as "Parent - Attr1, Attr2" while ERPNext uses template-based naming
+		if woocommerce_product.type != "variation":
+			if item.item.item_name != woocommerce_product.woocommerce_name:
+				item.item.item_name = woocommerce_product.woocommerce_name
+				item_dirty = True
 
 		fields_updated, item.item = self.set_item_fields(item=item.item)
 
@@ -533,6 +536,18 @@ class SynchroniseItem(SynchroniseWooCommerce):
 					)
 				)
 				for map in wc_server.item_field_map:
+					# Skip description and short_description syncing for variants
+					# Variants should not have their own description - only the parent product should
+					if self.woocommerce_product.type == "variation":
+						wc_field = map.woocommerce_field_name.lower()
+						if "description" in wc_field or "short_description" in wc_field:
+							frappe.log_error(
+								"WooCommerce Variant Field Sync Skipped",
+								f"Skipping {map.woocommerce_field_name} sync for variant {self.woocommerce_product.name}. "
+								"Descriptions should only be set on the parent product, not variants."
+							)
+							continue
+
 					erpnext_item_field_name = map.erpnext_field_name.split(" | ")
 
 					# We expect woocommerce_field_name to be valid JSONPath
@@ -564,6 +579,18 @@ class SynchroniseItem(SynchroniseWooCommerce):
 				)
 
 				for map in wc_server.item_field_map:
+					# Skip description and short_description syncing for variants
+					# Variants should not have their own description - only the parent product should
+					if woocommerce_product.type == "variation":
+						wc_field = map.woocommerce_field_name.lower()
+						if "description" in wc_field or "short_description" in wc_field:
+							frappe.log_error(
+								"WooCommerce Variant Field Sync Skipped",
+								f"Skipping {map.woocommerce_field_name} sync for variant {woocommerce_product.name}. "
+								"Descriptions should only be set on the parent product, not variants."
+							)
+							continue
+
 					erpnext_item_field_name = map.erpnext_field_name.split(" | ")
 					erpnext_item_field_value = getattr(item.item, erpnext_item_field_name[0])
 
