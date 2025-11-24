@@ -67,6 +67,12 @@ def run_item_sync(
 			)
 			woocommerce_product.load_from_db()
 
+		# Check if sync is enabled on the server before triggering sync
+		wc_server_doc = frappe.get_cached_doc("WooCommerce Server", woocommerce_product.woocommerce_server)
+		if not wc_server_doc.enable_sync:
+			frappe.logger().info(f"Skipping sync for product {woocommerce_product.name} on disabled server {wc_server_doc.name}")
+			return (None, None)
+
 		# Trigger sync
 		sync = SynchroniseItem(woocommerce_product=woocommerce_product)
 		if enqueue:
@@ -80,6 +86,12 @@ def run_item_sync(
 		if not item.woocommerce_servers:
 			frappe.throw(_("No WooCommerce Servers defined for Item {0}").format(item_code))
 		for wc_server in item.woocommerce_servers:
+			# Check if sync is enabled on the server before triggering sync
+			wc_server_doc = frappe.get_cached_doc("WooCommerce Server", wc_server.woocommerce_server)
+			if not wc_server_doc.enable_sync:
+				frappe.logger().info(f"Skipping sync for item {item.name} on disabled server {wc_server_doc.name}")
+				continue
+
 			# Trigger sync for every linked server
 			sync = SynchroniseItem(
 				item=ERPNextItemToSync(item=item, item_woocommerce_server_idx=wc_server.idx)
@@ -728,10 +740,19 @@ def clear_sync_hash_and_run_item_sync(item_code: str):
 	iws = frappe.qb.DocType("Item WooCommerce Server")
 
 	iwss = (
-		frappe.qb.from_(iws).where(iws.enabled == 1).where(iws.parent == item_code).select(iws.name)
+		frappe.qb.from_(iws).where(iws.enabled == 1).where(iws.parent == item_code).select(iws.name, iws.woocommerce_server)
 	).run(as_dict=True)
 
-	for iws in iwss:
+	# Filter out servers with sync disabled
+	iwss_to_sync = []
+	for iws_row in iwss:
+		wc_server = frappe.get_cached_doc("WooCommerce Server", iws_row.woocommerce_server)
+		if wc_server.enable_sync:
+			iwss_to_sync.append(iws_row)
+		else:
+			frappe.logger().info(f"Skipping sync for item {item_code} on disabled server {wc_server.name}")
+
+	for iws in iwss_to_sync:
 		frappe.db.set_value(
 			"Item WooCommerce Server",
 			iws.name,
@@ -740,5 +761,5 @@ def clear_sync_hash_and_run_item_sync(item_code: str):
 			update_modified=False,
 		)
 
-	if len(iwss) > 0:
+	if len(iwss_to_sync) > 0:
 		run_item_sync(item_code=item_code, enqueue=True)
