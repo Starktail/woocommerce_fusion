@@ -313,6 +313,11 @@ class SynchroniseItem(SynchroniseWooCommerce):
 			wc_product.woocommerce_name = item.item.item_name
 			wc_product_dirty = True
 
+		desired_status = item.item_woocommerce_server.product_status or "publish"
+		if wc_product.status != desired_status:
+			wc_product.status = desired_status
+			wc_product_dirty = True
+
 		product_fields_changed, wc_product = self.set_product_fields(wc_product, item)
 		if product_fields_changed:
 			wc_product_dirty = True
@@ -380,6 +385,7 @@ class SynchroniseItem(SynchroniseWooCommerce):
 			wc_product.woocommerce_server = item.item_woocommerce_server.woocommerce_server
 			wc_product.woocommerce_name = item.item.item_name
 			wc_product.regular_price = get_item_price_rate(item) or "0"
+			wc_product.status = item.item_woocommerce_server.product_status or "publish"
 
 			self.set_product_fields(wc_product, item)
 
