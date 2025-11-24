@@ -180,5 +180,14 @@ frappe.ui.form.on('WooCommerce Server', {
 			freeze: true,
 			freeze_message: __('Starting item sync...')
 		});
+	},
+	// Import New Products from WooCommerce button handler
+	import_new_wc_products: function(frm) {
+		frappe.call({
+			method: "import_new_wc_products",
+			doc: frm.doc,
+			freeze: true,
+			freeze_message: __('Importing new products from WooCommerce...')
+		});
 	}
 });

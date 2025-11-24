@@ -22,6 +22,7 @@
   "column_break_actions",
   "sync_all_items_now",
   "push_all_erp_items_to_wc",
+  "import_new_wc_products",
   "section_details_defaults",
   "creation_user",
   "column_break_14",
@@ -315,6 +316,12 @@
    "fieldname": "push_all_erp_items_to_wc",
    "fieldtype": "Button",
    "label": "Push All ERP Items to WooCommerce"
+  },
+  {
+   "depends_on": "eval: !doc.__islocal && doc.enable_sync",
+   "fieldname": "import_new_wc_products",
+   "fieldtype": "Button",
+   "label": "Import New Products from WooCommerce"
   },
   {
    "default": "0",
