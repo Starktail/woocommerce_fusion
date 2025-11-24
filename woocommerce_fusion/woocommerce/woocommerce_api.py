@@ -7,6 +7,7 @@ import frappe
 from frappe import _
 from frappe.model.document import Document
 from frappe.utils import format_datetime, get_datetime
+from requests.exceptions import ConnectTimeout, ReadTimeout, Timeout
 
 from woocommerce_fusion.exceptions import SyncDisabledError
 from woocommerce_fusion.tasks.utils import APIWithRequestLogging
@@ -54,7 +55,7 @@ class WooCommerceResource(Document):
 					consumer_key=server.api_consumer_key,
 					consumer_secret=server.api_consumer_secret,
 					version="wc/v3",
-					timeout=40,
+					timeout=(10, 40),  # (connect_timeout, read_timeout) - prevents SSL handshake hangs
 					verify_ssl=verify_ssl,
 				),
 				woocommerce_server_url=server.woocommerce_server_url,
@@ -114,11 +115,43 @@ class WooCommerceResource(Document):
 		# Get WooCommerce Record
 		try:
 			record = self.current_wc_api.api.get(f"{self.resource}/{record_id}").json()
+		except (ConnectTimeout, ReadTimeout, Timeout) as timeout_err:
+			# Handle timeout errors with specific messaging
+			if isinstance(timeout_err, ConnectTimeout):
+				error_type = "Connection/SSL handshake timeout"
+				error_hint = (
+					"The WooCommerce server is not responding within the connection timeout (10 seconds). "
+					"This could indicate:\n"
+					"• Server is down or unreachable\n"
+					"• SSL/TLS certificate issues\n"
+					"• Network connectivity problems\n"
+					"• Firewall blocking the connection"
+				)
+			elif isinstance(timeout_err, ReadTimeout):
+				error_type = "Read timeout"
+				error_hint = (
+					"The WooCommerce server is taking too long to respond (>40 seconds). "
+					"This could indicate:\n"
+					"• Server is overloaded\n"
+					"• Large response payload\n"
+					"• Database performance issues"
+				)
+			else:
+				error_type = "Timeout"
+				error_hint = "The request to WooCommerce server timed out."
+
+			error_text = (
+				f"load_from_db failed - {error_type} (WooCommerce {self.resource} #{record_id})\n\n"
+				f"Server: {self.current_wc_api.woocommerce_server_url}\n\n"
+				f"{error_hint}\n\n"
+				f"Technical Details:\n{frappe.get_traceback()}"
+			)
+			log_and_raise_error(error_text, exception=timeout_err)
 		except Exception as err:
 			error_text = (
 				f"load_from_db failed (WooCommerce {self.resource} #{record_id})\n\n{frappe.get_traceback()}"
 			)
-			log_and_raise_error(error_text)
+			log_and_raise_error(error_text, exception=err)
 
 		if "id" not in record:
 			log_and_raise_error(
@@ -185,8 +218,14 @@ class WooCommerceResource(Document):
 				try:
 					endpoint = args["endpoint"] if "endpoint" in args else cls.resource
 					response = wc_server.api.get(endpoint, params=params)
+				except (ConnectTimeout, ReadTimeout, Timeout) as timeout_err:
+					error_type = "Connection timeout" if isinstance(timeout_err, ConnectTimeout) else "Read timeout"
+					log_and_raise_error(
+						exception=timeout_err,
+						error_text=f"get_list failed - {error_type} for {wc_server.woocommerce_server_url}"
+					)
 				except Exception as err:
-					log_and_raise_error(err, error_text="get_list failed")
+					log_and_raise_error(exception=err, error_text="get_list failed")
 
 				# Handle unsupported status parameter gracefully
 				if response.status_code == 400:
@@ -257,8 +296,14 @@ class WooCommerceResource(Document):
 					params["offset"] = current_offset
 					try:
 						response = wc_server.api.get(cls.resource, params=params)
+					except (ConnectTimeout, ReadTimeout, Timeout) as timeout_err:
+						error_type = "Connection timeout" if isinstance(timeout_err, ConnectTimeout) else "Read timeout"
+						log_and_raise_error(
+							exception=timeout_err,
+							error_text=f"get_list pagination failed - {error_type} for {wc_server.woocommerce_server_url}"
+						)
 					except Exception as err:
-						log_and_raise_error(err, error_text="get_list failed")
+						log_and_raise_error(exception=err, error_text="get_list failed")
 
 					# Handle unsupported status parameter gracefully during pagination
 					if response.status_code == 400:
@@ -303,8 +348,14 @@ class WooCommerceResource(Document):
 			# Get WooCommerce Records
 			try:
 				response = wc_server.api.get(cls.resource)
+			except (ConnectTimeout, ReadTimeout, Timeout) as timeout_err:
+				error_type = "Connection timeout" if isinstance(timeout_err, ConnectTimeout) else "Read timeout"
+				log_and_raise_error(
+					exception=timeout_err,
+					error_text=f"get_count failed - {error_type} for {wc_server.woocommerce_server_url}"
+				)
 			except Exception as err:
-				log_and_raise_error(err, error_text="get_count failed")
+				log_and_raise_error(exception=err, error_text="get_count failed")
 
 			# Handle unsupported status parameter gracefully
 			if response.status_code == 400:
@@ -362,8 +413,14 @@ class WooCommerceResource(Document):
 		)
 		try:
 			response = self.current_wc_api.api.post(endpoint, data=record)
+		except (ConnectTimeout, ReadTimeout, Timeout) as timeout_err:
+			error_type = "Connection timeout" if isinstance(timeout_err, ConnectTimeout) else "Read timeout"
+			log_and_raise_error(
+				exception=timeout_err,
+				error_text=f"db_insert failed - {error_type} for {self.current_wc_api.woocommerce_server_url}"
+			)
 		except Exception as err:
-			log_and_raise_error(err, error_text="db_insert failed")
+			log_and_raise_error(exception=err, error_text="db_insert failed")
 		if response.status_code != 201:
 			log_and_raise_error(error_text="db_insert failed", response=response)
 		self.woocommerce_id = response.json()["id"]
@@ -416,8 +473,14 @@ class WooCommerceResource(Document):
 		)
 		try:
 			response = self.current_wc_api.api.put(endpoint, data=record)
+		except (ConnectTimeout, ReadTimeout, Timeout) as timeout_err:
+			error_type = "Connection timeout" if isinstance(timeout_err, ConnectTimeout) else "Read timeout"
+			log_and_raise_error(
+				exception=timeout_err,
+				error_text=f"db_update failed - {error_type} for {self.current_wc_api.woocommerce_server_url}"
+			)
 		except Exception as err:
-			log_and_raise_error(err, error_text="db_update failed")
+			log_and_raise_error(exception=err, error_text="db_update failed")
 		if response.status_code != 200:
 			log_and_raise_error(error_text="db_update failed", response=response)
 

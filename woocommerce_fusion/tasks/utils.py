@@ -1,44 +1,102 @@
+import time
 import traceback
 
 import frappe
 import requests
 from frappe.utils.caching import redis_cache
+from requests.exceptions import ConnectTimeout, ReadTimeout, Timeout
 from woocommerce import API
 
 
 class APIWithRequestLogging(API):
-	"""WooCommerce API with Request Logging."""
+	"""WooCommerce API with Request Logging and Retry Logic."""
 
 	def _API__request(self, method, endpoint, data, params=None, **kwargs):
-		"""Override _request method to also create a 'WooCommerce Request Log'"""
+		"""Override _request method to add request logging and retry logic with exponential backoff."""
 		result = None
-		try:
-			result = super()._API__request(method, endpoint, data, params, **kwargs)
-			if not frappe.flags.in_test and is_woocommerce_request_logging_enabled(self.url):
-				frappe.enqueue(
-					"woocommerce_fusion.tasks.utils.log_woocommerce_request",
-					url=self.url,
-					endpoint=endpoint,
-					request_method=method,
-					params=params,
-					data=data,
-					res=result,
-					traceback="".join(traceback.format_stack(limit=8)),
-				)
-			return result
-		except Exception as e:
-			if not frappe.flags.in_test and is_woocommerce_request_logging_enabled(self.url):
-				frappe.enqueue(
-					"woocommerce_fusion.tasks.utils.log_woocommerce_request",
-					url=self.url,
-					endpoint=endpoint,
-					request_method=method,
-					params=params,
-					data=data,
-					res=result,
-					traceback="".join(traceback.format_stack(limit=8)),
-				)
-			raise e
+		max_retries = 3
+		retry_delay = 2  # Initial delay in seconds
+
+		for attempt in range(max_retries + 1):
+			try:
+				result = super()._API__request(method, endpoint, data, params, **kwargs)
+
+				# Log successful request
+				if not frappe.flags.in_test and is_woocommerce_request_logging_enabled(self.url):
+					frappe.enqueue(
+						"woocommerce_fusion.tasks.utils.log_woocommerce_request",
+						url=self.url,
+						endpoint=endpoint,
+						request_method=method,
+						params=params,
+						data=data,
+						res=result,
+						traceback="".join(traceback.format_stack(limit=8)),
+					)
+				return result
+
+			except (ConnectTimeout, ReadTimeout, Timeout) as timeout_error:
+				# Determine timeout type for better error messaging
+				if isinstance(timeout_error, ConnectTimeout):
+					error_type = "Connection/SSL handshake timeout"
+				elif isinstance(timeout_error, ReadTimeout):
+					error_type = "Read timeout"
+				else:
+					error_type = "General timeout"
+
+				# Check if we should retry
+				is_last_attempt = attempt == max_retries
+
+				if is_last_attempt:
+					# Log the final failed attempt
+					error_message = (
+						f"{error_type} after {max_retries} retries\n"
+						f"URL: {self.url}\n"
+						f"Endpoint: {endpoint}\n"
+						f"Method: {method}\n"
+						f"Error: {str(timeout_error)}"
+					)
+					frappe.log_error(
+						title=f"WooCommerce {error_type} - Final Attempt Failed",
+						message=error_message
+					)
+
+					if not frappe.flags.in_test and is_woocommerce_request_logging_enabled(self.url):
+						frappe.enqueue(
+							"woocommerce_fusion.tasks.utils.log_woocommerce_request",
+							url=self.url,
+							endpoint=endpoint,
+							request_method=method,
+							params=params,
+							data=data,
+							res=result,
+							traceback="".join(traceback.format_stack(limit=8)),
+						)
+					raise timeout_error
+				else:
+					# Retry with exponential backoff
+					wait_time = retry_delay * (2 ** attempt)
+					frappe.logger().warning(
+						f"WooCommerce {error_type} on attempt {attempt + 1}/{max_retries + 1} "
+						f"for {self.url}{endpoint}. Retrying in {wait_time}s..."
+					)
+					time.sleep(wait_time)
+					continue
+
+			except Exception as e:
+				# Handle non-timeout exceptions (no retry)
+				if not frappe.flags.in_test and is_woocommerce_request_logging_enabled(self.url):
+					frappe.enqueue(
+						"woocommerce_fusion.tasks.utils.log_woocommerce_request",
+						url=self.url,
+						endpoint=endpoint,
+						request_method=method,
+						params=params,
+						data=data,
+						res=result,
+						traceback="".join(traceback.format_stack(limit=8)),
+					)
+				raise e
 
 
 @redis_cache(ttl=86400)
