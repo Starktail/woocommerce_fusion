@@ -196,7 +196,8 @@ class WooCommerceResource(Document):
                 else wc_records_per_page_limit
             )
             offset = int(args["start"]) if args and "start" in args else 0
-            params["per_page"] = min(per_page + offset, wc_records_per_page_limit)
+            # Always fetch the maximum allowed per page for efficiency
+            params["per_page"] = wc_records_per_page_limit
 
             # Map Frappe filters to WooCommerce parameters
             if "filters" in args and args["filters"]:
@@ -297,8 +298,9 @@ class WooCommerceResource(Document):
                     all_results.extend(results[start:end])
                     total_processed += len(results)
 
-                    # Check if there are no more records available or required
-                    if len(results) < per_page:
+                    # Check if there are no more records available from the API
+                    # Break when we receive fewer records than we requested from WooCommerce
+                    if len(results) < params["per_page"]:
                         break
 
                     current_offset += params["per_page"]
