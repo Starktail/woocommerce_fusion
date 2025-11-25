@@ -677,46 +677,81 @@ class SynchroniseItem(SynchroniseWooCommerce):
 
     def create_or_update_item_attributes(self, wc_product: WooCommerceProduct):
         """
-        Create or update an Item Attribute
-        """
-        if wc_product.attributes:
-            wc_attributes = json.loads(wc_product.attributes)
-            for wc_attribute in wc_attributes:
-                if frappe.db.exists("Item Attribute", wc_attribute["name"]):
-                    # Get existing Item Attribute
-                    item_attribute = frappe.get_doc("Item Attribute", wc_attribute["name"])
-                else:
-                    # Create a Item Attribute
-                    item_attribute = frappe.get_doc(
-                        {"doctype": "Item Attribute", "attribute_name": wc_attribute["name"]}
-                    )
+        Create or update an Item Attribute.
 
-                # Get list of attribute options.
-                # In variable WooCommerce Products, it's a list with key "options"
-                # In a WooCommerce Product variant, it's a single value with key "option"
-                options = (
-                    wc_attribute["options"]
-                    if wc_product.type == "variable"
-                    else [wc_attribute["option"]]
+        For variable products: Can add missing attribute values (they contain the complete list)
+        For variations: Only ADD missing attribute values to avoid removing values used by other items
+
+        Respects sync direction settings - only modifies ERPNext attributes when sync direction allows.
+
+        Note: Attribute values (e.g., "White", "Black") are the same in both systems.
+        The difference is in item naming - ERPNext uses "Parent Name - Attribute Value" format
+        while WooCommerce variations just use the attribute value.
+        """
+        if not wc_product.attributes:
+            return
+
+        # Get sync direction from WooCommerce Server
+        wc_server = frappe.get_cached_doc("WooCommerce Server", wc_product.woocommerce_server)
+        sync_direction = getattr(wc_server, "sync_direction", "Bidirectional")
+
+        # Check if we should update ERPNext based on sync direction
+        # For "ERP to WooCommerce Only", we should not modify ERPNext attributes from WooCommerce data
+        can_update_erp = sync_direction in ["Bidirectional", "WooCommerce to ERP Only"]
+
+        wc_attributes = json.loads(wc_product.attributes)
+        for wc_attribute in wc_attributes:
+            attribute_exists = frappe.db.exists("Item Attribute", wc_attribute["name"])
+
+            if attribute_exists:
+                # Get existing Item Attribute
+                item_attribute = frappe.get_doc("Item Attribute", wc_attribute["name"])
+            else:
+                # Create a new Item Attribute (always allowed - we need the attribute to exist)
+                item_attribute = frappe.get_doc(
+                    {"doctype": "Item Attribute", "attribute_name": wc_attribute["name"]}
                 )
 
-                # If no attributes values exist, or attribute values exist already but are different, remove and update them
-                if len(item_attribute.item_attribute_values) == 0 or (
-                    len(item_attribute.item_attribute_values) > 0
-                    and set(options)
-                    != set([val.attribute_value for val in item_attribute.item_attribute_values])
-                ):
-                    item_attribute.item_attribute_values = []
-                    for option in options:
+            # Get list of attribute options.
+            # In variable WooCommerce Products, it's a list with key "options"
+            # In a WooCommerce Product variant, it's a single value with key "option"
+            options = (
+                wc_attribute["options"]
+                if wc_product.type == "variable"
+                else [wc_attribute["option"]]
+            )
+
+            # Get existing attribute values
+            existing_values = set(
+                val.attribute_value for val in item_attribute.item_attribute_values
+            )
+
+            attribute_modified = False
+
+            if not attribute_exists:
+                # New attribute - add all options
+                for option in options:
+                    row = item_attribute.append("item_attribute_values")
+                    row.attribute_value = option
+                    row.abbr = option.replace(" ", "")
+                attribute_modified = True
+            elif can_update_erp:
+                # Existing attribute - respect sync direction and product type
+                # For both variable products and variations: Only ADD missing values
+                # This prevents the InvalidItemAttributeValueError when other items use different values
+                # We never remove existing values to avoid breaking items that depend on them
+                for option in options:
+                    if option not in existing_values:
                         row = item_attribute.append("item_attribute_values")
                         row.attribute_value = option
                         row.abbr = option.replace(" ", "")
+                        attribute_modified = True
 
-                item_attribute.flags.ignore_mandatory = True
-                if not item_attribute.name:
-                    item_attribute.insert()
-                else:
-                    item_attribute.save()
+            item_attribute.flags.ignore_mandatory = True
+            if not item_attribute.name:
+                item_attribute.insert()
+            elif attribute_modified:
+                item_attribute.save()
 
     def set_item_fields(self, item: Item) -> Tuple[bool, Item]:
         """
