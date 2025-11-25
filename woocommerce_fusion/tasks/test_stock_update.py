@@ -26,38 +26,48 @@ class TestWooCommerceStockSync(FrappeTestCase):
             ],
             is_stock_item=1,
             disabled=0,
+            has_variants=0,  # Not a parent item
+            variant_of=None,  # Not a variant
+            end_of_life=None,  # Not EOL
         )
         mock_frappe.get_doc.return_value = some_item
 
         # Set up a dummy bin list with stock in two Warehouses
         bin_list = [
-            frappe._dict(warehouse="Warehouse A", actual_qty=5),
-            frappe._dict(warehouse="Warehouse B", actual_qty=10),
-            frappe._dict(warehouse="Warehouse C", actual_qty=20),
+            frappe._dict(warehouse="Warehouse A", actual_qty=5, reserved_qty=0),
+            frappe._dict(warehouse="Warehouse B", actual_qty=10, reserved_qty=0),
+            frappe._dict(warehouse="Warehouse C", actual_qty=20, reserved_qty=0),
         ]
         mock_frappe.get_list.return_value = bin_list
 
-        # Set up mock return values
-        mock_frappe.get_cached_doc.side_effect = [
-            frappe._dict(
-                woocommerce_server="woo1.example.com",
-                enable_sync=1,
-                enable_stock_level_synchronisation=1,
-                warehouses=[
-                    frappe._dict(warehouse="Warehouse A"),
-                    frappe._dict(warehouse="Warehouse B"),
-                ],
-            ),
-            frappe._dict(
-                woocommerce_server="woo2.example.com",
-                enable_sync=1,
-                enable_stock_level_synchronisation=1,
-                warehouses=[
-                    frappe._dict(warehouse="Warehouse A"),
-                    frappe._dict(warehouse="Warehouse B"),
-                ],
-            ),
-        ]
+        # Set up mock return values for both WooCommerce servers
+        wc_server_1 = frappe._dict(
+            woocommerce_server="woo1.example.com",
+            woocommerce_server_url="https://woo1.example.com",
+            api_consumer_key="key1",
+            api_consumer_secret="secret1",
+            enable_sync=1,
+            enable_stock_level_synchronisation=1,
+            subtract_reserved_stock=False,
+            warehouses=[
+                frappe._dict(warehouse="Warehouse A"),
+                frappe._dict(warehouse="Warehouse B"),
+            ],
+        )
+        wc_server_2 = frappe._dict(
+            woocommerce_server="woo2.example.com",
+            woocommerce_server_url="https://woo2.example.com",
+            api_consumer_key="key2",
+            api_consumer_secret="secret2",
+            enable_sync=1,
+            enable_stock_level_synchronisation=1,
+            subtract_reserved_stock=False,
+            warehouses=[
+                frappe._dict(warehouse="Warehouse A"),
+                frappe._dict(warehouse="Warehouse B"),
+            ],
+        )
+        mock_frappe.get_cached_doc.side_effect = [wc_server_1, wc_server_2]
 
         # Mock out calls to WooCommerce API's
         mock_put_response = Mock()

@@ -278,9 +278,8 @@ class SynchroniseSalesOrder(SynchroniseWooCommerce):
                 if get_datetime(self.woocommerce_order.woocommerce_date_modified) < get_datetime(
                     self.sales_order.modified
                 ):
-                    # ERPNext changed more recently - do not update WooCommerce from ERPNext
-                    # Orders are not synced back to WooCommerce
-                    pass
+                    # ERPNext changed more recently - update WooCommerce from ERPNext
+                    self.update_woocommerce_order(self.woocommerce_order, self.sales_order)
 
             # If the Sales Order exists and has been submitted in the mean time, sync Payment Entries
             if (
