@@ -905,7 +905,10 @@ def get_list_of_wc_products(
     """
     Fetches a list of WooCommerce Products within a specified date range or linked with an Item, using pagination.
 
-    At least one of date_time_from, item parameters are required
+    At least one of date_time_from, item parameters are required.
+
+    For variant items (those with variant_of set), this function uses the WooCommerce variations endpoint
+    /products/{parent_id}/variations to properly fetch the variation data.
     """
     if not any([date_time_from, item]):
         raise ValueError("At least one of date_time_from or item parameters are required")
@@ -917,6 +920,8 @@ def get_list_of_wc_products(
     filters = []
     wc_products = []
     servers = None
+    endpoint = None  # Custom endpoint for variations
+    metadata = None  # Metadata for variation naming
 
     # Build filters
     if date_time_from:
@@ -927,17 +932,50 @@ def get_list_of_wc_products(
         )
         servers = [item.item_woocommerce_server.woocommerce_server]
 
+        # Check if this is a variant item - if so, we need to use the variations endpoint
+        if item.item.variant_of:
+            # Get the parent item to find its WooCommerce ID
+            parent_item = frappe.get_doc("Item", item.item.variant_of)
+
+            # Find the parent's WooCommerce server link for the same server
+            parent_wc_server = next(
+                (
+                    ws
+                    for ws in parent_item.woocommerce_servers
+                    if ws.woocommerce_server == item.item_woocommerce_server.woocommerce_server
+                ),
+                None,
+            )
+
+            if parent_wc_server and parent_wc_server.woocommerce_id:
+                # Use the variations endpoint with the parent's WooCommerce ID
+                endpoint = f"products/{parent_wc_server.woocommerce_id}/variations"
+                metadata = {"parent_woocommerce_name": parent_item.item_name}
+            else:
+                # Parent doesn't have a WooCommerce ID for this server - this is an error state
+                frappe.log_error(
+                    "WooCommerce Variant Sync Error",
+                    f"Cannot sync variant {item.item.item_code} - parent item {item.item.variant_of} "
+                    f"does not have a WooCommerce ID for server {item.item_woocommerce_server.woocommerce_server}",
+                )
+                return []
+
     while new_results:
         woocommerce_product = frappe.get_doc({"doctype": "WooCommerce Product"})
-        new_results = woocommerce_product.get_list(
-            args={
-                "filters": filters,
-                "page_length": page_length,
-                "start": start,
-                "servers": servers,
-                "as_doc": True,
-            }
-        )
+        args = {
+            "filters": filters,
+            "page_length": page_length,
+            "start": start,
+            "servers": servers,
+            "as_doc": True,
+        }
+        # Add custom endpoint for variations
+        if endpoint:
+            args["endpoint"] = endpoint
+        if metadata:
+            args["metadata"] = metadata
+
+        new_results = woocommerce_product.get_list(args=args)
         for wc_product in new_results:
             wc_products.append(wc_product)
         start += page_length
