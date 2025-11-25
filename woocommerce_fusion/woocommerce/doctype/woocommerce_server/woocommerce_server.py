@@ -571,12 +571,64 @@ class WooCommerceServer(Document):
                         user=frappe.session.user,
                     )
 
+            # Fetch variations for variable products
+            variable_products = [p for p in all_products if p.get("type") == "variable"]
+            if variable_products:
+                frappe.publish_realtime(
+                    "show_alert",
+                    {
+                        "message": _("Fetching variations for {0} variable products...").format(
+                            len(variable_products)
+                        ),
+                        "indicator": "blue",
+                    },
+                    user=frappe.session.user,
+                )
+
+                variations_fetched = 0
+                for variable_product in variable_products:
+                    parent_id = variable_product.get("id")
+                    parent_name = variable_product.get("name", "Unknown")
+                    variation_page = 1
+
+                    while True:
+                        variations = wc_api.get(
+                            f"products/{parent_id}/variations",
+                            params={"per_page": per_page, "page": variation_page},
+                        ).json()
+                        if not variations:
+                            break
+
+                        # Add parent_id and type to each variation for proper identification
+                        for variation in variations:
+                            variation["parent_id"] = parent_id
+                            variation["type"] = "variation"
+                            variation["parent_name"] = parent_name
+
+                        all_products.extend(variations)
+                        variations_fetched += len(variations)
+                        variation_page += 1
+
+                if variations_fetched > 0:
+                    frappe.publish_realtime(
+                        "show_alert",
+                        {
+                            "message": _("Fetched {0} variations...").format(variations_fetched),
+                            "indicator": "blue",
+                        },
+                        user=frappe.session.user,
+                    )
+
+            # Count products and variations separately for reporting
+            main_products_count = len([p for p in all_products if p.get("type") != "variation"])
+            variations_count = len([p for p in all_products if p.get("type") == "variation"])
+
             # Show total products fetched
             frappe.publish_realtime(
                 "show_alert",
                 {
-                    "message": _("Fetched {0} products. Checking which are new...").format(
-                        len(all_products)
+                    "message": _("Fetched {0} products and {1} variations. Checking which are new...").format(
+                        main_products_count, variations_count
                     ),
                     "indicator": "blue",
                 },
@@ -601,12 +653,16 @@ class WooCommerceServer(Document):
                 if product_id not in existing_product_ids:
                     new_products.append(product)
 
+            # Count new products and variations separately
+            new_main_products = [p for p in new_products if p.get("type") != "variation"]
+            new_variations = [p for p in new_products if p.get("type") == "variation"]
+
             # Show how many new products found
             if not new_products:
                 frappe.msgprint(
                     _(
-                        "No new products found to import. All {0} products from WooCommerce are already linked to items."
-                    ).format(len(all_products)),
+                        "No new products found to import. All {0} products and {1} variations from WooCommerce are already linked to items."
+                    ).format(main_products_count, variations_count),
                     title=_("No New Products"),
                     indicator="blue",
                 )
@@ -623,8 +679,8 @@ class WooCommerceServer(Document):
             frappe.publish_realtime(
                 "show_alert",
                 {
-                    "message": _("Found {0} new products. Starting import...").format(
-                        len(new_products)
+                    "message": _("Found {0} new products and {1} new variations. Starting import...").format(
+                        len(new_main_products), len(new_variations)
                     ),
                     "indicator": "blue",
                 },
@@ -679,12 +735,12 @@ class WooCommerceServer(Document):
             if errors:
                 message = _(
                     "<b>Import Started with Warnings!</b><br><br>"
-                    "<b>Total products on WooCommerce:</b> {0}<br>"
-                    "<b>Already linked to items:</b> {1}<br>"
-                    "<b>New products found:</b> {2}<br>"
-                    "<b>Products queued for import:</b> {3}<br>"
-                    "<b>Errors:</b> {4}<br><br>"
-                    "New products will be created as items in ERPNext.<br><br>"
+                    "<b>Total products on WooCommerce:</b> {0} ({1} products + {2} variations)<br>"
+                    "<b>Already linked to items:</b> {3}<br>"
+                    "<b>New items found:</b> {4} ({5} products + {6} variations)<br>"
+                    "<b>Items queued for import:</b> {7}<br>"
+                    "<b>Errors:</b> {8}<br><br>"
+                    "New products and variations will be created as items in ERPNext.<br><br>"
                     "<b>Check progress:</b><br>"
                     "• Go to <b>Background Jobs</b> (search in awesome bar)<br>"
                     "• Or check <b>RQ Console</b> for job status<br>"
@@ -692,8 +748,12 @@ class WooCommerceServer(Document):
                     "Import is running in the background and may take several minutes."
                 ).format(
                     len(all_products),
+                    main_products_count,
+                    variations_count,
                     len(existing_product_ids),
                     len(new_products),
+                    len(new_main_products),
+                    len(new_variations),
                     products_queued,
                     len(errors),
                 )
@@ -703,11 +763,11 @@ class WooCommerceServer(Document):
             else:
                 message = _(
                     "<b>Import Started Successfully!</b><br><br>"
-                    "<b>Total products on WooCommerce:</b> {0}<br>"
-                    "<b>Already linked to items:</b> {1}<br>"
-                    "<b>New products found:</b> {2}<br>"
-                    "<b>Products queued for import:</b> {3}<br><br>"
-                    "New products will be created as items in ERPNext.<br><br>"
+                    "<b>Total products on WooCommerce:</b> {0} ({1} products + {2} variations)<br>"
+                    "<b>Already linked to items:</b> {3}<br>"
+                    "<b>New items found:</b> {4} ({5} products + {6} variations)<br>"
+                    "<b>Items queued for import:</b> {7}<br><br>"
+                    "New products and variations will be created as items in ERPNext.<br><br>"
                     "<b>Check progress:</b><br>"
                     "• Go to <b>Background Jobs</b> (search in awesome bar)<br>"
                     "• Or check <b>RQ Console</b> for job status<br>"
@@ -715,8 +775,12 @@ class WooCommerceServer(Document):
                     "Import is running in the background and may take several minutes."
                 ).format(
                     len(all_products),
+                    main_products_count,
+                    variations_count,
                     len(existing_product_ids),
                     len(new_products),
+                    len(new_main_products),
+                    len(new_variations),
                     products_queued,
                 )
                 frappe.msgprint(message, title=_("Import Started Successfully"), indicator="green")
