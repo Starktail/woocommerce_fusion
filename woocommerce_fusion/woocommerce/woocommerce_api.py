@@ -150,10 +150,10 @@ class WooCommerceResource(Document):
                 f"{error_hint}\n\n"
                 f"Technical Details:\n{frappe.get_traceback()}"
             )
-            log_and_raise_error(error_text, exception=timeout_err)
+            log_and_raise_error(exception=timeout_err, error_text=error_text)
         except Exception as err:
             error_text = f"load_from_db failed (WooCommerce {self.resource} #{record_id})\n\n{frappe.get_traceback()}"
-            log_and_raise_error(error_text, exception=err)
+            log_and_raise_error(exception=err, error_text=error_text)
 
         if "id" not in record:
             log_and_raise_error(
