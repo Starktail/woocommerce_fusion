@@ -73,10 +73,26 @@ def update_stock_levels_on_woocommerce_site(item_code):
     This function fetches the item from the database, then for each associated
     WooCommerce site, it retrieves the current inventory, calculates the new stock quantity,
     and posts the updated stock levels back to the WooCommerce site.
+
+    Note: Template items (has_variants=1) are skipped because in WooCommerce,
+    variable products should NOT have manage_stock enabled at the parent level.
+    Stock is managed at the variation level. If manage_stock is enabled on the parent
+    with 0 quantity, WooCommerce will show the product as "out of stock" even if
+    variations have stock available.
     """
     item = frappe.get_doc("Item", item_code)
 
+    # Skip if:
+    # - No WooCommerce servers linked
+    # - Not a stock item
+    # - Item is disabled
+    # - Item is a template (has_variants=1) - stock is managed at variation level
     if len(item.woocommerce_servers) == 0 or not item.is_stock_item or item.disabled:
+        return False
+
+    # Additional safety check: Don't sync stock for template items (parent products)
+    # In WooCommerce, variable products track stock at the variation level, not parent level
+    if item.has_variants:
         return False
     else:
         bins = frappe.get_list(
