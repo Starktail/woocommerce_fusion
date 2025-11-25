@@ -908,7 +908,9 @@ def get_list_of_wc_products(
     At least one of date_time_from, item parameters are required.
 
     For variant items (those with variant_of set), this function uses the WooCommerce variations endpoint
-    /products/{parent_id}/variations to properly fetch the variation data.
+    /products/{parent_id}/variations/{variation_id} to properly fetch the variation data.
+    Note: We use the direct variation endpoint because the variations list endpoint does NOT support
+    the 'include' parameter for filtering by ID (unlike the main products endpoint).
     """
     if not any([date_time_from, item]):
         raise ValueError("At least one of date_time_from or item parameters are required")
@@ -927,9 +929,6 @@ def get_list_of_wc_products(
     if date_time_from:
         filters.append(["WooCommerce Product", "date_modified", ">", date_time_from])
     if item:
-        filters.append(
-            ["WooCommerce Product", "id", "=", item.item_woocommerce_server.woocommerce_id]
-        )
         servers = [item.item_woocommerce_server.woocommerce_server]
 
         # Check if this is a variant item - if so, we need to use the variations endpoint
@@ -948,9 +947,14 @@ def get_list_of_wc_products(
             )
 
             if parent_wc_server and parent_wc_server.woocommerce_id:
-                # Use the variations endpoint with the parent's WooCommerce ID
-                endpoint = f"products/{parent_wc_server.woocommerce_id}/variations"
+                # Use the DIRECT variations endpoint with the parent's WooCommerce ID and variation ID
+                # Important: We use the direct endpoint (products/{parent_id}/variations/{variation_id})
+                # instead of the list endpoint with 'include' filter because the WooCommerce variations
+                # list endpoint does NOT support the 'include' parameter for filtering by ID.
+                variation_id = item.item_woocommerce_server.woocommerce_id
+                endpoint = f"products/{parent_wc_server.woocommerce_id}/variations/{variation_id}"
                 metadata = {"parent_woocommerce_name": parent_item.item_name}
+                # Don't add id filter for variations - we're using direct endpoint
             else:
                 # Parent doesn't have a WooCommerce ID for this server - this is an error state
                 frappe.log_error(
@@ -959,6 +963,11 @@ def get_list_of_wc_products(
                     f"does not have a WooCommerce ID for server {item.item_woocommerce_server.woocommerce_server}",
                 )
                 return []
+        else:
+            # Regular product - use the standard id filter
+            filters.append(
+                ["WooCommerce Product", "id", "=", item.item_woocommerce_server.woocommerce_id]
+            )
 
     while new_results:
         woocommerce_product = frappe.get_doc({"doctype": "WooCommerce Product"})
