@@ -1,4 +1,4 @@
-from time import sleep
+from time import sleep, time
 from typing import List, Optional
 
 import frappe
@@ -64,10 +64,32 @@ class SynchroniseItemPrice(SynchroniseWooCommerce):
         """
         Run synchornisation
         """
+        sync_start_time = time()
+        frappe.logger().info(f"Starting item price sync for {len(self.servers)} server(s)")
+
         for server in self.servers:
             self.wc_server = server
+            server_start_time = time()
+            frappe.logger().info(
+                f"Starting sync for server: {server.name} ({server.woocommerce_server_url})"
+            )
+
             self.get_erpnext_item_prices()
+            frappe.logger().info(
+                f"Found {len(self.item_price_list)} items to sync for server {server.name}"
+            )
+
             self.sync_items_with_woocommerce_products()
+
+            server_elapsed = time() - server_start_time
+            frappe.logger().info(
+                f"Completed sync for server {server.name} in {server_elapsed:.2f} seconds"
+            )
+
+        total_elapsed = time() - sync_start_time
+        frappe.logger().info(
+            f"Item price sync completed in {total_elapsed:.2f} seconds ({total_elapsed/60:.2f} minutes)"
+        )
 
     def get_erpnext_item_prices(self) -> None:
         """
@@ -112,7 +134,17 @@ class SynchroniseItemPrice(SynchroniseWooCommerce):
         """
         Synchronise Item Prices with WooCommerce Products
         """
-        for item_price in self.item_price_list:
+        total_items = len(self.item_price_list)
+        processed_count = 0
+        updated_count = 0
+        error_count = 0
+        sync_start_time = time()
+
+        # Log progress every N items
+        log_interval = max(1, total_items // 20)  # Log ~20 times throughout the process
+
+        for idx, item_price in enumerate(self.item_price_list, start=1):
+            item_start_time = time()
             # Get the WooCommerce Product doc
             wc_product_name = generate_woocommerce_record_name_from_domain_and_id(
                 domain=item_price.woocommerce_server, resource_id=item_price.woocommerce_id
@@ -122,7 +154,9 @@ class SynchroniseItemPrice(SynchroniseWooCommerce):
             )
 
             try:
+                load_start = time()
                 wc_product.load_from_db()
+                load_time = time() - load_start
 
                 # If self.item_price_doc is set, set the price_list_rate accordingly, else use the price_list_rate from the price list
                 price_list_rate = (
@@ -141,12 +175,56 @@ class SynchroniseItemPrice(SynchroniseWooCommerce):
                     else wc_product.regular_price
                 )
                 if wc_product_regular_price != price_list_rate:
+                    save_start = time()
                     wc_product.regular_price = price_list_rate
                     wc_product.save()
+                    save_time = time() - save_start
+                    updated_count += 1
+
+                    if load_time > 5 or save_time > 5:
+                        frappe.logger().warning(
+                            f"Slow operation for item {item_price.item_code} (WC ID: {item_price.woocommerce_id}): "
+                            f"load={load_time:.2f}s, save={save_time:.2f}s"
+                        )
+
+                processed_count += 1
+
             except Exception:
+                error_count += 1
                 error_message = (
+                    f"Item: {item_price.item_code} (WC ID: {item_price.woocommerce_id})\n"
+                    f"Progress: {idx}/{total_items}\n"
                     f"{frappe.get_traceback()}\n\n Product Data: \n{str(wc_product.as_dict())}"
                 )
                 frappe.log_error("WooCommerce Error: Price List Sync", error_message)
 
+            # Progress logging
+            if idx % log_interval == 0 or idx == total_items:
+                elapsed = time() - sync_start_time
+                items_per_second = idx / elapsed if elapsed > 0 else 0
+                remaining_items = total_items - idx
+                estimated_remaining = remaining_items / items_per_second if items_per_second > 0 else 0
+
+                frappe.logger().info(
+                    f"Progress: {idx}/{total_items} items ({(idx/total_items*100):.1f}%) | "
+                    f"Updated: {updated_count} | Errors: {error_count} | "
+                    f"Speed: {items_per_second:.2f} items/sec | "
+                    f"Elapsed: {elapsed:.1f}s | ETA: {estimated_remaining:.1f}s"
+                )
+
+                # Warning if approaching timeout (3600 seconds)
+                if elapsed > 3000 and remaining_items > 0:
+                    frappe.logger().warning(
+                        f"Sync has been running for {elapsed/60:.1f} minutes. "
+                        f"Approaching job timeout (60 minutes). "
+                        f"Consider reducing item count or increasing timeout."
+                    )
+
             sleep(self.wc_server.price_list_delay_per_item)
+
+        # Final summary
+        total_time = time() - sync_start_time
+        frappe.logger().info(
+            f"Sync completed: {processed_count}/{total_items} processed, "
+            f"{updated_count} updated, {error_count} errors in {total_time:.2f}s ({total_time/60:.2f} minutes)"
+        )
