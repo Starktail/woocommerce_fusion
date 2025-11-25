@@ -187,4 +187,4 @@ def update_stock_levels_on_woocommerce_site(item_code):
                 frappe.log_error("WooCommerce Error", error_message)
                 raise ValueError(error_message)
 
-        return True
+    return True
