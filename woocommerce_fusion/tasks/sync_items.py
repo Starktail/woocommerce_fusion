@@ -66,6 +66,9 @@ def run_item_sync(
             )
         )
 
+    # Initialize sync to None - it may not be assigned if all servers have sync disabled
+    sync = None
+
     # Get ERPNext Item and WooCommerce product if they exist
     if woocommerce_product or woocommerce_product_name:
         if not woocommerce_product:
