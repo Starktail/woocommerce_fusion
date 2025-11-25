@@ -574,18 +574,31 @@ class SynchroniseItem(SynchroniseWooCommerce):
         item = frappe.new_doc("Item")
 
         # Handle variants' attributes
+        wc_attributes = []
         if wc_product.type in ["variable", "variation"]:
             self.create_or_update_item_attributes(wc_product)
-            wc_attributes = json.loads(wc_product.attributes)
+            if wc_product.attributes:
+                wc_attributes = json.loads(wc_product.attributes)
             for wc_attribute in wc_attributes:
                 row = item.append("attributes")
                 row.attribute = wc_attribute["name"]
                 if wc_product.type == "variation":
                     row.attribute_value = wc_attribute["option"]
 
-        # Handle variants
+        # Handle variants - only set has_variants if attributes exist
+        # ERPNext requires attributes for template items
         if wc_product.type == "variable":
-            item.has_variants = 1
+            if wc_attributes:
+                item.has_variants = 1
+            else:
+                # Variable product without attributes - treat as simple product
+                frappe.log_error(
+                    title="WooCommerce Variable Product Without Attributes",
+                    message=f"WooCommerce product {wc_product.woocommerce_id} ({wc_product.woocommerce_name}) "
+                    f"is marked as 'variable' but has no attributes defined. "
+                    f"Creating as a simple item without variants. "
+                    f"Please add attributes in WooCommerce if variants are needed.",
+                )
 
         if wc_product.type == "variation":
             # Validate that the variant has a parent_id
