@@ -78,7 +78,7 @@ class TestWooCommerceStockSync(FrappeTestCase):
         actual_put_data = [call.kwargs["data"] for call in mock_api_instance.put.call_args_list]
 
         expected_put_endpoints = ["products/1", "products/2"]
-        expected_data = {"stock_quantity": 15}
+        expected_data = {"stock_quantity": 15, "manage_stock": True, "backorders": "yes"}
         expected_put_data = [expected_data for x in range(2)]
         self.assertEqual(actual_put_endpoints, expected_put_endpoints)
         self.assertEqual(actual_put_data, expected_put_data)
@@ -141,7 +141,7 @@ class TestWooCommerceStockSync(FrappeTestCase):
         actual_put_data = mock_api_instance.put.call_args.kwargs["data"]
 
         expected_put_endpoint = "products/100/variations/101"
-        expected_data = {"stock_quantity": 15}
+        expected_data = {"stock_quantity": 15, "manage_stock": True, "backorders": "yes"}
         self.assertEqual(actual_put_endpoint, expected_put_endpoint)
         self.assertEqual(actual_put_data, expected_data)
 
@@ -235,6 +235,51 @@ class TestWooCommerceStockSync(FrappeTestCase):
         actual_put_data = mock_api_instance.put.call_args.kwargs["data"]
         self.assertEqual(actual_put_data["backorders"], "yes")
         self.assertEqual(actual_put_data["manage_stock"], True)
+
+    @patch("woocommerce_fusion.tasks.stock_update.frappe")
+    @patch("woocommerce_fusion.tasks.stock_update.APIWithRequestLogging", autospec=True)
+    def test_parent_item_sets_manage_stock_false(self, mock_wc_api, mock_frappe):
+        """
+        Test that parent items (has_variants=1) set manage_stock=False on WooCommerce
+        """
+        # Set up a parent item with variants
+        parent_item = frappe._dict(
+            woocommerce_servers=[
+                frappe._dict(woocommerce_id=1, woocommerce_server="woo1.example.com", enabled=1),
+            ],
+            is_stock_item=0,  # Parent items should not be stock items
+            disabled=0,
+            has_variants=1,  # This is a parent item with variants
+        )
+        mock_frappe.get_doc.return_value = parent_item
+
+        # Set up mock WooCommerce server
+        mock_frappe.get_cached_doc.return_value = frappe._dict(
+            woocommerce_server="woo1.example.com",
+            enable_sync=1,
+            enable_stock_level_synchronisation=1,
+            warehouses=[frappe._dict(warehouse="Warehouse A")],
+            subtract_reserved_stock=False,
+        )
+
+        # Mock WooCommerce API
+        mock_put_response = Mock()
+        mock_put_response.status_code = 200
+        mock_api_instance = MagicMock()
+        mock_api_instance.put.return_value = mock_put_response
+        mock_wc_api.return_value = mock_api_instance
+
+        # Call function under test
+        update_stock_levels_on_woocommerce_site("parent_item_code")
+
+        # Assert that put was called once
+        self.assertEqual(mock_api_instance.put.call_count, 1)
+
+        # Assert manage_stock is set to False and no stock_quantity is sent
+        actual_put_data = mock_api_instance.put.call_args.kwargs["data"]
+        self.assertEqual(actual_put_data["manage_stock"], False)
+        self.assertNotIn("stock_quantity", actual_put_data)
+        self.assertNotIn("backorders", actual_put_data)
 
     @patch("woocommerce_fusion.tasks.stock_update.frappe")
     @patch("woocommerce_fusion.tasks.stock_update.APIWithRequestLogging", autospec=True)

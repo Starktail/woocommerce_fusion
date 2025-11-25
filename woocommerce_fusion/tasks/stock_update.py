@@ -74,54 +74,58 @@ def update_stock_levels_on_woocommerce_site(item_code):
     WooCommerce site, it retrieves the current inventory, calculates the new stock quantity,
     and posts the updated stock levels back to the WooCommerce site.
 
-    Note: Template items (has_variants=1) are skipped because in WooCommerce,
-    variable products should NOT have manage_stock enabled at the parent level.
-    Stock is managed at the variation level. If manage_stock is enabled on the parent
-    with 0 quantity, WooCommerce will show the product as "out of stock" even if
-    variations have stock available.
+    Behavior:
+    - Parent items (has_variants=1): Sets manage_stock=False on WooCommerce (no stock quantity sync)
+      because variable products should manage stock at the variation level, not parent level.
+    - Variants and simple products: Sets manage_stock=True and syncs stock_quantity.
     """
     item = frappe.get_doc("Item", item_code)
 
     # Skip if:
     # - No WooCommerce servers linked
-    # - Not a stock item
     # - Item is disabled
-    # - Item is a template (has_variants=1) - stock is managed at variation level
-    if len(item.woocommerce_servers) == 0 or not item.is_stock_item or item.disabled:
+    if len(item.woocommerce_servers) == 0 or item.disabled:
         return False
 
-    # Additional safety check: Don't sync stock for template items (parent products)
-    # In WooCommerce, variable products track stock at the variation level, not parent level
-    if item.has_variants:
-        return False
-    else:
+    # Get bins for stock calculation (only needed for non-template items)
+    bins = []
+    if not item.has_variants and item.is_stock_item:
         bins = frappe.get_list(
             "Bin", {"item_code": item_code}, ["name", "warehouse", "reserved_qty", "actual_qty"]
         )
 
-        for wc_site in item.woocommerce_servers:
-            if wc_site.woocommerce_id:
-                woocommerce_id = wc_site.woocommerce_id
-                woocommerce_server = wc_site.woocommerce_server
-                wc_server = frappe.get_cached_doc("WooCommerce Server", woocommerce_server)
+    for wc_site in item.woocommerce_servers:
+        if wc_site.woocommerce_id:
+            woocommerce_id = wc_site.woocommerce_id
+            woocommerce_server = wc_site.woocommerce_server
+            wc_server = frappe.get_cached_doc("WooCommerce Server", woocommerce_server)
 
-                if (
-                    not wc_server
-                    or not wc_server.enable_sync
-                    or not wc_site.enabled
-                    or not wc_server.enable_stock_level_synchronisation
-                ):
-                    continue
+            if (
+                not wc_server
+                or not wc_server.enable_sync
+                or not wc_site.enabled
+                or not wc_server.enable_stock_level_synchronisation
+            ):
+                continue
 
-                wc_api = APIWithRequestLogging(
-                    url=wc_server.woocommerce_server_url,
-                    consumer_key=wc_server.api_consumer_key,
-                    consumer_secret=wc_server.api_consumer_secret,
-                    version="wc/v3",
-                    timeout=40,
-                    verify_ssl=verify_ssl,
-                )
+            wc_api = APIWithRequestLogging(
+                url=wc_server.woocommerce_server_url,
+                consumer_key=wc_server.api_consumer_key,
+                consumer_secret=wc_server.api_consumer_secret,
+                version="wc/v3",
+                timeout=40,
+                verify_ssl=verify_ssl,
+            )
 
+            # Handle parent items (templates with variants) vs regular items differently
+            if item.has_variants:
+                # Parent items should NOT manage stock at the parent level
+                # Stock is managed at the variation level in WooCommerce
+                data_to_post = {
+                    "manage_stock": False,
+                }
+            else:
+                # For variants and simple products, sync stock levels normally
                 # Sum all quantities from select warehouses and round the total down (WooCommerce API doesn't accept float values)
                 stock_quantity = math.floor(
                     sum(
@@ -149,38 +153,38 @@ def update_stock_levels_on_woocommerce_site(item_code):
                     "backorders": "no" if is_eol else "yes",
                 }
 
-                try:
-                    parent_item_id = item.variant_of
-                    parent_woocommerce_id = None
-                    if parent_item_id:
-                        parent_item = frappe.get_doc("Item", parent_item_id)
-                        # Get the parent item's woocommerce_id
-                        for parent_wc_site in parent_item.woocommerce_servers:
-                            if parent_wc_site.woocommerce_server == woocommerce_server:
-                                parent_woocommerce_id = parent_wc_site.woocommerce_id
-                                break
-                        if not parent_woocommerce_id:
-                            continue
-                        endpoint = f"products/{parent_woocommerce_id}/variations/{woocommerce_id}"
-                    else:
-                        endpoint = f"products/{woocommerce_id}"
-                    response = wc_api.put(endpoint=endpoint, data=data_to_post)
-                except Exception as err:
-                    error_message = (
-                        f"{frappe.get_traceback()}\n\nData in PUT request: \n{str(data_to_post)}"
-                    )
-                    frappe.log_error("WooCommerce Error", error_message)
-                    raise err
-                if response.status_code != 200:
-                    error_message = (
-                        f"Status Code not 200\n\nData in PUT request: \n{str(data_to_post)}"
-                    )
-                    error_message += (
-                        f"\n\nResponse: \n{response.status_code}\nResponse Text: {response.text}\nRequest URL: {response.request.url}\nRequest Body: {response.request.body}"
-                        if response is not None
-                        else ""
-                    )
-                    frappe.log_error("WooCommerce Error", error_message)
-                    raise ValueError(error_message)
+            try:
+                parent_item_id = item.variant_of
+                parent_woocommerce_id = None
+                if parent_item_id:
+                    parent_item = frappe.get_doc("Item", parent_item_id)
+                    # Get the parent item's woocommerce_id
+                    for parent_wc_site in parent_item.woocommerce_servers:
+                        if parent_wc_site.woocommerce_server == woocommerce_server:
+                            parent_woocommerce_id = parent_wc_site.woocommerce_id
+                            break
+                    if not parent_woocommerce_id:
+                        continue
+                    endpoint = f"products/{parent_woocommerce_id}/variations/{woocommerce_id}"
+                else:
+                    endpoint = f"products/{woocommerce_id}"
+                response = wc_api.put(endpoint=endpoint, data=data_to_post)
+            except Exception as err:
+                error_message = (
+                    f"{frappe.get_traceback()}\n\nData in PUT request: \n{str(data_to_post)}"
+                )
+                frappe.log_error("WooCommerce Error", error_message)
+                raise err
+            if response.status_code != 200:
+                error_message = (
+                    f"Status Code not 200\n\nData in PUT request: \n{str(data_to_post)}"
+                )
+                error_message += (
+                    f"\n\nResponse: \n{response.status_code}\nResponse Text: {response.text}\nRequest URL: {response.request.url}\nRequest Body: {response.request.body}"
+                    if response is not None
+                    else ""
+                )
+                frappe.log_error("WooCommerce Error", error_message)
+                raise ValueError(error_message)
 
         return True
