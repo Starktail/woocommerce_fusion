@@ -16,14 +16,19 @@ class TestWooCommerceSync(FrappeTestCase):
     def setUpClass(cls):
         super().setUpClass()  # important to call super() methods when extending TestCase.
 
+    @patch("woocommerce_fusion.tasks.sync_items.frappe")
     @patch.object(SynchroniseItem, "update_item")
     def test_sync_items_while_passing_item_should_update_item_if_item_is_older(
-        self, mock_update_item, mock_set_sync_hash, mock_run_item_sync
+        self, mock_update_item, mock_frappe, mock_set_sync_hash, mock_run_item_sync
     ):
         """
         Test that the 'sync_items' function should update the item
         if the item is older than the corresponding WooCommerce product
         """
+        # Mock WooCommerce Server with sync direction
+        mock_wc_server = frappe._dict(sync_direction="Bidirectional")
+        mock_frappe.get_cached_doc.return_value = mock_wc_server
+
         # Initialise class
         sync = SynchroniseItem(servers=Mock())
 
@@ -64,6 +69,10 @@ class TestWooCommerceSync(FrappeTestCase):
         Test that the 'sync_items' function should update the WooCommerce product
         if the item is newer than the corresponding WooCommerce product
         """
+        # Mock WooCommerce Server with sync direction
+        mock_wc_server = frappe._dict(sync_direction="Bidirectional")
+        mock_frappe.get_cached_doc.return_value = mock_wc_server
+
         # Initialise class
         sync = SynchroniseItem(servers=Mock())
 
@@ -99,7 +108,7 @@ class TestWooCommerceSync(FrappeTestCase):
         # Assert that the item need to be updated
         mock_update_woocommerce_product.assert_called_once_with(wc_product, sync.item)
 
-    @patch("woocommerce_fusion.tasks.sync.frappe")
+    @patch("woocommerce_fusion.tasks.sync_items.frappe")
     @patch.object(SynchroniseItem, "create_item")
     def test_sync_items_while_passing_item_should_create_item_if_no_item(
         self, mock_create_item, mock_frappe, mock_set_sync_hash, mock_run_item_sync
@@ -108,6 +117,10 @@ class TestWooCommerceSync(FrappeTestCase):
         Test that the 'sync_items' function should create a Item if
         there are no corresponding Items
         """
+        # Mock WooCommerce Server with sync direction
+        mock_wc_server = frappe._dict(sync_direction="Bidirectional")
+        mock_frappe.get_cached_doc.return_value = mock_wc_server
+
         # Initialise class
         sync = SynchroniseItem(servers=Mock())
 
@@ -139,6 +152,13 @@ class TestWooCommerceSync(FrappeTestCase):
     def test_create_item(
         self, mock_json, mock_new_doc, mock_get_cached_doc, mock_set_sync_hash, mock_run_item_sync
     ):
+        # Configure mock_get_cached_doc to return a WooCommerce Server with proper attributes
+        mock_get_cached_doc.return_value = frappe._dict(
+            name_by="Product ID",  # Not "Product SKU" so it uses woocommerce_id
+            server_abbreviation=None,  # No prefix
+            enable_image_sync=False,
+        )
+
         item_mock = MagicMock()
         item_mock.append.return_value = MagicMock()
         item_mock.woocommerce_servers = [frappe._dict(idx=1, woocommerce_server="Test Server")]
@@ -150,6 +170,7 @@ class TestWooCommerceSync(FrappeTestCase):
         wc_product.sku = "Test SKU"
         wc_product.woocommerce_id = 12345
         wc_product.woocommerce_name = "Test Product"
+        wc_product.type = "simple"  # Not a variant
 
         # Create instance of the class that contains create_item method
         sync = SynchroniseItem(servers=Mock())
@@ -287,6 +308,7 @@ class TestWooCommerceSync(FrappeTestCase):
         )
         item_mock.item.save.assert_called_once()
 
+    @patch("frappe.db.exists")
     @patch("frappe.get_cached_doc")
     @patch("frappe.get_doc")
     @patch("woocommerce_fusion.tasks.sync_items.get_item_price_rate")
@@ -295,20 +317,29 @@ class TestWooCommerceSync(FrappeTestCase):
         mock_get_item_price_rate,
         mock_get_doc,
         mock_get_cached_doc,
+        mock_db_exists,
         mock_set_sync_hash,
         mock_run_item_sync,
     ):
+        # Mock frappe.db.exists to return True for parent item
+        mock_db_exists.return_value = True
+
         # Setup mock objects
         wc_product_mock = MagicMock()
 
         parent_item_mock = MagicMock()
         parent_item_mock.woocommerce_id = 696969
+        parent_item_mock.has_variants = 1  # Parent item must be a template
+
+        parent_wc_product_mock = MagicMock()
+        parent_wc_product_mock.woocommerce_id = 696969
+        parent_wc_product_mock.type = "variable"
 
         mock_get_doc.side_effect = [wc_product_mock, parent_item_mock]
 
         mock_get_item_price_rate.return_value = "100.00"
 
-        mock_run_item_sync.return_value = (None, parent_item_mock)
+        mock_run_item_sync.return_value = (parent_item_mock, parent_wc_product_mock)
 
         # Create a mock ERPNextItemToSync
         item_woocommerce_server_mock = MagicMock()
@@ -321,6 +352,7 @@ class TestWooCommerceSync(FrappeTestCase):
         item_mock.item.item_name = "Test Item"
         item_mock.item.has_variants = 0
         item_mock.item.variant_of = "696969"
+        item_mock.item.attributes = []  # No attributes for simplicity
 
         # Create instance of the class that contains create_woocommerce_product method
         sync = SynchroniseItem(servers=Mock())
