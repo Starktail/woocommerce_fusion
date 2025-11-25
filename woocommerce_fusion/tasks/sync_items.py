@@ -416,6 +416,21 @@ class SynchroniseItem(SynchroniseWooCommerce):
                 item.item.item_name = woocommerce_product.woocommerce_name
                 item_dirty = True
 
+        # Sync is_stock_item based on WooCommerce manage_stock setting
+        # For variable (parent) products: Don't manage stock at parent level
+        # because WooCommerce variable products track stock at variation level.
+        # If manage_stock is enabled on the parent, the parent will show "out of stock"
+        # with 0 quantity even if variations have stock.
+        # For simple products and variations: Use the manage_stock setting from WooCommerce
+        if woocommerce_product.type == "variable":
+            desired_is_stock_item = 0
+        else:
+            desired_is_stock_item = 1 if woocommerce_product.manage_stock else 0
+
+        if item.item.is_stock_item != desired_is_stock_item:
+            item.item.is_stock_item = desired_is_stock_item
+            item_dirty = True
+
         fields_updated, item.item = self.set_item_fields(item=item.item)
 
         wc_server = frappe.get_cached_doc(
@@ -651,6 +666,21 @@ class SynchroniseItem(SynchroniseWooCommerce):
         row = item.append("woocommerce_servers")
         row.woocommerce_id = wc_product.woocommerce_id
         row.woocommerce_server = wc_server.name
+
+        # Set stock item based on WooCommerce manage_stock setting
+        # For variable (parent) products: Don't manage stock at parent level
+        # because WooCommerce variable products track stock at variation level.
+        # If manage_stock is enabled on the parent, the parent will show "out of stock"
+        # with 0 quantity even if variations have stock.
+        # For simple products and variations: Use the manage_stock setting from WooCommerce
+        if wc_product.type == "variable":
+            # Parent/template items should NOT be stock items
+            # Stock is managed at the variation level
+            item.is_stock_item = 0
+        else:
+            # Simple products and variations: use WooCommerce's manage_stock setting
+            item.is_stock_item = 1 if wc_product.manage_stock else 0
+
         item.flags.ignore_mandatory = True
         item.flags.created_by_sync = True
 
