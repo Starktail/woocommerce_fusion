@@ -263,7 +263,14 @@ class WooCommerceResource(Document):
                     count_of_total_records_in_api = int(response.headers["x-wp-total"])
                 else:
                     try:
-                        count_of_total_records_in_api = len(response.json())
+                        response_data = response.json()
+                        # Handle single-record responses (dict) vs list responses
+                        # Single-record endpoints (e.g., products/{id}/variations/{variation_id})
+                        # return a dict, not a list
+                        if isinstance(response_data, dict):
+                            count_of_total_records_in_api = 1
+                        else:
+                            count_of_total_records_in_api = len(response_data)
                     except Exception as err:
                         log_and_raise_error(error_text="Unexpected response", response=response)
 
@@ -274,6 +281,12 @@ class WooCommerceResource(Document):
 
                 # Parse the response
                 results = response.json()
+
+                # Handle single-record responses (e.g., direct variation endpoint returns a dict, not a list)
+                # When using endpoints like products/{id}/variations/{variation_id}, WooCommerce returns
+                # a single object instead of an array
+                if isinstance(results, dict):
+                    results = [results]
 
                 # If we're still here, it means that this API has some records in the required range
                 while True:
