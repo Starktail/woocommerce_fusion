@@ -785,10 +785,9 @@ class SynchroniseItem(SynchroniseWooCommerce):
                     if self.woocommerce_product.type == "variation":
                         wc_field = map.woocommerce_field_name.lower()
                         if "description" in wc_field or "short_description" in wc_field:
-                            frappe.log_error(
-                                "WooCommerce Variant Field Sync Skipped",
+                            frappe.logger().info(
                                 f"Skipping {map.woocommerce_field_name} sync for variant {self.woocommerce_product.name}. "
-                                "Descriptions should only be set on the parent product, not variants.",
+                                "Descriptions should only be set on the parent product, not variants."
                             )
                             continue
 
@@ -842,10 +841,9 @@ class SynchroniseItem(SynchroniseWooCommerce):
                     if woocommerce_product.type == "variation":
                         wc_field = map.woocommerce_field_name.lower()
                         if "description" in wc_field or "short_description" in wc_field:
-                            frappe.log_error(
-                                "WooCommerce Variant Field Sync Skipped",
+                            frappe.logger().info(
                                 f"Skipping {map.woocommerce_field_name} sync for variant {woocommerce_product.name}. "
-                                "Descriptions should only be set on the parent product, not variants.",
+                                "Descriptions should only be set on the parent product, not variants."
                             )
                             continue
 
