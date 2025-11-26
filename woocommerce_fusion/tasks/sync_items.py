@@ -23,34 +23,6 @@ from woocommerce_fusion.woocommerce.woocommerce_api import (
 )
 
 
-def item_has_submitted_transactions(item_code: str) -> bool:
-    """
-    Check if an item has any submitted transactions that would prevent
-    changing restricted fields like is_stock_item, has_serial_no, etc.
-
-    This mirrors the validation in ERPNext's Item.cant_change() method.
-    """
-    # List of doctypes that link to Item and would prevent field changes
-    linked_doctypes = [
-        ("Stock Ledger Entry", "item_code"),
-        ("Delivery Note Item", "item_code"),
-        ("Sales Invoice Item", "item_code"),
-        ("Purchase Receipt Item", "item_code"),
-        ("Purchase Invoice Item", "item_code"),
-        ("Stock Entry Detail", "item_code"),
-    ]
-
-    for doctype, fieldname in linked_doctypes:
-        # Check if there are any submitted entries
-        if frappe.db.exists(
-            doctype,
-            {fieldname: item_code, "docstatus": 1},
-        ):
-            return True
-
-    return False
-
-
 def run_item_sync_from_hook(doc, method):
     """
     Intended to be triggered by a Document Controller hook from Item
@@ -444,33 +416,9 @@ class SynchroniseItem(SynchroniseWooCommerce):
                 item.item.item_name = woocommerce_product.woocommerce_name
                 item_dirty = True
 
-        # Sync is_stock_item based on WooCommerce manage_stock setting
-        # For variable (parent) products: Don't manage stock at parent level
-        # because WooCommerce variable products track stock at variation level.
-        # If manage_stock is enabled on the parent, the parent will show "out of stock"
-        # with 0 quantity even if variations have stock.
-        # For simple products and variations: Use the manage_stock setting from WooCommerce
-        if woocommerce_product.type == "variable":
-            desired_is_stock_item = 0
-        else:
-            desired_is_stock_item = 1 if woocommerce_product.manage_stock else 0
-
-        if item.item.is_stock_item != desired_is_stock_item:
-            # Check if item has submitted transactions - if so, ERPNext won't allow
-            # changing is_stock_item. Skip the change to avoid ValidationError.
-            if item_has_submitted_transactions(item.item.item_code):
-                frappe.log_error(
-                    title="WooCommerce Sync: Cannot Change Stock Item Setting",
-                    message=(
-                        f"Cannot change 'Maintain Stock' (is_stock_item) from {item.item.is_stock_item} "
-                        f"to {desired_is_stock_item} for item {item.item.item_code} because there are "
-                        f"submitted transactions linked to this item. The WooCommerce manage_stock "
-                        f"setting will be ignored for this item."
-                    ),
-                )
-            else:
-                item.item.is_stock_item = desired_is_stock_item
-                item_dirty = True
+        # Note: is_stock_item is NOT synced from WooCommerce to ERPNext.
+        # This field is controlled entirely within ERPNext as it affects
+        # fundamental inventory management behavior.
 
         fields_updated, item.item = self.set_item_fields(item=item.item)
 
@@ -708,19 +656,10 @@ class SynchroniseItem(SynchroniseWooCommerce):
         row.woocommerce_id = wc_product.woocommerce_id
         row.woocommerce_server = wc_server.name
 
-        # Set stock item based on WooCommerce manage_stock setting
-        # For variable (parent) products: Don't manage stock at parent level
-        # because WooCommerce variable products track stock at variation level.
-        # If manage_stock is enabled on the parent, the parent will show "out of stock"
-        # with 0 quantity even if variations have stock.
-        # For simple products and variations: Use the manage_stock setting from WooCommerce
-        if wc_product.type == "variable":
-            # Parent/template items should NOT be stock items
-            # Stock is managed at the variation level
-            item.is_stock_item = 0
-        else:
-            # Simple products and variations: use WooCommerce's manage_stock setting
-            item.is_stock_item = 1 if wc_product.manage_stock else 0
+        # Note: is_stock_item is NOT set from WooCommerce data.
+        # This field is controlled entirely within ERPNext as it affects
+        # fundamental inventory management behavior. ERPNext will use its
+        # default value (typically 1 for stock items).
 
         item.flags.ignore_mandatory = True
         item.flags.created_by_sync = True
