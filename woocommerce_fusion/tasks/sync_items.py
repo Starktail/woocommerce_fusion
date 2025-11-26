@@ -23,6 +23,34 @@ from woocommerce_fusion.woocommerce.woocommerce_api import (
 )
 
 
+def item_has_submitted_transactions(item_code: str) -> bool:
+    """
+    Check if an item has any submitted transactions that would prevent
+    changing restricted fields like is_stock_item, has_serial_no, etc.
+
+    This mirrors the validation in ERPNext's Item.cant_change() method.
+    """
+    # List of doctypes that link to Item and would prevent field changes
+    linked_doctypes = [
+        ("Stock Ledger Entry", "item_code"),
+        ("Delivery Note Item", "item_code"),
+        ("Sales Invoice Item", "item_code"),
+        ("Purchase Receipt Item", "item_code"),
+        ("Purchase Invoice Item", "item_code"),
+        ("Stock Entry Detail", "item_code"),
+    ]
+
+    for doctype, fieldname in linked_doctypes:
+        # Check if there are any submitted entries
+        if frappe.db.exists(
+            doctype,
+            {fieldname: item_code, "docstatus": 1},
+        ):
+            return True
+
+    return False
+
+
 def run_item_sync_from_hook(doc, method):
     """
     Intended to be triggered by a Document Controller hook from Item
@@ -428,8 +456,21 @@ class SynchroniseItem(SynchroniseWooCommerce):
             desired_is_stock_item = 1 if woocommerce_product.manage_stock else 0
 
         if item.item.is_stock_item != desired_is_stock_item:
-            item.item.is_stock_item = desired_is_stock_item
-            item_dirty = True
+            # Check if item has submitted transactions - if so, ERPNext won't allow
+            # changing is_stock_item. Skip the change to avoid ValidationError.
+            if item_has_submitted_transactions(item.item.item_code):
+                frappe.log_error(
+                    title="WooCommerce Sync: Cannot Change Stock Item Setting",
+                    message=(
+                        f"Cannot change 'Maintain Stock' (is_stock_item) from {item.item.is_stock_item} "
+                        f"to {desired_is_stock_item} for item {item.item.item_code} because there are "
+                        f"submitted transactions linked to this item. The WooCommerce manage_stock "
+                        f"setting will be ignored for this item."
+                    ),
+                )
+            else:
+                item.item.is_stock_item = desired_is_stock_item
+                item_dirty = True
 
         fields_updated, item.item = self.set_item_fields(item=item.item)
 
