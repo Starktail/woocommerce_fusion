@@ -28,7 +28,6 @@ class CustomSalesOrder(SalesOrder):
         if self.woocommerce_id and self.woocommerce_server:
             wc_server = frappe.get_cached_doc("WooCommerce Server", self.woocommerce_server)
             if wc_server.sales_order_series:
-                self.naming_series = wc_server.sales_order_series
                 self.name = make_autoname(key=wc_server.sales_order_series)
             else:
                 # Get idx of site
@@ -47,7 +46,6 @@ class CustomSalesOrder(SalesOrder):
                 )  # Format with leading zeros to make it 6 digits
         else:
             naming_series = get_default_naming_series("Sales Order")
-            self.naming_series = naming_series
             self.name = make_autoname(key=naming_series)
 
     def on_change(self):
