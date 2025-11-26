@@ -18,7 +18,7 @@ build-backend = "flit_core.buildapi"
 
 [tool.bench.dev-dependencies]
 hypothesis = "~=6.31.0"
-parameterized = "~=0.9.0 "
+parameterized = "~=0.9.0"
 
 [tool.black]
 line-length = 99
