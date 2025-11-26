@@ -800,6 +800,10 @@ class SynchroniseItem(SynchroniseWooCommerce):
                         woocommerce_product_dict
                     )
 
+                    # Skip if no matches found - the field may not exist in the WooCommerce product
+                    if not woocommerce_product_field_matches:
+                        continue
+
                     setattr(
                         item,
                         erpnext_item_field_name[0],
