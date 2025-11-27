@@ -71,9 +71,9 @@ class WooCommerceProduct(WooCommerceResource):
 
             if parent_products:
                 parent_product = parent_products[0]
-                parent_woocommerce_name = parent_product.get("woocommerce_name") or parent_product.get(
-                    "name"
-                )
+                parent_woocommerce_name = parent_product.get(
+                    "woocommerce_name"
+                ) or parent_product.get("name")
 
                 # Now fetch all variations for this parent
                 args["endpoint"] = f"products/{parent_id}/variations"

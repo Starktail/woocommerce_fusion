@@ -627,9 +627,9 @@ class WooCommerceServer(Document):
             frappe.publish_realtime(
                 "show_alert",
                 {
-                    "message": _("Fetched {0} products and {1} variations. Checking which are new...").format(
-                        main_products_count, variations_count
-                    ),
+                    "message": _(
+                        "Fetched {0} products and {1} variations. Checking which are new..."
+                    ).format(main_products_count, variations_count),
                     "indicator": "blue",
                 },
                 user=frappe.session.user,
@@ -679,9 +679,9 @@ class WooCommerceServer(Document):
             frappe.publish_realtime(
                 "show_alert",
                 {
-                    "message": _("Found {0} new products and {1} new variations. Starting import...").format(
-                        len(new_main_products), len(new_variations)
-                    ),
+                    "message": _(
+                        "Found {0} new products and {1} new variations. Starting import..."
+                    ).format(len(new_main_products), len(new_variations)),
                     "indicator": "blue",
                 },
                 user=frappe.session.user,
