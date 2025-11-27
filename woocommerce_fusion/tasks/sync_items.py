@@ -188,7 +188,9 @@ def sync_all_variants_for_item(item: Item, wc_server_link, enqueue: bool = False
 
     try:
         # Get all variant items for this template
-        variant_items = frappe.get_all("Item", filters={"variant_of": item.item_code}, fields=["name"])
+        variant_items = frappe.get_all(
+            "Item", filters={"variant_of": item.item_code}, fields=["name"]
+        )
 
         # Sync each variant
         for variant_item_data in variant_items:

@@ -329,11 +329,17 @@ class SynchroniseItemPrice(SynchroniseWooCommerce):
                 elapsed = time() - sync_start_time
                 items_per_second = idx / elapsed if elapsed > 0 else 0
                 remaining_in_batch = batch_items - idx
-                estimated_remaining = remaining_in_batch / items_per_second if items_per_second > 0 else 0
+                estimated_remaining = (
+                    remaining_in_batch / items_per_second if items_per_second > 0 else 0
+                )
 
                 # Calculate overall progress
                 overall_position = self.offset + idx
-                overall_percent = (overall_position / self.total_items_count * 100) if self.total_items_count > 0 else 0
+                overall_percent = (
+                    (overall_position / self.total_items_count * 100)
+                    if self.total_items_count > 0
+                    else 0
+                )
 
                 frappe.logger().info(
                     f"Batch progress: {idx}/{batch_items} | "

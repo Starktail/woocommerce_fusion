@@ -166,7 +166,9 @@ class TestGetErpnextItemPricesCount(FrappeTestCase):
         # Setup mock query builder chain
         mock_query = MagicMock()
         mock_query.run.return_value = [{"count": 150}]
-        mock_qb.from_.return_value.inner_join.return_value.on.return_value.inner_join.return_value.on.return_value.select.return_value.where.return_value = mock_query
+        mock_qb.from_.return_value.inner_join.return_value.on.return_value.inner_join.return_value.on.return_value.select.return_value.where.return_value = (
+            mock_query
+        )
 
         sync = SynchroniseItemPrice()
         sync.item_code = None
@@ -311,9 +313,7 @@ class TestBatchContinuation(FrappeTestCase):
 
     @patch("woocommerce_fusion.tasks.sync_item_prices.frappe")
     @patch("woocommerce_fusion.tasks.sync_item_prices.time")
-    def test_no_next_batch_when_all_items_processed(
-        self, mock_time, mock_frappe, mock_super_init
-    ):
+    def test_no_next_batch_when_all_items_processed(self, mock_time, mock_frappe, mock_super_init):
         """Test that no next batch is enqueued when all items are processed."""
         mock_super_init.return_value = None
         mock_time.return_value = 0
@@ -348,9 +348,7 @@ class TestBatchContinuation(FrappeTestCase):
 
     @patch("woocommerce_fusion.tasks.sync_item_prices.frappe")
     @patch("woocommerce_fusion.tasks.sync_item_prices.time")
-    def test_no_batch_when_item_price_list_empty(
-        self, mock_time, mock_frappe, mock_super_init
-    ):
+    def test_no_batch_when_item_price_list_empty(self, mock_time, mock_frappe, mock_super_init):
         """Test that no processing happens when item_price_list is empty."""
         mock_super_init.return_value = None
         mock_time.return_value = 0
@@ -377,9 +375,7 @@ class TestBatchContinuation(FrappeTestCase):
 
                 mock_get_prices.side_effect = set_item_list
 
-                with patch.object(
-                    sync, "sync_items_with_woocommerce_products"
-                ) as mock_sync:
+                with patch.object(sync, "sync_items_with_woocommerce_products") as mock_sync:
                     sync.run()
 
         # Verify sync_items_with_woocommerce_products was NOT called
@@ -393,7 +389,9 @@ class TestSyncItemsWithWooCommerceProducts(FrappeTestCase):
 
     @patch("woocommerce_fusion.tasks.sync_item_prices.sleep")
     @patch("woocommerce_fusion.tasks.sync_item_prices.frappe")
-    @patch("woocommerce_fusion.tasks.sync_item_prices.generate_woocommerce_record_name_from_domain_and_id")
+    @patch(
+        "woocommerce_fusion.tasks.sync_item_prices.generate_woocommerce_record_name_from_domain_and_id"
+    )
     @patch("woocommerce_fusion.tasks.sync_item_prices.time")
     def test_progress_logging_shows_overall_position(
         self, mock_time, mock_generate_name, mock_frappe, mock_sleep, mock_super_init
@@ -437,7 +435,9 @@ class TestSyncItemsWithWooCommerceProducts(FrappeTestCase):
 
     @patch("woocommerce_fusion.tasks.sync_item_prices.sleep")
     @patch("woocommerce_fusion.tasks.sync_item_prices.frappe")
-    @patch("woocommerce_fusion.tasks.sync_item_prices.generate_woocommerce_record_name_from_domain_and_id")
+    @patch(
+        "woocommerce_fusion.tasks.sync_item_prices.generate_woocommerce_record_name_from_domain_and_id"
+    )
     @patch("woocommerce_fusion.tasks.sync_item_prices.time")
     def test_error_message_includes_overall_position(
         self, mock_time, mock_generate_name, mock_frappe, mock_sleep, mock_super_init
@@ -476,7 +476,11 @@ class TestSyncItemsWithWooCommerceProducts(FrappeTestCase):
         # Check that log_error was called with overall position
         mock_frappe.log_error.assert_called_once()
         error_call_args = mock_frappe.log_error.call_args
-        error_message = error_call_args[0][1] if len(error_call_args[0]) > 1 else error_call_args[1].get("message", "")
+        error_message = (
+            error_call_args[0][1]
+            if len(error_call_args[0]) > 1
+            else error_call_args[1].get("message", "")
+        )
         self.assertIn("51/150", error_message)  # offset 50 + idx 1 = 51
 
 
