@@ -31,3 +31,8 @@ force_grid_wrap = 0
 use_parentheses = true
 ensure_newline_before_comments = true
 indent = "\t"
+
+[tool.coverage.run]
+# Suppress warning about --include being ignored when --source is set
+# This warning is triggered by Frappe's test runner which passes both flags
+disable_warnings = ["include-ignored"]
