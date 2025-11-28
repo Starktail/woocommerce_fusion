@@ -1,4 +1,4 @@
-from unittest.mock import MagicMock, Mock, patch, call
+from unittest.mock import MagicMock, Mock, patch, call, PropertyMock
 
 import frappe
 from frappe.tests.utils import FrappeTestCase
@@ -163,6 +163,12 @@ class TestGetErpnextItemPricesCount(FrappeTestCase):
         """Test that count query is executed when sync is enabled."""
         mock_super_init.return_value = None
 
+        # Setup mock DocTypes to avoid coroutine issues with MagicMock in Python 3.10+
+        mock_ip = Mock()
+        mock_iwc = Mock()
+        mock_item = Mock()
+        mock_qb.DocType.side_effect = [mock_ip, mock_iwc, mock_item]
+
         # Setup mock query builder chain
         mock_query = MagicMock()
         mock_query.run.return_value = [{"count": 150}]
@@ -208,6 +214,12 @@ class TestGetErpnextItemPrices(FrappeTestCase):
         """Test that query applies LIMIT and OFFSET for batch processing."""
         mock_super_init.return_value = None
 
+        # Setup mock DocTypes to avoid coroutine issues with MagicMock in Python 3.10+
+        mock_ip = Mock()
+        mock_iwc = Mock()
+        mock_item = Mock()
+        mock_qb.DocType.side_effect = [mock_ip, mock_iwc, mock_item]
+
         # Setup mock query builder chain
         mock_query = MagicMock()
         mock_limit_query = MagicMock()
@@ -239,6 +251,12 @@ class TestGetErpnextItemPrices(FrappeTestCase):
     def test_query_no_limit_when_batch_size_zero(self, mock_qb, mock_super_init):
         """Test that no LIMIT is applied when batch_size is 0 (process all)."""
         mock_super_init.return_value = None
+
+        # Setup mock DocTypes to avoid coroutine issues with MagicMock in Python 3.10+
+        mock_ip = Mock()
+        mock_iwc = Mock()
+        mock_item = Mock()
+        mock_qb.DocType.side_effect = [mock_ip, mock_iwc, mock_item]
 
         # Setup mock query builder chain
         mock_query = MagicMock()
@@ -414,13 +432,13 @@ class TestSyncItemsWithWooCommerceProducts(FrappeTestCase):
         )
         sync.item_price_doc = None
         sync.item_price_list = [
-            {
-                "name": "item-price-1",
-                "item_code": "ITEM-001",
-                "price_list_rate": 100.0,
-                "woocommerce_server": "test-server",
-                "woocommerce_id": "123",
-            }
+            frappe._dict(
+                name="item-price-1",
+                item_code="ITEM-001",
+                price_list_rate=100.0,
+                woocommerce_server="test-server",
+                woocommerce_id="123",
+            )
         ]
 
         sync.sync_items_with_woocommerce_products()
@@ -462,13 +480,13 @@ class TestSyncItemsWithWooCommerceProducts(FrappeTestCase):
         )
         sync.item_price_doc = None
         sync.item_price_list = [
-            {
-                "name": "item-price-1",
-                "item_code": "ITEM-001",
-                "price_list_rate": 100.0,
-                "woocommerce_server": "test-server",
-                "woocommerce_id": "123",
-            }
+            frappe._dict(
+                name="item-price-1",
+                item_code="ITEM-001",
+                price_list_rate=100.0,
+                woocommerce_server="test-server",
+                woocommerce_id="123",
+            )
         ]
 
         sync.sync_items_with_woocommerce_products()
@@ -493,10 +511,10 @@ class TestBuildItemPriceQueryConditions(FrappeTestCase):
         """Test that conditions include item_code filter when set."""
         mock_super_init.return_value = None
 
-        # Setup mock DocTypes
-        mock_ip = MagicMock()
-        mock_iwc = MagicMock()
-        mock_item = MagicMock()
+        # Setup mock DocTypes using Mock() to avoid coroutine issues with MagicMock in Python 3.10+
+        mock_ip = Mock()
+        mock_iwc = Mock()
+        mock_item = Mock()
         mock_qb.DocType.side_effect = [mock_ip, mock_iwc, mock_item]
 
         sync = SynchroniseItemPrice(item_code="TEST-ITEM-001")
@@ -516,10 +534,10 @@ class TestBuildItemPriceQueryConditions(FrappeTestCase):
         """Test that conditions exclude item_code filter when not set."""
         mock_super_init.return_value = None
 
-        # Setup mock DocTypes
-        mock_ip = MagicMock()
-        mock_iwc = MagicMock()
-        mock_item = MagicMock()
+        # Setup mock DocTypes using Mock() to avoid coroutine issues with MagicMock in Python 3.10+
+        mock_ip = Mock()
+        mock_iwc = Mock()
+        mock_item = Mock()
         mock_qb.DocType.side_effect = [mock_ip, mock_iwc, mock_item]
 
         sync = SynchroniseItemPrice(item_code=None)
