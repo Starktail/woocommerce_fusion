@@ -176,6 +176,37 @@ def update_stock_levels_on_woocommerce_site(item_code):
                 frappe.log_error("WooCommerce Error", error_message)
                 raise err
             if response.status_code != 200:
+                # Check for invalid variation ID error (404 with specific error code)
+                if response.status_code == 404 and parent_item_id:
+                    try:
+                        response_data = response.json()
+                        error_code = response_data.get("code", "")
+                        if error_code == "woocommerce_rest_product_variation_invalid_id":
+                            # The variation ID stored in ERPNext doesn't exist in WooCommerce
+                            # or doesn't belong to the specified parent product
+                            error_message = (
+                                f"Invalid WooCommerce variation ID for item '{item_code}'.\n\n"
+                                f"Details:\n"
+                                f"- ERPNext Item: {item_code}\n"
+                                f"- Parent ERPNext Item: {parent_item_id}\n"
+                                f"- Parent WooCommerce Product ID: {parent_woocommerce_id}\n"
+                                f"- Variation WooCommerce ID (stored in ERPNext): {woocommerce_id}\n"
+                                f"- WooCommerce Server: {woocommerce_server}\n\n"
+                                f"This error occurs when:\n"
+                                f"1. The variation was deleted from WooCommerce but ERPNext still has the old ID\n"
+                                f"2. The variation ID belongs to a different parent product in WooCommerce\n"
+                                f"3. The parent-child relationship changed in WooCommerce\n\n"
+                                f"To fix this, re-sync the item from WooCommerce or manually update the "
+                                f"WooCommerce ID in the Item's 'WooCommerce Servers' table."
+                            )
+                            frappe.log_error("WooCommerce Invalid Variation ID", error_message)
+                            # Don't raise an exception - just log and continue to next server
+                            # This allows stock updates to proceed for other valid items
+                            continue
+                    except (ValueError, KeyError):
+                        # If we can't parse the JSON response, fall through to generic error handling
+                        pass
+
                 error_message = (
                     f"Status Code not 200\n\nData in PUT request: \n{str(data_to_post)}"
                 )
