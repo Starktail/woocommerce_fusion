@@ -339,3 +339,74 @@ class TestWooCommerceStockSync(FrappeTestCase):
         actual_put_data = mock_api_instance.put.call_args.kwargs["data"]
         self.assertEqual(actual_put_data["backorders"], "no")
         self.assertEqual(actual_put_data["manage_stock"], True)
+
+    @patch("woocommerce_fusion.tasks.stock_update.frappe")
+    @patch("woocommerce_fusion.tasks.stock_update.APIWithRequestLogging", autospec=True)
+    def test_invalid_variation_id_logs_error_and_continues(self, mock_wc_api, mock_frappe):
+        """
+        Test that when WooCommerce returns a 404 "Invalid ID" error for a variation,
+        the error is logged with helpful details and execution continues without raising
+        """
+        # Set up a dummy variant item
+        variant_item = frappe._dict(
+            woocommerce_servers=[
+                frappe._dict(woocommerce_id=253, woocommerce_server="woo1.example.com", enabled=1),
+            ],
+            is_stock_item=1,
+            disabled=0,
+            variant_of="parent_item_code",
+            end_of_life=None,
+        )
+        parent_item = frappe._dict(
+            woocommerce_servers=[
+                frappe._dict(woocommerce_id=6583, woocommerce_server="woo1.example.com", enabled=1),
+            ],
+        )
+        mock_frappe.get_doc.side_effect = [variant_item, parent_item]
+
+        # Set up a dummy bin list
+        bin_list = [frappe._dict(warehouse="Warehouse A", actual_qty=5, reserved_qty=0)]
+        mock_frappe.get_list.return_value = bin_list
+
+        # Set up mock WooCommerce server
+        mock_frappe.get_cached_doc.return_value = frappe._dict(
+            woocommerce_server="woo1.example.com",
+            enable_sync=1,
+            enable_stock_level_synchronisation=1,
+            warehouses=[frappe._dict(warehouse="Warehouse A")],
+            subtract_reserved_stock=False,
+        )
+
+        # Mock WooCommerce API to return 404 with invalid variation ID error
+        mock_put_response = Mock()
+        mock_put_response.status_code = 404
+        mock_put_response.json.return_value = {
+            "code": "woocommerce_rest_product_variation_invalid_id",
+            "message": "Invalid ID.",
+            "data": {"status": 404},
+        }
+        mock_put_response.text = '{"code":"woocommerce_rest_product_variation_invalid_id","message":"Invalid ID.","data":{"status":404}}'
+        mock_put_response.request = Mock()
+        mock_put_response.request.url = "https://woo1.example.com/wp-json/wc/v3/products/6583/variations/253"
+        mock_put_response.request.body = '{"stock_quantity": 5}'
+
+        mock_api_instance = MagicMock()
+        mock_api_instance.put.return_value = mock_put_response
+        mock_wc_api.return_value = mock_api_instance
+
+        # Call function under test - should NOT raise an exception
+        result = update_stock_levels_on_woocommerce_site("variant_item_code")
+
+        # Assert that log_error was called with the correct title
+        mock_frappe.log_error.assert_called_once()
+        call_args = mock_frappe.log_error.call_args
+        self.assertEqual(call_args[0][0], "WooCommerce Invalid Variation ID")
+        # Verify the error message contains helpful details
+        error_message = call_args[0][1]
+        self.assertIn("variant_item_code", error_message)
+        self.assertIn("parent_item_code", error_message)
+        self.assertIn("6583", error_message)
+        self.assertIn("253", error_message)
+
+        # Assert the function completed and returned True (since it continued past the error)
+        self.assertTrue(result)

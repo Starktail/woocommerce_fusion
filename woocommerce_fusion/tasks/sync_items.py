@@ -320,6 +320,18 @@ class SynchroniseItem(SynchroniseWooCommerce):
 
             wc_products = get_list_of_wc_products(item=self.item)
             if len(wc_products) == 0:
+                # Provide more detailed error message for variants
+                if self.item.item.variant_of:
+                    raise ValueError(
+                        f"No WooCommerce variation found for item '{self.item.item.item_code}'.\n\n"
+                        f"Details:\n"
+                        f"- ERPNext Item: {self.item.item.item_code}\n"
+                        f"- Parent ERPNext Item: {self.item.item.variant_of}\n"
+                        f"- Variation WooCommerce ID: {self.item.item_woocommerce_server.woocommerce_id}\n"
+                        f"- WooCommerce Server: {self.item.item_woocommerce_server.woocommerce_server}\n\n"
+                        f"The variation may have been deleted from WooCommerce or the ID may be incorrect. "
+                        f"Please verify the WooCommerce ID in the Item's 'WooCommerce Servers' table."
+                    )
                 raise ValueError(
                     f"No WooCommerce Product found with ID {self.item.item_woocommerce_server.woocommerce_id} on {self.item.item_woocommerce_server.woocommerce_server}"
                 )
