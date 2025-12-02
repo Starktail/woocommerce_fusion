@@ -177,7 +177,12 @@ class WooCommerceProduct(WooCommerceResource):
         # Set corrected properties
         product["name"] = str(product["woocommerce_name"])
 
-        # Drop 'related_ids' field
-        product.pop("related_ids")
+        # Drop read-only list fields that shouldn't be sent to WooCommerce API
+        # These fields come from WooCommerce as lists but Frappe's validation
+        # rejects list values for JSON fields during save. Since they are
+        # read-only, we simply remove them before writing to WooCommerce.
+        for field in ["related_ids", "upsell_ids", "cross_sell_ids"]:
+            if field in product:
+                product.pop(field)
 
         return product
