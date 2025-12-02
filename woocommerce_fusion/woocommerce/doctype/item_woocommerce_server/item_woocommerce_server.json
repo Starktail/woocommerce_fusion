@@ -11,7 +11,10 @@
   "woocommerce_server",
   "product_status",
   "view_product",
-  "woocommerce_last_sync_hash"
+  "woocommerce_last_sync_hash",
+  "linked_products_section",
+  "upsell_ids",
+  "cross_sell_ids"
  ],
  "fields": [
   {
@@ -54,12 +57,32 @@
    "fieldtype": "Data",
    "label": "Last Sync Hash",
    "read_only": 1
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "linked_products_section",
+   "fieldtype": "Section Break",
+   "label": "Linked Products"
+  },
+  {
+   "description": "List of WooCommerce product IDs for upsells",
+   "fieldname": "upsell_ids",
+   "fieldtype": "Small Text",
+   "label": "Upsell IDs",
+   "read_only": 1
+  },
+  {
+   "description": "List of WooCommerce product IDs for cross-sells",
+   "fieldname": "cross_sell_ids",
+   "fieldtype": "Small Text",
+   "label": "Cross-Sell IDs",
+   "read_only": 1
   }
  ],
  "index_web_pages_for_search": 1,
  "istable": 1,
  "links": [],
- "modified": "2025-11-23 10:00:00.000000",
+ "modified": "2025-12-02 14:00:00.000000",
  "modified_by": "Administrator",
  "module": "WooCommerce",
  "name": "Item WooCommerce Server",
