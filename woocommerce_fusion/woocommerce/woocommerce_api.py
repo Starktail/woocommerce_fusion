@@ -578,6 +578,20 @@ class WooCommerceResource(Document):
 
         return record
 
+    def validate(self):
+        """
+        Serialize JSON fields before Frappe's validation runs.
+
+        When a WooCommerce virtual document is loaded via frappe.get_doc(), Frappe
+        automatically deserializes JSON fields from strings to Python lists/dicts.
+        However, Frappe's validation (specifically get_valid_dict in _validate_length)
+        throws an error when it encounters list values for JSON fields.
+
+        This method ensures all JSON fields are serialized back to strings before
+        validation runs, preventing the "Value for X cannot be a list" error.
+        """
+        self.serialize_attributes_of_type_dict_or_list(self)
+
     def before_db_update(self, record: Dict):
         return record
 

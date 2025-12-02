@@ -901,6 +901,67 @@ class SynchroniseItem(SynchroniseWooCommerce):
 
         return wc_product_dirty, woocommerce_product
 
+    def sync_linked_product_ids(self):
+        """
+        Sync linked product IDs (upsell_ids, cross_sell_ids) from WooCommerce Product
+        to the Item WooCommerce Server child table.
+
+        These fields contain lists of WooCommerce product IDs that are displayed
+        in the Item's WooCommerce settings for reference.
+        """
+        if not self.woocommerce_product:
+            return
+
+        # Get upsell_ids and cross_sell_ids from WooCommerce Product
+        # These are stored as JSON strings in the WooCommerceProduct document
+        upsell_ids = getattr(self.woocommerce_product, "upsell_ids", None)
+        cross_sell_ids = getattr(self.woocommerce_product, "cross_sell_ids", None)
+
+        # Convert to display-friendly format (comma-separated string)
+        # The values might be JSON strings containing lists, or already deserialized lists
+        upsell_ids_str = self._format_linked_ids(upsell_ids)
+        cross_sell_ids_str = self._format_linked_ids(cross_sell_ids)
+
+        # Update the Item WooCommerce Server record
+        frappe.db.set_value(
+            "Item WooCommerce Server",
+            self.item.item_woocommerce_server.name,
+            {
+                "upsell_ids": upsell_ids_str,
+                "cross_sell_ids": cross_sell_ids_str,
+            },
+            update_modified=False,
+        )
+
+    def _format_linked_ids(self, ids_value) -> str:
+        """
+        Format linked product IDs for display.
+
+        Args:
+            ids_value: Can be a JSON string, a Python list, or None
+
+        Returns:
+            Comma-separated string of IDs, or empty string if no IDs
+        """
+        if not ids_value:
+            return ""
+
+        # If it's a string, try to parse it as JSON
+        if isinstance(ids_value, str):
+            try:
+                ids_list = json.loads(ids_value)
+            except (json.JSONDecodeError, TypeError):
+                return ids_value  # Return as-is if not valid JSON
+        elif isinstance(ids_value, list):
+            ids_list = ids_value
+        else:
+            return ""
+
+        # Convert list to comma-separated string
+        if ids_list:
+            return ", ".join(str(id) for id in ids_list)
+        return ""
+
     def set_sync_hash(self):
         """
         Set the last sync hash value using db.set_value, as it does not call the ORM triggers
@@ -923,6 +984,9 @@ class SynchroniseItem(SynchroniseWooCommerce):
             1,
             update_modified=False,
         )
+
+        # Update linked product IDs (upsell_ids, cross_sell_ids) from WooCommerce
+        self.sync_linked_product_ids()
 
 
 def get_list_of_wc_products(
