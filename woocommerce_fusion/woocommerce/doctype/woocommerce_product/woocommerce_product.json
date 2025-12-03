@@ -69,6 +69,7 @@
   "average_rating",
   "categories",
   "tags",
+  "brands",
   "images",
   "default_attributes",
   "variations",
@@ -403,6 +404,13 @@
    "read_only": 1
   },
   {
+   "description": "Product brands from WooCommerce (supports WooCommerce Brands, YITH Brands, Perfect Brands plugins)",
+   "fieldname": "brands",
+   "fieldtype": "JSON",
+   "label": "Brands",
+   "read_only": 1
+  },
+  {
    "fieldname": "images",
    "fieldtype": "JSON",
    "label": "Images",
@@ -494,7 +502,7 @@
  "index_web_pages_for_search": 1,
  "is_virtual": 1,
  "links": [],
- "modified": "2025-07-21 13:08:18.390431",
+ "modified": "2025-12-03 10:00:00.000000",
  "modified_by": "Administrator",
  "module": "WooCommerce",
  "name": "WooCommerce Product",
