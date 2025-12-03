@@ -21,14 +21,19 @@ class CustomSalesOrder(SalesOrder):
 
     def autoname(self):
         """
-        If this is a WooCommerce-linked order, use the naming series defined in "WooCommerce Server"
-        or default to WEB[WooCommerce Order ID], e.g. WEB012142.
+        If this is a WooCommerce-linked order, use the naming series defined in "WooCommerce Server",
+        or server abbreviation if set, or default to WEB[idx]-[WooCommerce Order ID], e.g. WEB1-012142.
         Else, name it normally.
         """
         if self.woocommerce_id and self.woocommerce_server:
             wc_server = frappe.get_cached_doc("WooCommerce Server", self.woocommerce_server)
             if wc_server.sales_order_series:
                 self.name = make_autoname(key=wc_server.sales_order_series)
+            elif getattr(wc_server, "server_abbreviation", None):
+                # Use server abbreviation if set
+                self.name = "{}-{:06}".format(
+                    wc_server.server_abbreviation, int(self.woocommerce_id)
+                )
             else:
                 # Get idx of site
                 wc_servers = frappe.get_all("WooCommerce Server", fields=["name", "creation"])
