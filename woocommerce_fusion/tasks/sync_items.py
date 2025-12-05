@@ -436,6 +436,9 @@ class SynchroniseItem(SynchroniseWooCommerce):
 
         fields_updated, item.item = self.set_item_fields(item=item.item)
 
+        # Sync brand from WooCommerce to ERPNext
+        brand_updated = self.sync_brand_from_wc_to_erp(item.item)
+
         wc_server = frappe.get_cached_doc(
             "WooCommerce Server", woocommerce_product.woocommerce_server
         )
@@ -446,7 +449,7 @@ class SynchroniseItem(SynchroniseWooCommerce):
                     item.item.image = wc_product_images[0]["src"]
                     item_dirty = True
 
-        if item_dirty or fields_updated:
+        if item_dirty or fields_updated or brand_updated:
             item.item.flags.created_by_sync = True
             item.item.save()
 
@@ -472,6 +475,11 @@ class SynchroniseItem(SynchroniseWooCommerce):
 
         product_fields_changed, wc_product = self.set_product_fields(wc_product, item)
         if product_fields_changed:
+            wc_product_dirty = True
+
+        # Sync brand from ERPNext to WooCommerce (including Google Merchant and Facebook meta)
+        brand_updated, wc_product = self.sync_brand_from_erp_to_wc(wc_product, item)
+        if brand_updated:
             wc_product_dirty = True
 
         if wc_product_dirty:
@@ -570,6 +578,9 @@ class SynchroniseItem(SynchroniseWooCommerce):
             wc_product.status = item.item_woocommerce_server.product_status or "publish"
 
             self.set_product_fields(wc_product, item)
+
+            # Sync brand from ERPNext to WooCommerce (including Google Merchant and Facebook meta)
+            self.sync_brand_from_erp_to_wc(wc_product, item)
 
             wc_product.insert()
             self.woocommerce_product = wc_product
@@ -684,6 +695,10 @@ class SynchroniseItem(SynchroniseWooCommerce):
                 item.image = wc_product_images[0]["src"]
 
         modified, item = self.set_item_fields(item=item)
+
+        # Sync brand from WooCommerce to ERPNext
+        self.sync_brand_from_wc_to_erp(item)
+
         item.flags.created_by_sync = True
 
         item.insert()
@@ -900,6 +915,170 @@ class SynchroniseItem(SynchroniseWooCommerce):
                     )
 
         return wc_product_dirty, woocommerce_product
+
+    def sync_brand_from_wc_to_erp(self, item: Item) -> bool:
+        """
+        Sync brand from WooCommerce Product to ERPNext Item.
+
+        Extracts the brand from WooCommerce product's brands taxonomy and sets it
+        on the ERPNext Item's brand field. Creates the Brand in ERPNext if it doesn't exist.
+
+        Args:
+            item: The ERPNext Item to update
+
+        Returns:
+            True if the item was modified, False otherwise
+        """
+        if not self.woocommerce_product:
+            return False
+
+        wc_server = frappe.get_cached_doc(
+            "WooCommerce Server", self.woocommerce_product.woocommerce_server
+        )
+
+        if not wc_server.enable_brand_sync:
+            return False
+
+        # Get brands from WooCommerce product
+        brands_json = getattr(self.woocommerce_product, "brands", None)
+        if not brands_json:
+            return False
+
+        try:
+            brands = json.loads(brands_json) if isinstance(brands_json, str) else brands_json
+        except (json.JSONDecodeError, TypeError):
+            return False
+
+        if not brands or not isinstance(brands, list) or len(brands) == 0:
+            return False
+
+        # Get the first brand name
+        first_brand = brands[0]
+        brand_name = first_brand.get("name") if isinstance(first_brand, dict) else str(first_brand)
+
+        if not brand_name:
+            return False
+
+        # Truncate brand name to 70 characters (Google Merchant Center limit)
+        brand_name = brand_name[:70]
+
+        # Check if brand exists in ERPNext, create if not
+        if not frappe.db.exists("Brand", brand_name):
+            try:
+                new_brand = frappe.new_doc("Brand")
+                new_brand.brand = brand_name
+                new_brand.flags.ignore_mandatory = True
+                new_brand.insert(ignore_permissions=True)
+                frappe.logger().info(f"Created new Brand '{brand_name}' from WooCommerce")
+            except Exception as e:
+                frappe.log_error(
+                    f"Failed to create Brand '{brand_name}' from WooCommerce: {str(e)}",
+                    "WooCommerce Brand Sync Error",
+                )
+                return False
+
+        # Update item brand if different
+        if item.brand != brand_name:
+            item.brand = brand_name
+            return True
+
+        return False
+
+    def sync_brand_from_erp_to_wc(
+        self, woocommerce_product, item: "ERPNextItemToSync"
+    ) -> Tuple[bool, "WooCommerceProduct"]:
+        """
+        Sync brand from ERPNext Item to WooCommerce Product.
+
+        Sets the brand in WooCommerce's brand taxonomy and also updates the
+        Google Merchant and Facebook meta fields for better feed compatibility.
+
+        Args:
+            woocommerce_product: The WooCommerce Product to update
+            item: The ERPNext Item source
+
+        Returns:
+            Tuple of (was_modified, updated_product)
+        """
+        if not item.item.brand:
+            return False, woocommerce_product
+
+        wc_server = frappe.get_cached_doc(
+            "WooCommerce Server", woocommerce_product.woocommerce_server
+        )
+
+        if not wc_server.enable_brand_sync:
+            return False, woocommerce_product
+
+        brand_name = item.item.brand
+        # Truncate to 70 characters (Google Merchant Center limit)
+        brand_name = brand_name[:70]
+
+        was_modified = False
+
+        # Update brands taxonomy
+        current_brands_json = getattr(woocommerce_product, "brands", "[]")
+        try:
+            current_brands = (
+                json.loads(current_brands_json)
+                if isinstance(current_brands_json, str)
+                else current_brands_json
+            ) or []
+        except (json.JSONDecodeError, TypeError):
+            current_brands = []
+
+        # Check if brand already exists in the list
+        brand_exists = any(
+            (isinstance(b, dict) and b.get("name") == brand_name) or b == brand_name
+            for b in current_brands
+        )
+
+        if not brand_exists:
+            # Add brand to list - WooCommerce API will handle creating the term
+            new_brands = [{"name": brand_name}]
+            woocommerce_product.brands = json.dumps(new_brands)
+            was_modified = True
+
+        # Update Google Merchant and Facebook meta fields
+        google_meta_key = wc_server.wc_brand_google_merchant_attribute or "_wc_gla_brand"
+        facebook_meta_key = wc_server.wc_brand_facebook_attribute or "_wc_facebook_brand"
+
+        # Get current meta_data
+        meta_data_json = getattr(woocommerce_product, "meta_data", "[]")
+        try:
+            meta_data = (
+                json.loads(meta_data_json)
+                if isinstance(meta_data_json, str)
+                else meta_data_json
+            ) or []
+        except (json.JSONDecodeError, TypeError):
+            meta_data = []
+
+        # Helper function to update or add meta field
+        def update_meta(key: str, value: str) -> bool:
+            nonlocal meta_data
+            for meta in meta_data:
+                if isinstance(meta, dict) and meta.get("key") == key:
+                    if meta.get("value") != value:
+                        meta["value"] = value
+                        return True
+                    return False
+            # Add new meta entry
+            meta_data.append({"key": key, "value": value})
+            return True
+
+        # Update Google Merchant brand meta
+        if update_meta(google_meta_key, brand_name):
+            was_modified = True
+
+        # Update Facebook brand meta
+        if update_meta(facebook_meta_key, brand_name):
+            was_modified = True
+
+        if was_modified:
+            woocommerce_product.meta_data = json.dumps(meta_data)
+
+        return was_modified, woocommerce_product
 
     def sync_linked_product_ids(self):
         """

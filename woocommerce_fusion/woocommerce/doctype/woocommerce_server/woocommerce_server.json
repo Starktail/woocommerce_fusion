@@ -103,6 +103,13 @@
   "wc_ast_shipment_providers",
   "germanized_for_woocommerce_section",
   "html_emjq",
+  "woocommerce_brands_section",
+  "enable_brand_sync",
+  "wc_brand_taxonomy",
+  "column_break_brands",
+  "wc_brand_google_merchant_attribute",
+  "wc_brand_facebook_attribute",
+  "wc_brand_info_html",
   "tab_logs",
   "enable_woocommerce_request_logs"
  ],
@@ -720,12 +727,58 @@
    "label": "Account for Negative Order Fee Lines",
    "mandatory_depends_on": "eval: doc.enable_order_fees_sync",
    "options": "Account"
+  },
+  {
+   "fieldname": "woocommerce_brands_section",
+   "fieldtype": "Section Break",
+   "label": "WooCommerce Brands"
+  },
+  {
+   "default": "0",
+   "description": "Enable synchronisation of product brands between ERPNext and WooCommerce. Supports WooCommerce Brands (Core), YITH Brands, and Perfect Brands plugins.",
+   "fieldname": "enable_brand_sync",
+   "fieldtype": "Check",
+   "label": "Enable Brand Sync"
+  },
+  {
+   "default": "product_brand",
+   "depends_on": "eval: doc.enable_brand_sync",
+   "description": "The taxonomy slug used by your WooCommerce brands plugin. Common values: 'product_brand' (WooCommerce Brands, YITH, Perfect Brands), 'brand' (some plugins)",
+   "fieldname": "wc_brand_taxonomy",
+   "fieldtype": "Data",
+   "label": "Brand Taxonomy Slug"
+  },
+  {
+   "fieldname": "column_break_brands",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "_wc_gla_brand",
+   "depends_on": "eval: doc.enable_brand_sync",
+   "description": "The WooCommerce meta_data key used by Google Listings & Ads plugin for the brand attribute (g:brand). Common: '_wc_gla_brand', 'wc_google_brand'",
+   "fieldname": "wc_brand_google_merchant_attribute",
+   "fieldtype": "Data",
+   "label": "Google Merchant Brand Meta Key"
+  },
+  {
+   "default": "_wc_facebook_brand",
+   "depends_on": "eval: doc.enable_brand_sync",
+   "description": "The WooCommerce meta_data key used by Facebook for WooCommerce plugin for the brand attribute. Common: '_wc_facebook_brand', 'fb_brand'",
+   "fieldname": "wc_brand_facebook_attribute",
+   "fieldtype": "Data",
+   "label": "Facebook Catalog Brand Meta Key"
+  },
+  {
+   "depends_on": "eval: doc.enable_brand_sync",
+   "fieldname": "wc_brand_info_html",
+   "fieldtype": "HTML",
+   "options": "<div class=\"alert alert-info\">\n<strong>Brand Sync Information:</strong>\n<ul>\n<li><strong>WooCommerce → ERPNext:</strong> Syncs the first brand from WooCommerce to the ERPNext Item's Brand field</li>\n<li><strong>ERPNext → WooCommerce:</strong> Syncs the ERPNext Item's Brand to WooCommerce's brand taxonomy and updates Google Merchant & Facebook meta fields</li>\n<li><strong>Google Merchant Center:</strong> Brand is required for most products. Max 70 characters.</li>\n<li><strong>Facebook Catalog:</strong> Brand is required for product matching and better ad performance.</li>\n</ul>\n</div>"
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2025-10-22 09:36:31.805564",
+ "modified": "2025-12-03 10:00:00.000000",
  "modified_by": "Administrator",
  "module": "WooCommerce",
  "name": "WooCommerce Server",
