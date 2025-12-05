@@ -95,12 +95,41 @@ class TestCustomSalesOrder(FrappeTestCase):
                 }
             )
         ]
-        mock_frappe.get_cached_doc.return_value = frappe._dict({"sales_order_series": ""})
+        # Neither sales_order_series nor server_abbreviation are set
+        mock_frappe.get_cached_doc.return_value = frappe._dict(
+            {"sales_order_series": "", "server_abbreviation": ""}
+        )
 
         sales_order = create_so(woocommerce_id="123", woocommerce_server_url="https://somesite.co")
 
         # Expect WEB[x]-[yyyyyy] where x = 1 because it's the first item servers list, and yyy = 000123 because the woocommerce id = 123
         self.assertEqual(sales_order.name, "WEB1-000123")
+
+    @patch("woocommerce_fusion.overrides.selling.sales_order.frappe")
+    def test_sales_order_is_named_with_server_abbreviation_if_set(
+        self, mock_frappe, mock_get_woocommerce_order
+    ):
+        """
+        Test that the Sales Order uses server_abbreviation for naming when it is set
+        """
+        mock_frappe.get_all.return_value = [
+            frappe._dict(
+                {
+                    "creation": "2024-01-01",
+                    "woocommerce_server_url": "https://myshop.co",
+                    "name": "myshop.co",
+                }
+            )
+        ]
+        # No sales_order_series, but server_abbreviation is set
+        mock_frappe.get_cached_doc.return_value = frappe._dict(
+            {"sales_order_series": "", "server_abbreviation": "SHOP"}
+        )
+
+        sales_order = create_so(woocommerce_id="456", woocommerce_server_url="https://myshop.co")
+
+        # Expect [abbreviation]-[yyyyyy] where abbreviation = SHOP, and yyyyyy = 000456
+        self.assertEqual(sales_order.name, "SHOP-000456")
 
 
 def create_so(woocommerce_id: str = None, woocommerce_server_url: str = None):
