@@ -9,15 +9,15 @@ This app allows you to synchronise your ERPNext site with **multiple** WooCommer
 
 ### Features
 
-- [Sales Order Synchronisation](https://woocommerce-fusion-docs.finfoot.tech/features/sales-order)
-- [Item Synchronisation](https://woocommerce-fusion-docs.finfoot.tech/features/items)
-- [Sync Item Stock Levels](https://woocommerce-fusion-docs.finfoot.tech/features/item-stock-levels)
-- [Sync Item Prices](https://woocommerce-fusion-docs.finfoot.tech/features/item-prices)
-- [Integration with WooCommerce Plugins](https://woocommerce-fusion-docs.finfoot.tech/features/woocommerce-plugins)
+- [Sales Order Synchronisation](https://woocommerce-fusion-docs.starktail.com/features/sales-order)
+- [Item Synchronisation](https://woocommerce-fusion-docs.starktail.com/features/items)
+- [Sync Item Stock Levels](https://woocommerce-fusion-docs.starktail.com/features/item-stock-levels)
+- [Sync Item Prices](https://woocommerce-fusion-docs.starktail.com/features/item-prices)
+- [Integration with WooCommerce Plugins](https://woocommerce-fusion-docs.starktail.com/features/woocommerce-plugins)
 
 ### User documentation
 
-User documentation is hosted at [woocommerce-fusion-docs.finfoot.tech](https://woocommerce-fusion-docs.finfoot.tech)
+User documentation is hosted at [woocommerce-fusion-docs.starktail.com](https://woocommerce-fusion-docs.starktail.com)
 
 ### Manual Installation
 
