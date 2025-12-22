@@ -7,10 +7,7 @@ description = "WooCommerce connector for ERPNext v14+"
 requires-python = ">=3.9"
 readme = "README.md"
 dynamic = ["version"]
-dependencies = [
-    "woocommerce~=3.0.0",
-    "jsonpath-ng~=1.7.0"
-]
+dependencies = ["woocommerce~=3.0.0", "jsonpath-ng~=1.7.0"]
 
 [build-system]
 requires = ["flit_core >=3.4,<4"]
