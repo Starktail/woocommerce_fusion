@@ -172,11 +172,12 @@ class WooCommerceProduct(WooCommerceResource):
         product["weight"] = str(product["weight"])
         product["regular_price"] = str(product["regular_price"])
 
-        # Do not post Sale Price if it is 0
+        # Handle Sale Price: convert to string if set, or send empty string to clear it
         if product["sale_price"] and float(product["sale_price"]) > 0:
             product["sale_price"] = str(product["sale_price"])
         else:
-            product.pop("sale_price")
+            # Send empty string to clear sale price in WooCommerce
+            product["sale_price"] = ""
 
         # Set corrected properties
         product["name"] = str(product["woocommerce_name"])

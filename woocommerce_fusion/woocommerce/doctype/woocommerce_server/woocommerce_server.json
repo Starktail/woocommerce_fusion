@@ -96,6 +96,7 @@
   "enable_price_list_sync",
   "price_list",
   "price_list_delay_per_item",
+  "wc_sale_price_list",
   "sales_price_list",
   "tab_plugins",
   "advanced_shipment_tracking_section",
@@ -401,6 +402,14 @@
    "fieldname": "price_list_delay_per_item",
    "fieldtype": "Int",
    "label": "Delay per POST Request"
+  },
+  {
+   "depends_on": "eval: doc.enable_price_list_sync",
+   "description": "Price list to use for syncing WooCommerce sale prices. If set, prices from this list will be synced as sale_price to WooCommerce products.",
+   "fieldname": "wc_sale_price_list",
+   "fieldtype": "Link",
+   "label": "WooCommerce Sale Price List",
+   "options": "Price List"
   },
   {
    "fieldname": "tab_details",
