@@ -550,3 +550,75 @@ class TestBuildItemPriceQueryConditions(FrappeTestCase):
 
         # Should have 5 standard conditions only
         self.assertEqual(len(conditions), 5)
+
+
+class TestSalePriceHelperMethods(FrappeTestCase):
+    """Test the sale price helper methods."""
+
+    def test_get_wc_product_sale_price_returns_float_from_string(self):
+        """Test that _get_wc_product_sale_price converts string to float."""
+        mock_product = MagicMock()
+        mock_product.sale_price = "49.99"
+
+        result = SynchroniseItemPrice._get_wc_product_sale_price(mock_product)
+
+        self.assertEqual(result, 49.99)
+
+    def test_get_wc_product_sale_price_returns_zero_for_empty_string(self):
+        """Test that _get_wc_product_sale_price returns 0 for empty string."""
+        mock_product = MagicMock()
+        mock_product.sale_price = ""
+
+        result = SynchroniseItemPrice._get_wc_product_sale_price(mock_product)
+
+        self.assertEqual(result, 0.0)
+
+    def test_get_wc_product_sale_price_returns_zero_for_none(self):
+        """Test that _get_wc_product_sale_price returns 0 for None."""
+        mock_product = MagicMock()
+        mock_product.sale_price = None
+
+        result = SynchroniseItemPrice._get_wc_product_sale_price(mock_product)
+
+        self.assertEqual(result, 0.0)
+
+    def test_get_wc_product_sale_price_returns_float_from_float(self):
+        """Test that _get_wc_product_sale_price handles float input."""
+        mock_product = MagicMock()
+        mock_product.sale_price = 29.99
+
+        result = SynchroniseItemPrice._get_wc_product_sale_price(mock_product)
+
+        self.assertEqual(result, 29.99)
+
+    def test_sale_price_changed_returns_true_when_different(self):
+        """Test that _sale_price_changed returns True when prices differ."""
+        result = SynchroniseItemPrice._sale_price_changed(49.99, 39.99)
+
+        self.assertTrue(result)
+
+    def test_sale_price_changed_returns_false_when_same(self):
+        """Test that _sale_price_changed returns False when prices are equal."""
+        result = SynchroniseItemPrice._sale_price_changed(49.99, 49.99)
+
+        self.assertFalse(result)
+
+    def test_sale_price_changed_handles_none_erp_price(self):
+        """Test that _sale_price_changed handles None ERP price (no sale)."""
+        # When ERP has no sale price (None) and WC has 0, they should be equal
+        result = SynchroniseItemPrice._sale_price_changed(0.0, None)
+        self.assertFalse(result)
+
+        # When ERP has no sale price (None) but WC has a sale price, they should differ
+        result = SynchroniseItemPrice._sale_price_changed(49.99, None)
+        self.assertTrue(result)
+
+    def test_sale_price_changed_clears_wc_sale_price(self):
+        """Test that sale price is considered changed when WC has price and ERP doesn't."""
+        # WC has sale_price of 49.99, ERP has None - should clear WC sale price
+        result = SynchroniseItemPrice._sale_price_changed(49.99, None)
+        self.assertTrue(result)
+
+        # WC has sale_price of 49.99, ERP has 0 - should clear WC sale price
+        result = SynchroniseItemPrice._sale_price_changed(49.99, 0)
+        self.assertTrue(result)

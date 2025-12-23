@@ -223,6 +223,7 @@ class SynchroniseItemPrice(SynchroniseWooCommerce):
     def get_erpnext_item_prices(self) -> None:
         """
         Get list of ERPNext Item Prices to synchronise with LIMIT and OFFSET for batch processing.
+        Also fetches sale prices from the configured sale price list if available.
         """
         self.item_price_list = []
         if (
@@ -254,6 +255,37 @@ class SynchroniseItemPrice(SynchroniseWooCommerce):
                 query = query.limit(self.batch_size).offset(self.offset)
 
             self.item_price_list = query.run(as_dict=True)
+
+            # If sale price list is configured, fetch sale prices for all items
+            if self.wc_server.wc_sale_price_list:
+                self._fetch_sale_prices()
+
+    def _fetch_sale_prices(self) -> None:
+        """
+        Fetch sale prices from the configured sale price list and add them to item_price_list.
+        """
+        if not self.item_price_list:
+            return
+
+        # Get all item codes from the current batch
+        item_codes = [item.item_code for item in self.item_price_list]
+
+        # Query sale prices for these items
+        sale_prices = frappe.get_all(
+            "Item Price",
+            filters={
+                "item_code": ["in", item_codes],
+                "price_list": self.wc_server.wc_sale_price_list,
+            },
+            fields=["item_code", "price_list_rate"],
+        )
+
+        # Create a lookup dict for sale prices
+        sale_price_lookup = {sp.item_code: sp.price_list_rate for sp in sale_prices}
+
+        # Add sale_price to each item in the list
+        for item in self.item_price_list:
+            item.sale_price = sale_price_lookup.get(item.item_code)
 
     def sync_items_with_woocommerce_products(self) -> None:
         """
@@ -298,9 +330,21 @@ class SynchroniseItemPrice(SynchroniseWooCommerce):
                     if isinstance(wc_product.regular_price, str)
                     else wc_product.regular_price
                 )
-                if wc_product_regular_price != price_list_rate:
+
+                # Handle sale_price comparison
+                sale_price = getattr(item_price, "sale_price", None)
+                wc_product_sale_price = self._get_wc_product_sale_price(wc_product)
+                regular_price_changed = wc_product_regular_price != price_list_rate
+                sale_price_changed = self._sale_price_changed(
+                    wc_product_sale_price, sale_price
+                )
+
+                if regular_price_changed or sale_price_changed:
                     save_start = time()
-                    wc_product.regular_price = price_list_rate
+                    if regular_price_changed:
+                        wc_product.regular_price = price_list_rate
+                    if sale_price_changed:
+                        wc_product.sale_price = sale_price if sale_price else ""
                     wc_product.save()
                     save_time = time() - save_start
                     updated_count += 1
@@ -357,3 +401,26 @@ class SynchroniseItemPrice(SynchroniseWooCommerce):
             f"Batch completed: {processed_count}/{batch_items} processed, "
             f"{updated_count} updated, {error_count} errors in {total_time:.2f}s ({total_time/60:.2f} minutes)"
         )
+
+    @staticmethod
+    def _get_wc_product_sale_price(wc_product) -> float:
+        """
+        Get the sale_price from a WooCommerce product, converting to float.
+        Returns 0.0 if sale_price is empty or not set.
+        """
+        sale_price = getattr(wc_product, "sale_price", None)
+        if not sale_price:
+            return 0.0
+        if isinstance(sale_price, str):
+            return float(sale_price) if sale_price else 0.0
+        return float(sale_price)
+
+    @staticmethod
+    def _sale_price_changed(wc_sale_price: float, erp_sale_price) -> bool:
+        """
+        Check if the sale price has changed.
+        Handles the case where ERPNext sale_price is None (no sale price configured)
+        and WooCommerce has a sale price set (should be cleared).
+        """
+        erp_sale_price_float = float(erp_sale_price) if erp_sale_price else 0.0
+        return wc_sale_price != erp_sale_price_float
