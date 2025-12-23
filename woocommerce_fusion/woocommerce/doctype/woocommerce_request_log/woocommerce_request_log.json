@@ -71,7 +71,7 @@
    "in_list_view": 1,
    "in_standard_filter": 1,
    "label": "Status",
-   "options": "Success\nError",
+   "options": "Success\nError\nSkipped",
    "read_only": 1
   },
   {
