@@ -5,7 +5,10 @@ import json
 from dataclasses import dataclass
 from typing import Dict
 
-from woocommerce_fusion.woocommerce.woocommerce_api import WooCommerceAPI, WooCommerceResource
+from woocommerce_fusion.woocommerce.woocommerce_api import (
+    WooCommerceAPI,
+    WooCommerceResource,
+)
 
 
 @dataclass
@@ -52,7 +55,8 @@ class WooCommerceProduct(WooCommerceResource):
         variations_with_parents = [
             (product.get("parent_id"), product.get("id"))
             for product in products
-            if product.get("parent_id") and product.get("parent_id") not in processed_parent_ids
+            if product.get("parent_id")
+            and product.get("parent_id") not in processed_parent_ids
         ]
 
         # Group by parent_id to avoid duplicate API calls
@@ -184,5 +188,9 @@ class WooCommerceProduct(WooCommerceResource):
         for field in ["related_ids", "upsell_ids", "cross_sell_ids"]:
             if field in product:
                 product.pop(field)
+
+        # WooCommerce variations don't support catalog_visibility - remove it before API call
+        if product.get("type") == "variation" and "catalog_visibility" in product:
+            product.pop("catalog_visibility")
 
         return product
