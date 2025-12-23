@@ -734,11 +734,17 @@ class WooCommerceResource(Document):
 
         This function iterates over the fields of the input object that are expected to be in JSON format,
         and if the field is present in the object, it transforms the field's value into a JSON-formatted string.
+
+        Note: Only serializes values that are not already strings to avoid double-encoding.
+        This is important because validate() may be called multiple times during the document lifecycle.
         """
         json_fields = cls.get_json_fields()
         for field in json_fields:
             if field.fieldname in obj:
-                obj[field.fieldname] = json.dumps(obj[field.fieldname])
+                value = obj[field.fieldname]
+                # Only serialize if not already a string (to avoid double-encoding)
+                if value is not None and not isinstance(value, str):
+                    obj[field.fieldname] = json.dumps(value)
         return obj
 
     @classmethod
