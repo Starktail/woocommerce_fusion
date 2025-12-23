@@ -6,7 +6,7 @@ from urllib.parse import urlparse
 import frappe
 from frappe import _
 from frappe.model.document import Document
-from frappe.utils import format_datetime, get_datetime
+from frappe.utils import format_datetime, get_datetime, now
 from requests.exceptions import ConnectTimeout, ReadTimeout, Timeout
 
 from woocommerce_fusion.exceptions import SyncDisabledError
@@ -20,6 +20,112 @@ if frappe._dev_server:
     import urllib3
 
     urllib3.disable_warnings()
+
+
+def handle_unsupported_status_error(
+    wc_server_name: str,
+    wc_server_url: str,
+    status: str,
+    response,
+    endpoint: str,
+    params: dict,
+):
+    """
+    Handle the case where a WooCommerce server doesn't support a particular order status.
+    This marks the status as unsupported and logs the event.
+
+    Args:
+        wc_server_name: The name of the WooCommerce Server document
+        wc_server_url: The URL of the WooCommerce server
+        status: The status value that was rejected
+        response: The API response object
+        endpoint: The API endpoint that was called
+        params: The parameters that were sent
+    """
+    # Mark the status as unsupported for this server
+    try:
+        wc_server = frappe.get_doc("WooCommerce Server", wc_server_name)
+
+        # Get existing unsupported statuses
+        unsupported_statuses = json.loads(wc_server.unsupported_order_statuses or "{}")
+
+        # Add the new unsupported status if not already present
+        if status not in unsupported_statuses:
+            unsupported_statuses[status] = {"first_detected": now(), "last_attempted": now()}
+        else:
+            # Update last_attempted timestamp
+            unsupported_statuses[status]["last_attempted"] = now()
+
+        # Save back to the document
+        wc_server.unsupported_order_statuses = json.dumps(unsupported_statuses)
+        wc_server.save(ignore_permissions=True)
+        frappe.db.commit()
+
+    except Exception as e:
+        # Log but don't fail if we can't update the server doc
+        frappe.logger().warning(
+            f"Could not mark status '{status}' as unsupported for server '{wc_server_name}': {e}"
+        )
+
+    # Log to WooCommerce Request Log with "Skipped" status
+    try:
+        if not frappe.flags.in_test:
+            frappe.enqueue(
+                "woocommerce_fusion.woocommerce.woocommerce_api.log_skipped_status_request",
+                wc_server_url=wc_server_url,
+                wc_server_name=wc_server_name,
+                endpoint=endpoint,
+                params=params,
+                status=status,
+                response_text=response.text if response else None,
+            )
+    except Exception as e:
+        frappe.logger().warning(f"Could not log skipped status request: {e}")
+
+    frappe.logger().info(
+        f"Server '{wc_server_name}' does not support order status '{status}'. "
+        f"This status has been marked as unsupported and will be skipped in future syncs."
+    )
+
+
+def log_skipped_status_request(
+    wc_server_url: str,
+    wc_server_name: str,
+    endpoint: str,
+    params: dict,
+    status: str,
+    response_text: str = None,
+):
+    """
+    Log a skipped request due to unsupported status to the WooCommerce Request Log.
+    """
+    request_log = frappe.get_doc(
+        {
+            "doctype": "WooCommerce Request Log",
+            "user": frappe.session.user if frappe.session.user else None,
+            "url": wc_server_url,
+            "endpoint": endpoint,
+            "method": "GET",
+            "params": frappe.as_json(params) if params else None,
+            "data": None,
+            "response": response_text,
+            "error": f"Order status '{status}' is not supported by WooCommerce server '{wc_server_name}'. "
+            f"This status has been marked as unsupported and will be automatically skipped.",
+            "status": "Skipped",
+            "time_elapsed": None,
+        }
+    )
+    request_log.save(ignore_permissions=True)
+
+
+def extract_status_from_params(params: dict) -> str:
+    """
+    Extract the status value from API parameters.
+    Returns None if no status parameter is found.
+    """
+    if not params:
+        return None
+    return params.get("status")
 
 
 @dataclass
@@ -244,11 +350,17 @@ class WooCommerceResource(Document):
                         ) == "rest_invalid_param" and "status" in error_data.get("data", {}).get(
                             "params", {}
                         ):
-                            # This server doesn't support the requested status - skip it gracefully
-                            frappe.logger().info(
-                                f"Server {wc_server.woocommerce_server} does not support status parameter value. "
-                                f"Skipping this server. Response: {response.text}"
-                            )
+                            # Extract status from params and mark as unsupported
+                            status_value = extract_status_from_params(params)
+                            if status_value:
+                                handle_unsupported_status_error(
+                                    wc_server_name=wc_server.woocommerce_server,
+                                    wc_server_url=wc_server.woocommerce_server_url,
+                                    status=status_value,
+                                    response=response,
+                                    endpoint=cls.resource,
+                                    params=params,
+                                )
                             continue
                     except (ValueError, AttributeError):
                         # If we can't parse the response, fall through to standard error handling
@@ -346,11 +458,17 @@ class WooCommerceResource(Document):
                             ).get(
                                 "params", {}
                             ):
-                                # Server doesn't support this status - break pagination for this server
-                                frappe.logger().info(
-                                    f"Server {wc_server.woocommerce_server} does not support status parameter value during pagination. "
-                                    f"Skipping remaining results from this server."
-                                )
+                                # Extract status from params and mark as unsupported
+                                status_value = extract_status_from_params(params)
+                                if status_value:
+                                    handle_unsupported_status_error(
+                                        wc_server_name=wc_server.woocommerce_server,
+                                        wc_server_url=wc_server.woocommerce_server_url,
+                                        status=status_value,
+                                        response=response,
+                                        endpoint=cls.resource,
+                                        params=params,
+                                    )
                                 break
                         except (ValueError, AttributeError):
                             pass
