@@ -31,6 +31,14 @@ frappe.ui.form.on('Sales Order', {
 			frm.doc.woocommerce_shipment_trackings = [];
 			frm.set_df_property('woocommerce_shipment_tracking_html', 'options', " ");
 		}
+
+		// Load payment status for WooCommerce orders
+		if (frm.doc.woocommerce_id && frm.doc.woocommerce_server) {
+			frm.trigger("load_payment_status");
+		}
+		else {
+			frm.set_df_property('woocommerce_payment_status_html', 'options', " ");
+		}
 	},
 
 	sync_sales_order: function(frm) {
@@ -143,6 +151,54 @@ frappe.ui.form.on('Sales Order', {
 				else {
 					frm.set_df_property('woocommerce_shipment_tracking_html', 'options', '');
 					frm.refresh_field('woocommerce_shipment_tracking_html');
+				}
+			}
+		});
+	},
+
+	load_payment_status: function(frm) {
+		// Load and display payment status from WooCommerce
+		frm.set_df_property('woocommerce_payment_status_html', 'options', '<i>Loading Payment Status...</i>');
+		frm.refresh_field('woocommerce_payment_status_html');
+		frappe.call({
+			method: "woocommerce_fusion.overrides.selling.sales_order.get_woocommerce_order_payment_info",
+			args: {
+				doc: frm.doc
+			},
+			callback: function(r) {
+				if (r.message) {
+					let paymentInfo = r.message;
+					let statusBadgeClass = {
+						'green': 'bg-success',
+						'red': 'bg-danger',
+						'orange': 'bg-warning'
+					}[paymentInfo.status_color] || 'bg-secondary';
+
+					let paymentHTML = `<div style="margin-bottom: 15px; padding: 10px; border: 1px solid #d1d8dd; border-radius: 5px; background-color: #f8f9fa;">`;
+					paymentHTML += `<b>WooCommerce Payment:</b><br>`;
+					paymentHTML += `<table class="table table-borderless" style="margin-bottom: 0;">`;
+					paymentHTML += `<tr><td style="width: 140px;"><b>Status:</b></td><td><span class="badge ${statusBadgeClass}" style="font-size: 12px;">${paymentInfo.payment_status}</span></td></tr>`;
+
+					if (paymentInfo.payment_method) {
+						paymentHTML += `<tr><td><b>Payment Provider:</b></td><td>${paymentInfo.payment_method}</td></tr>`;
+					}
+
+					if (paymentInfo.transaction_id) {
+						paymentHTML += `<tr><td><b>Transaction ID:</b></td><td>${paymentInfo.transaction_id}</td></tr>`;
+					}
+
+					if (paymentInfo.date_paid) {
+						paymentHTML += `<tr><td><b>Date Paid:</b></td><td>${paymentInfo.date_paid}</td></tr>`;
+					}
+
+					paymentHTML += `</table></div>`;
+
+					frm.set_df_property('woocommerce_payment_status_html', 'options', paymentHTML);
+					frm.refresh_field('woocommerce_payment_status_html');
+				}
+				else {
+					frm.set_df_property('woocommerce_payment_status_html', 'options', '');
+					frm.refresh_field('woocommerce_payment_status_html');
 				}
 			}
 		});

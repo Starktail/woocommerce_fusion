@@ -97,6 +97,46 @@ def get_woocommerce_order_shipment_trackings(doc):
 
 
 @frappe.whitelist()
+def get_woocommerce_order_payment_info(doc):
+    """
+    Fetches payment information from a WooCommerce order.
+    Returns payment method, status (captured/refunded/no payment), and transaction details.
+    """
+    doc = frappe._dict(json.loads(doc))
+    if not (doc.woocommerce_server and doc.woocommerce_id):
+        return None
+
+    wc_order = get_woocommerce_order(doc.woocommerce_server, doc.woocommerce_id)
+
+    # Determine payment status
+    payment_status = "No Payment"
+    status_color = "orange"
+
+    # Check for refunds
+    has_refunds = False
+    if wc_order.refunds:
+        refunds_data = json.loads(wc_order.refunds) if isinstance(wc_order.refunds, str) else wc_order.refunds
+        if refunds_data and len(refunds_data) > 0:
+            has_refunds = True
+
+    # Check WooCommerce order status for refunded
+    if wc_order.status == "refunded" or has_refunds:
+        payment_status = "Refunded"
+        status_color = "red"
+    elif wc_order.date_paid:
+        payment_status = "Captured"
+        status_color = "green"
+
+    return {
+        "payment_method": wc_order.payment_method_title or wc_order.payment_method or "",
+        "payment_status": payment_status,
+        "status_color": status_color,
+        "transaction_id": wc_order.transaction_id or "",
+        "date_paid": str(wc_order.date_paid) if wc_order.date_paid else "",
+    }
+
+
+@frappe.whitelist()
 def update_woocommerce_order_shipment_trackings(doc, shipment_trackings):
     """
     Updates the shipment tracking details of a specific WooCommerce order.
