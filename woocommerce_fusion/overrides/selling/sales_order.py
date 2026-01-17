@@ -115,7 +115,9 @@ def get_woocommerce_order_payment_info(doc):
     # Check for refunds
     has_refunds = False
     if wc_order.refunds:
-        refunds_data = json.loads(wc_order.refunds) if isinstance(wc_order.refunds, str) else wc_order.refunds
+        refunds_data = (
+            json.loads(wc_order.refunds) if isinstance(wc_order.refunds, str) else wc_order.refunds
+        )
         if refunds_data and len(refunds_data) > 0:
             has_refunds = True
 

@@ -7,6 +7,7 @@ from frappe.model.naming import get_default_naming_series
 from frappe.tests.utils import FrappeTestCase
 
 from woocommerce_fusion.overrides.selling.sales_order import (
+    get_woocommerce_order_payment_info,
     get_woocommerce_order_shipment_trackings,
     update_woocommerce_order_shipment_trackings,
 )
@@ -61,6 +62,117 @@ class TestCustomSalesOrder(FrappeTestCase):
         updated_woocommerce_order = mock_get_woocommerce_order.return_value
 
         self.assertEqual(updated_woocommerce_order.shipment_trackings, [{"foo": "baz"}])
+
+    def test_get_woocommerce_order_payment_info_captured(self, mock_get_woocommerce_order):
+        """
+        Test that payment info returns 'Captured' status when date_paid is set
+        """
+        woocommerce_order = frappe._dict(
+            payment_method="stripe",
+            payment_method_title="Credit Card (Stripe)",
+            transaction_id="txn_123456",
+            date_paid="2024-01-15 10:30:00",
+            status="processing",
+            refunds=None,
+        )
+        mock_get_woocommerce_order.return_value = woocommerce_order
+
+        sales_order = frappe._dict(
+            doctype="Sales Order", woocommerce_server="site1.example.com", woocommerce_id="1"
+        )
+        doc = json.dumps(sales_order)
+        result = get_woocommerce_order_payment_info(doc)
+
+        self.assertEqual(result["payment_status"], "Captured")
+        self.assertEqual(result["status_color"], "green")
+        self.assertEqual(result["payment_method"], "Credit Card (Stripe)")
+        self.assertEqual(result["transaction_id"], "txn_123456")
+
+    def test_get_woocommerce_order_payment_info_refunded(self, mock_get_woocommerce_order):
+        """
+        Test that payment info returns 'Refunded' status when order status is refunded
+        """
+        woocommerce_order = frappe._dict(
+            payment_method="paypal",
+            payment_method_title="PayPal",
+            transaction_id="PAY-123",
+            date_paid="2024-01-15 10:30:00",
+            status="refunded",
+            refunds=None,
+        )
+        mock_get_woocommerce_order.return_value = woocommerce_order
+
+        sales_order = frappe._dict(
+            doctype="Sales Order", woocommerce_server="site1.example.com", woocommerce_id="1"
+        )
+        doc = json.dumps(sales_order)
+        result = get_woocommerce_order_payment_info(doc)
+
+        self.assertEqual(result["payment_status"], "Refunded")
+        self.assertEqual(result["status_color"], "red")
+
+    def test_get_woocommerce_order_payment_info_refunded_with_refunds_list(
+        self, mock_get_woocommerce_order
+    ):
+        """
+        Test that payment info returns 'Refunded' status when refunds list has entries
+        """
+        woocommerce_order = frappe._dict(
+            payment_method="stripe",
+            payment_method_title="Stripe",
+            transaction_id="txn_789",
+            date_paid="2024-01-15 10:30:00",
+            status="processing",
+            refunds=json.dumps([{"id": 1, "reason": "Customer request"}]),
+        )
+        mock_get_woocommerce_order.return_value = woocommerce_order
+
+        sales_order = frappe._dict(
+            doctype="Sales Order", woocommerce_server="site1.example.com", woocommerce_id="1"
+        )
+        doc = json.dumps(sales_order)
+        result = get_woocommerce_order_payment_info(doc)
+
+        self.assertEqual(result["payment_status"], "Refunded")
+        self.assertEqual(result["status_color"], "red")
+
+    def test_get_woocommerce_order_payment_info_no_payment(self, mock_get_woocommerce_order):
+        """
+        Test that payment info returns 'No Payment' status when date_paid is not set
+        """
+        woocommerce_order = frappe._dict(
+            payment_method="bacs",
+            payment_method_title="Direct Bank Transfer",
+            transaction_id="",
+            date_paid=None,
+            status="pending",
+            refunds=None,
+        )
+        mock_get_woocommerce_order.return_value = woocommerce_order
+
+        sales_order = frappe._dict(
+            doctype="Sales Order", woocommerce_server="site1.example.com", woocommerce_id="1"
+        )
+        doc = json.dumps(sales_order)
+        result = get_woocommerce_order_payment_info(doc)
+
+        self.assertEqual(result["payment_status"], "No Payment")
+        self.assertEqual(result["status_color"], "orange")
+        self.assertEqual(result["payment_method"], "Direct Bank Transfer")
+
+    def test_get_woocommerce_order_payment_info_returns_none_without_woocommerce_link(
+        self, mock_get_woocommerce_order
+    ):
+        """
+        Test that payment info returns None when no woocommerce_server or woocommerce_id
+        """
+        sales_order = frappe._dict(
+            doctype="Sales Order", woocommerce_server=None, woocommerce_id=None
+        )
+        doc = json.dumps(sales_order)
+        result = get_woocommerce_order_payment_info(doc)
+
+        self.assertIsNone(result)
 
     def test_sales_order_uses_custom_class(self, mock_get_woocommerce_order):
         """
