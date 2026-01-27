@@ -5,7 +5,7 @@ import frappe
 from erpnext import get_default_company
 from frappe.tests.utils import FrappeTestCase
 
-from woocommerce_fusion.tasks.sync_sales_orders import SynchroniseSalesOrder
+from woocommerce_fusion.tasks.sync_sales_orders import SynchroniseSalesOrder, find_existing_contact
 from woocommerce_fusion.woocommerce.woocommerce_api import (
 	generate_woocommerce_record_name_from_domain_and_id,
 )
@@ -20,6 +20,8 @@ class TestWooCommerceSync(FrappeTestCase):
 	@classmethod
 	def setUpClass(cls):
 		super().setUpClass()  # important to call super() methods when extending TestCase.
+		customer = create_customer()
+		create_contact(customer)
 
 	@patch.object(SynchroniseSalesOrder, "update_sales_order")
 	def test_sync_sales_order_should_update_sales_order_if_so_is_older(
@@ -62,7 +64,10 @@ class TestWooCommerceSync(FrappeTestCase):
 	@patch.object(SynchroniseSalesOrder, "create_and_link_payment_entry")
 	@patch.object(SynchroniseSalesOrder, "update_woocommerce_order")
 	def test_sync_sales_order_should_update_wc_order_if_so_is_newer(
-		self, mock_update_woocommerce_order, mock_create_and_link_payment_entry, mock_get_wc_servers
+		self,
+		mock_update_woocommerce_order,
+		mock_create_and_link_payment_entry,
+		mock_get_wc_servers,
 	):
 		"""
 		Test that the 'sync_sales_order' function should update the WooCommerce order
@@ -274,7 +279,11 @@ class TestWooCommerceSync(FrappeTestCase):
 	@patch.object(SynchroniseSalesOrder, "update_address")
 	@patch("woocommerce_fusion.tasks.sync_sales_orders.frappe.new_doc")
 	def test_create_single_address_created_when_same(
-		self, mock_frappe_new_doc, mock_update_address, mock_create_address, mock_get_wc_servers
+		self,
+		mock_frappe_new_doc,
+		mock_update_address,
+		mock_create_address,
+		mock_get_wc_servers,
 	):
 		# Initialise class
 		sync = SynchroniseSalesOrder()
@@ -317,14 +326,22 @@ class TestWooCommerceSync(FrappeTestCase):
 		# Assert that a single address is created
 		# mock_update_address.assert_called_once_with("Payment Entry")
 		mock_create_address.assert_called_once_with(
-			address, sync.customer, "Billing", is_primary_address=1, is_shipping_address=1
+			address,
+			sync.customer,
+			"Billing",
+			is_primary_address=1,
+			is_shipping_address=1,
 		)
 
 	@patch.object(SynchroniseSalesOrder, "create_address")
 	@patch.object(SynchroniseSalesOrder, "update_address")
 	@patch("woocommerce_fusion.tasks.sync_sales_orders.frappe.new_doc")
 	def test_create_multiple_addresses_created_when_different(
-		self, mock_frappe_new_doc, mock_update_address, mock_create_address, mock_get_wc_servers
+		self,
+		mock_frappe_new_doc,
+		mock_update_address,
+		mock_create_address,
+		mock_get_wc_servers,
 	):
 		# Initialise class
 		sync = SynchroniseSalesOrder()
@@ -368,8 +385,20 @@ class TestWooCommerceSync(FrappeTestCase):
 
 		# Assert that a single address is created
 		expected_calls = [
-			call(address_billing, sync.customer, "Billing", is_primary_address=1, is_shipping_address=0),
-			call(address_shipping, sync.customer, "Shipping", is_primary_address=0, is_shipping_address=1),
+			call(
+				address_billing,
+				sync.customer,
+				"Billing",
+				is_primary_address=1,
+				is_shipping_address=0,
+			),
+			call(
+				address_shipping,
+				sync.customer,
+				"Shipping",
+				is_primary_address=0,
+				is_shipping_address=1,
+			),
 		]
 
 		mock_create_address.assert_has_calls(expected_calls)
@@ -422,11 +451,47 @@ class TestWooCommerceSync(FrappeTestCase):
 		self.assertIsNone(mock_sales_order.woocommerce_payment_entry)
 		mock_frappe_new_doc.assert_not_called()
 
+	def test_contact_found_with_email(self, mock_get_cached_doc):
+		result = find_existing_contact(email="test@test.test", phone=None)
+		self.assertIsNotNone(result)
+
+	def test_contact_found_with_phone(self, mock_get_cached_doc):
+		result = find_existing_contact(email=None, phone="0123456789")
+		self.assertIsNotNone(result)
+
+	def test_contact_email_doesnt_exist(self, mock_get_cached_doc):
+		result = find_existing_contact(email="doesntexist@db.test", phone=None)
+		self.assertEqual(result, None)
+
+
+def create_customer():
+	customer = frappe.get_doc(
+		{
+			"doctype": "Customer",
+			"customer_name": "Test Customer for Contacts",
+			"customer_type": "Individual",
+		}
+	).insert(ignore_permissions=True)
+	return customer.name
+
+
+def create_contact(customer_doc_name):
+	contact = frappe.get_doc(
+		{
+			"doctype": "Contact",
+			"first_name": "Test",
+			"last_name": "Customer",
+		}
+	)
+	contact.append("links", {"link_doctype": "Customer", "link_name": customer_doc_name})
+	contact.append("email_ids", {"email_id": "test@test.test", "is_primary": 1})
+	contact.append("phone_nos", {"phone": "0123456789", "is_primary_phone": 1})
+	contact.insert(ignore_permissions=True)
+
 
 def create_bank_account(
 	bank_name=default_bank, account_name="_Test Bank", company=default_company
 ):
-
 	try:
 		gl_account = frappe.get_doc(
 			{
