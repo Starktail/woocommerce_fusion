@@ -381,7 +381,10 @@ class SynchroniseSalesOrder(SynchroniseWooCommerce):
 		for so_item in sales_order.items:
 			so_item.woocommerce_id = frappe.get_value(
 				"Item WooCommerce Server",
-				filters={"parent": so_item.item_code, "woocommerce_server": wc_order.woocommerce_server},
+				filters={
+					"parent": so_item.item_code,
+					"woocommerce_server": wc_order.woocommerce_server,
+				},
 				fieldname="woocommerce_id",
 			)
 
@@ -459,7 +462,8 @@ class SynchroniseSalesOrder(SynchroniseWooCommerce):
 							# The field should exist, else raise an error
 							raise ValueError(
 								_("Field <code>{0}</code> not found in Item Line of WooCommerce Order {1}").format(
-									map.woocommerce_field_name, self.woocommerce_order.name
+									map.woocommerce_field_name,
+									self.woocommerce_order.name,
 								)
 							)
 
@@ -603,7 +607,12 @@ class SynchroniseSalesOrder(SynchroniseWooCommerce):
 			self.customer = customer
 
 		self.create_or_update_address(wc_order)
-		contact = create_contact(raw_billing_data, self.customer)
+
+		contact = find_existing_contact(email, raw_billing_data.get("phone"))
+
+		if not contact:
+			contact = create_contact(raw_billing_data, self.customer)
+
 		self.customer.reload()
 		self.customer.customer_primary_contact = contact.name
 		try:
@@ -666,7 +675,8 @@ class SynchroniseSalesOrder(SynchroniseWooCommerce):
 			# determine if the item price should include tax or not
 			if wc_server.enable_tax_lines_sync and not wc_server.use_actual_tax_type:
 				tax_template = frappe.get_cached_doc(
-					"Sales Taxes and Charges Template", wc_server.sales_taxes_and_charges_template
+					"Sales Taxes and Charges Template",
+					wc_server.sales_taxes_and_charges_template,
 				)
 				if tax_template.taxes[0].included_in_print_rate:
 					rate = get_tax_inc_price_for_woocommerce_line_item(item)
@@ -698,13 +708,21 @@ class SynchroniseSalesOrder(SynchroniseWooCommerce):
 					new_sales_order.set_missing_lead_customer_details()
 				else:
 					ordered_items_tax = item.get("total_tax")
-					add_tax_details(new_sales_order, ordered_items_tax, "Ordered Item tax", wc_server.tax_account)
+					add_tax_details(
+						new_sales_order,
+						ordered_items_tax,
+						"Ordered Item tax",
+						wc_server.tax_account,
+					)
 
 		# If a Shipping Rule is added, shipping charges will be determined by the Shipping Rule. If not, then
 		# get it from the WooCommerce Order
 		if not new_sales_order.shipping_rule:
 			add_tax_details(
-				new_sales_order, wc_order.shipping_tax, "Shipping Tax", wc_server.f_n_f_tax_account
+				new_sales_order,
+				wc_order.shipping_tax,
+				"Shipping Tax",
+				wc_server.f_n_f_tax_account,
 			)
 			add_tax_details(
 				new_sales_order,
@@ -733,7 +751,6 @@ class SynchroniseSalesOrder(SynchroniseWooCommerce):
 			if not wc_order.fee_lines:
 				return
 			for fee_line in json.loads(wc_order.fee_lines):
-
 				# Add line for fee in Taxes and Charges table
 				new_sales_order.append(
 					"taxes",
@@ -790,7 +807,9 @@ class SynchroniseSalesOrder(SynchroniseWooCommerce):
 							so_item[erpnext_item_field_name[0]] = woocommerce_order_line_item_field_matches[0].value
 						else:
 							setattr(
-								so_item, erpnext_item_field_name[0], woocommerce_order_line_item_field_matches[0].value
+								so_item,
+								erpnext_item_field_name[0],
+								woocommerce_order_line_item_field_matches[0].value,
 							)
 							so_item_dirty = True
 			return so_item_dirty, so_item
@@ -800,7 +819,9 @@ class SynchroniseSalesOrder(SynchroniseWooCommerce):
 		If the address(es) exist, update it, else create it
 		"""
 		addresses = get_addresses_linking_to(
-			"Customer", self.customer.name, fields=["name", "is_primary_address", "is_shipping_address"]
+			"Customer",
+			self.customer.name,
+			fields=["name", "is_primary_address", "is_shipping_address"],
 		)
 
 		existing_billing_address = next(
@@ -834,11 +855,19 @@ class SynchroniseSalesOrder(SynchroniseWooCommerce):
 			address = existing_billing_address or existing_shipping_address
 			if address:
 				self.update_address(
-					address.name, raw_billing_data, self.customer, is_primary_address=1, is_shipping_address=1
+					address.name,
+					raw_billing_data,
+					self.customer,
+					is_primary_address=1,
+					is_shipping_address=1,
 				)
 			else:
 				self.create_address(
-					raw_billing_data, self.customer, "Billing", is_primary_address=1, is_shipping_address=1
+					raw_billing_data,
+					self.customer,
+					"Billing",
+					is_primary_address=1,
+					is_shipping_address=1,
 				)
 		else:
 			# Handle billing address
@@ -852,7 +881,11 @@ class SynchroniseSalesOrder(SynchroniseWooCommerce):
 				)
 			else:
 				self.create_address(
-					raw_billing_data, self.customer, "Billing", is_primary_address=1, is_shipping_address=0
+					raw_billing_data,
+					self.customer,
+					"Billing",
+					is_primary_address=1,
+					is_shipping_address=0,
 				)
 
 			# Handle shipping address
@@ -866,14 +899,25 @@ class SynchroniseSalesOrder(SynchroniseWooCommerce):
 				)
 			else:
 				self.create_address(
-					raw_shipping_data, self.customer, "Shipping", is_primary_address=0, is_shipping_address=1
+					raw_shipping_data,
+					self.customer,
+					"Shipping",
+					is_primary_address=0,
+					is_shipping_address=1,
 				)
 
 	def create_address(
-		self, raw_data: Dict, customer, address_type, is_primary_address=0, is_shipping_address=0
+		self,
+		raw_data: Dict,
+		customer,
+		address_type,
+		is_primary_address=0,
+		is_shipping_address=0,
 	):
 		title_convention = frappe.db.get_value(
-			"WooCommerce Server", self.woocommerce_order.woocommerce_server, "address_title_convention"
+			"WooCommerce Server",
+			self.woocommerce_order.woocommerce_server,
+			"address_title_convention",
 		)
 		address = frappe.new_doc("Address")
 
@@ -898,10 +942,17 @@ class SynchroniseSalesOrder(SynchroniseWooCommerce):
 		address.save()
 
 	def update_address(
-		self, address_name, raw_data: Dict, customer, is_primary_address=0, is_shipping_address=0
+		self,
+		address_name,
+		raw_data: Dict,
+		customer,
+		is_primary_address=0,
+		is_shipping_address=0,
 	):
 		title_convention = frappe.db.get_value(
-			"WooCommerce Server", self.woocommerce_order.woocommerce_server, "address_title_convention"
+			"WooCommerce Server",
+			self.woocommerce_order.woocommerce_server,
+			"address_title_convention",
 		)
 		address = frappe.get_doc("Address", address_name)
 
@@ -960,7 +1011,12 @@ def get_list_of_wc_orders(
 	while new_results:
 		woocommerce_order = frappe.get_doc({"doctype": "WooCommerce Order"})
 		new_results = woocommerce_order.get_list(
-			args={"filters": filters, "page_lenth": page_length, "start": start, "as_doc": True}
+			args={
+				"filters": filters,
+				"page_lenth": page_length,
+				"start": start,
+				"as_doc": True,
+			}
 		)
 		for wc_order in new_results:
 			wc_orders.append(wc_order)
@@ -978,6 +1034,22 @@ def rename_address(address, customer):
 	address.save()
 
 	frappe.rename_doc("Address", old_address_title, new_address_title)
+
+
+def find_existing_contact(email, phone):
+	# we assume phone and email are entered consistently in WooCommerce.
+	# To assume otherwise would require db patch to normalize existing user data.
+	if email:
+		existing = frappe.db.get_value("Contact Email", {"email_id": email}, "parent")
+		if existing:
+			return frappe._dict({"name": existing})
+
+	if phone:
+		existing = frappe.db.get_value("Contact Phone", {"phone": phone}, "parent")
+		if existing:
+			return frappe._dict({"name": existing})
+
+	return None
 
 
 def create_contact(data, customer):
