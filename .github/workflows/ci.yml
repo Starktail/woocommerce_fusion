@@ -80,7 +80,7 @@ jobs:
           sudo apt install -y caddy
           
           # Install WP-Playground CLI
-          npm install --global @wp-playground/cli
+          npm install --global @wp-playground/cli@3.0.42
 
       - name: Install Frappe Bench
         run: |
