@@ -82,6 +82,12 @@ Each **Customer** record has a `woocommerce_identifier` custom field. This ident
 | Company (`billing.company` on **WooCommerce Order** is set), **Only if *Enable Dual Accounts for Same Email (Private/Company)* is checked** | `{billing.email}-{company}` |
 | Individual (`billing.company` on **WooCommerce Order** is not set)                                                                          | `billing.email`             |
 
+## Contact Synchronisation
+
+**Contact** records are also created for **Customer**s. In order to prevent duplicate **Contact**s, synchronisation checks for an existing **Contact**, first by the provided email address, then by provided phone number.
+
+Currently, **Contact** records are not updated when details change. Changes must be handled manually.
+
 ## Address Synchronisation
 - If the billing and shipping address on the **WooCommerce Order** is the same, a single **Address** will be created with both the *Preferred Billing Address* and *Preferred Shipping Address* checkboxes ticked.
 - If an address with *Preferred Billing Address*/*Preferred Shipping Address* ticked aleady exists, this address will be updated
