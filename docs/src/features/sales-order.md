@@ -40,7 +40,7 @@ Note that if sync for an **Item** is disabled (i.e. the "Enabled" checkbox on th
 | ------------- | --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | billing       | **Address** with type *Billing*               | See **Customer Synchronisation** below. Checks if the `billing.email` field matches an existing **Customer's** `woocommerce_identifier` field. If not, a new **Customer** is created. |
 |               | **Contact**                                   |                                                                                                                                                                                       |
-| shipping      | **Adress** with type *Shipping*               | See **Address  Synchronsation** below                                                                                                                                                 |
+| shipping      | **Address** with type *Shipping*               | See **Address  Synchronsation** below                                                                                                                                                 |
 | line_items    | **Item**                                      | Checks if a linked **Item** exists, else a new Item is created                                                                                                                        |
 | id            | **Sales Order** > *Customer's Purchase Order* |                                                                                                                                                                                       |
 |               | **Sales Order** > *Woocommerce ID*            |                                                                                                                                                                                       |
@@ -81,6 +81,12 @@ Each **Customer** record has a `woocommerce_identifier` custom field. This ident
 | Guest (`customer_id` on **WooCommerce Order** is empty or 0)                                                                                | `Guest-{order_id}`          |
 | Company (`billing.company` on **WooCommerce Order** is set), **Only if *Enable Dual Accounts for Same Email (Private/Company)* is checked** | `{billing.email}-{company}` |
 | Individual (`billing.company` on **WooCommerce Order** is not set)                                                                          | `billing.email`             |
+
+## Contact Synchronisation
+
+**Contact** records are also created for **Customer**s. In order to prevent duplicate **Contact**s, synchronisation checks for an existing **Contact**, first by the provided email address, then by provided phone number.
+
+Currently, **Contact** records are not updated when details change. Changes must be handled manually.
 
 ## Address Synchronisation
 - If the billing and shipping address on the **WooCommerce Order** is the same, a single **Address** will be created with both the *Preferred Billing Address* and *Preferred Shipping Address* checkboxes ticked.
