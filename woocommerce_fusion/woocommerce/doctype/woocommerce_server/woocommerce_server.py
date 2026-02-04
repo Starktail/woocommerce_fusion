@@ -1,7 +1,6 @@
 # Copyright (c) 2023, Dirk van der Laarse and contributors
 # For license information, please see license.txt
 
-from typing import List
 from urllib.parse import urlparse
 
 import frappe
@@ -116,7 +115,7 @@ class WooCommerceServer(Document):
 
 	@frappe.whitelist()
 	@redis_cache(ttl=600)
-	def get_item_docfields(self, doctype: str) -> List[dict]:
+	def get_item_docfields(self, doctype: str) -> list[dict]:
 		"""
 		Get a list of DocFields for the Item Doctype
 		"""
@@ -144,7 +143,7 @@ class WooCommerceServer(Document):
 
 	@frappe.whitelist()
 	@redis_cache(ttl=86400)
-	def get_woocommerce_order_status_list(self) -> List[str]:
+	def get_woocommerce_order_status_list(self) -> list[str]:
 		"""
 		Retrieve list of WooCommerce Order Statuses
 		"""

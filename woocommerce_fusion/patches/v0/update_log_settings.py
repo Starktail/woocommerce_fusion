@@ -1,5 +1,3 @@
-from __future__ import unicode_literals
-
 import frappe
 from frappe import _
 from frappe.core.doctype.log_settings.log_settings import _supports_log_clearing

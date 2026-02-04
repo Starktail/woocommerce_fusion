@@ -107,9 +107,7 @@ class TestWooCommerceSync(FrappeTestCase):
 		mock_update_woocommerce_order.assert_called_once_with(wc_order, sales_order)
 
 	@patch.object(SynchroniseSalesOrder, "create_sales_order")
-	def test_sync_sales_order_should_create_so_if_no_so(
-		self, mock_create_sales_order, mock_get_wc_servers
-	):
+	def test_sync_sales_order_should_create_so_if_no_so(self, mock_create_sales_order, mock_get_wc_servers):
 		"""
 		Test that the 'sync_sales_order' function should create a Sales Order if
 		there are no corresponding Sales orders
@@ -489,9 +487,7 @@ def create_contact(customer_doc_name):
 	contact.insert(ignore_permissions=True)
 
 
-def create_bank_account(
-	bank_name=default_bank, account_name="_Test Bank", company=default_company
-):
+def create_bank_account(bank_name=default_bank, account_name="_Test Bank", company=default_company):
 	try:
 		gl_account = frappe.get_doc(
 			{
@@ -534,7 +530,7 @@ def create_bank_account(
 
 def create_gl_account_for_bank(account_name="_Test Bank"):
 	try:
-		gl_account = frappe.get_doc(
+		frappe.get_doc(
 			{
 				"doctype": "Account",
 				"company": get_default_company(),

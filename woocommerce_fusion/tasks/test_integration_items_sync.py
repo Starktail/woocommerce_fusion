@@ -44,9 +44,7 @@ class TestIntegrationWooCommerceItemsSync(TestIntegrationWooCommerce):
 		self.assertEqual(item.item_code, str(wc_product_id))
 		self.assertEqual(item.item_name, "SOME_ITEM")
 
-	def test_sync_create_new_item_with_image_when_synchronising_with_woocommerce(
-		self, mock_log_error
-	):
+	def test_sync_create_new_item_with_image_when_synchronising_with_woocommerce(self, mock_log_error):
 		"""
 		Test that the Item Synchronisation method creates a new Item with image when there are new
 		WooCommerce products.
@@ -221,9 +219,7 @@ class TestIntegrationWooCommerceItemsSync(TestIntegrationWooCommerce):
 		# Expect correct item name in item
 		self.assertEqual(wc_product["name"], item.item_name)
 
-	def test_sync_create_new_variable_wc_product_when_synchronising_with_woocommerce(
-		self, mock_log_error
-	):
+	def test_sync_create_new_variable_wc_product_when_synchronising_with_woocommerce(self, mock_log_error):
 		"""
 		Test that the Item Synchronisation method creates a new Variable WooCommerce product
 		when there is a new Template Item in ERPNext
@@ -262,9 +258,7 @@ class TestIntegrationWooCommerceItemsSync(TestIntegrationWooCommerce):
 		self.assertEqual(wc_product["attributes"][1]["name"], "Volume")
 		self.assertEqual(wc_product["attributes"][1]["variation"], True)
 
-	def test_sync_create_new_wc_product_variant_when_synchronising_with_woocommerce(
-		self, mock_log_error
-	):
+	def test_sync_create_new_wc_product_variant_when_synchronising_with_woocommerce(self, mock_log_error):
 		"""
 		Test that the Item Synchronisation method creates a new WooCommerce product variant
 		when there is a new Item Variant in ERPNext
@@ -372,47 +366,6 @@ class TestIntegrationWooCommerceItemsSync(TestIntegrationWooCommerce):
 
 		# Expect correct custom mapped field values
 		self.assertEqual(item.description, "Final description from WooCommerce")
-
-	def test_sync_create_new_variable_wc_product_when_synchronising_with_woocommerce(
-		self, mock_log_error
-	):
-		"""
-		Test that the Item Synchronisation method creates a new Variable WooCommerce product
-		when there is a new Template Item in ERPNext
-		"""
-		# Create a new item in ERPNext and set a WooCommerce server but not a product ID
-		item = create_item("ITEM100", valuation_rate=10)
-		row = item.append("woocommerce_servers")
-		row.woocommerce_server = self.wc_server.name
-
-		# Make this item a Template item with Attributes
-		item.has_variants = 1
-		for attr in ["Material Type", "Volume"]:
-			create_item_attribute(attr)
-			row = item.append("attributes")
-			row.attribute = attr
-
-		item.save()
-
-		# Run synchronisation
-		run_item_sync(item_code=item.name)
-
-		# Expect no errors logged
-		mock_log_error.assert_not_called()
-
-		# Get the updated item
-		item.reload()
-
-		# Expect newly created WooCommerce Product
-		wc_product = self.get_woocommerce_product(product_id=item.woocommerce_servers[0].woocommerce_id)
-		self.assertEqual(wc_product["type"], "variable")
-
-		# Expect attributes to be set
-		self.assertEqual(len(wc_product["attributes"]), 2)
-		self.assertEqual(wc_product["attributes"][0]["name"], "Material Type")
-		self.assertEqual(wc_product["attributes"][0]["variation"], True)
-		self.assertEqual(wc_product["attributes"][1]["name"], "Volume")
-		self.assertEqual(wc_product["attributes"][1]["variation"], True)
 
 
 def get_items_for_wc_product(woocommerce_id: str, woocommerce_server: str):

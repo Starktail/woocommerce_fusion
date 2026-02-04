@@ -134,9 +134,7 @@ class TestWooCommerceStockSync(FrappeTestCase):
 
 	@patch("woocommerce_fusion.tasks.stock_update.frappe.db.get_all")
 	@patch("woocommerce_fusion.tasks.stock_update.frappe.enqueue")
-	def test_update_stock_levels_for_all_enabled_items_in_background(
-		self, mock_enqueue, mock_get_all
-	):
+	def test_update_stock_levels_for_all_enabled_items_in_background(self, mock_enqueue, mock_get_all):
 		# Set up mock return values
 		mock_get_all.side_effect = [
 			[_dict({"name": f"Item-1-{x}"}) for x in range(500)],  # First page of results

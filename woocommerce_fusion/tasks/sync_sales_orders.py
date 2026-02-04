@@ -1,6 +1,5 @@
 import json
 from datetime import datetime
-from typing import Dict, Optional, Tuple, Union
 
 import frappe
 from erpnext.selling.doctype.sales_order.sales_order import SalesOrder
@@ -24,20 +23,16 @@ from woocommerce_fusion.woocommerce.woocommerce_api import (
 
 
 def run_sales_order_sync_from_hook(doc, method):
-	if (
-		doc.doctype == "Sales Order"
-		and not doc.flags.get("created_by_sync", None)
-		and doc.woocommerce_server
-	):
+	if doc.doctype == "Sales Order" and not doc.flags.get("created_by_sync", None) and doc.woocommerce_server:
 		frappe.enqueue(run_sales_order_sync, queue="long", sales_order_name=doc.name)
 
 
 @frappe.whitelist()
 def run_sales_order_sync(
-	sales_order_name: Optional[str] = None,
-	sales_order: Optional[SalesOrder] = None,
-	woocommerce_order_name: Optional[str] = None,
-	woocommerce_order: Optional[WooCommerceOrder] = None,
+	sales_order_name: str | None = None,
+	sales_order: SalesOrder | None = None,
+	woocommerce_order_name: str | None = None,
+	woocommerce_order: WooCommerceOrder | None = None,
 	enqueue=False,
 ):
 	"""
@@ -121,8 +116,8 @@ class SynchroniseSalesOrder(SynchroniseWooCommerce):
 
 	def __init__(
 		self,
-		sales_order: Optional[SalesOrder] = None,
-		woocommerce_order: Optional[WooCommerceOrder] = None,
+		sales_order: SalesOrder | None = None,
+		woocommerce_order: WooCommerceOrder | None = None,
 	) -> None:
 		super().__init__()
 		self.sales_order = sales_order
@@ -262,9 +257,7 @@ class SynchroniseSalesOrder(SynchroniseWooCommerce):
 				sales_order.flags.created_by_sync = True
 				sales_order.save()
 
-	def create_and_link_payment_entry(
-		self, wc_order: WooCommerceOrder, sales_order: SalesOrder
-	) -> bool:
+	def create_and_link_payment_entry(self, wc_order: WooCommerceOrder, sales_order: SalesOrder) -> bool:
 		"""
 		Create a Payment Entry for a WooCommerce Order that has been marked as Paid
 		"""
@@ -281,7 +274,7 @@ class SynchroniseSalesOrder(SynchroniseWooCommerce):
 			and sales_order.docstatus == 1
 		):
 			# If the grand total is 0, skip payment entry creation
-			if sales_order.grand_total == None or float(sales_order.grand_total) == 0:
+			if sales_order.grand_total is None or float(sales_order.grand_total) == 0:
 				return True
 
 			# Get Company Bank Account for this Payment Method
@@ -426,7 +419,8 @@ class SynchroniseSalesOrder(SynchroniseWooCommerce):
 
 				# Set the product_id for existing lines to null, to clear the line items for the WooCommerce order
 				replacement_line_items = [
-					{"id": line_item["id"], "product_id": None} for line_item in json.loads(wc_order.line_items)
+					{"id": line_item["id"], "product_id": None}
+					for line_item in json.loads(wc_order.line_items)
 				]
 				replacement_line_items.extend(new_line_items)
 
@@ -437,17 +431,15 @@ class SynchroniseSalesOrder(SynchroniseWooCommerce):
 			wc_order.save()
 
 	def set_wc_order_line_items_mapped_fields(
-		self, woocommerce_order_line_item: Dict, so_item: SalesOrderItem
-	) -> Tuple[bool, WooCommerceOrder]:
+		self, woocommerce_order_line_item: dict, so_item: SalesOrderItem
+	) -> tuple[bool, WooCommerceOrder]:
 		"""
 		If there exist any Field Mappings on `WooCommerce Server`, attempt to set their values from
 		ERPNext to WooCommerce
 		"""
 		wc_line_item_dirty = False
 		if woocommerce_order_line_item and self.sales_order and self.woocommerce_order:
-			wc_server = frappe.get_cached_doc(
-				"WooCommerce Server", self.woocommerce_order.woocommerce_server
-			)
+			wc_server = frappe.get_cached_doc("WooCommerce Server", self.woocommerce_order.woocommerce_server)
 			if wc_server.order_line_item_field_map:
 				for map in wc_server.order_line_item_field_map:
 					erpnext_item_field_name = map.erpnext_field_name.split(" | ")
@@ -461,7 +453,9 @@ class SynchroniseSalesOrder(SynchroniseWooCommerce):
 						if self.woocommerce_order.name:
 							# The field should exist, else raise an error
 							raise ValueError(
-								_("Field <code>{0}</code> not found in Item Line of WooCommerce Order {1}").format(
+								_(
+									"Field <code>{0}</code> not found in Item Line of WooCommerce Order {1}"
+								).format(
 									map.woocommerce_field_name,
 									self.woocommerce_order.name,
 								)
@@ -540,7 +534,7 @@ class SynchroniseSalesOrder(SynchroniseWooCommerce):
 		Create or update Customer and Address records, with special handling for guest orders using order ID.
 		"""
 		raw_billing_data = json.loads(wc_order.billing)
-		raw_shipping_data = json.loads(wc_order.shipping)
+		_raw_shipping_data = json.loads(wc_order.shipping)
 		first_name = raw_billing_data.get("first_name", "").strip()
 		last_name = raw_billing_data.get("last_name", "").strip()
 		email = raw_billing_data.get("email", "").strip()
@@ -601,7 +595,7 @@ class SynchroniseSalesOrder(SynchroniseWooCommerce):
 		try:
 			customer.save()
 		except Exception:
-			error_message = f"{frappe.get_traceback()}\n\nCustomer Data{str(customer.as_dict())}"
+			error_message = f"{frappe.get_traceback()}\n\nCustomer Data{customer.as_dict()}"
 			frappe.log_error("WooCommerce Error", error_message)
 		finally:
 			self.customer = customer
@@ -618,7 +612,7 @@ class SynchroniseSalesOrder(SynchroniseWooCommerce):
 		try:
 			self.customer.save()
 		except Exception:
-			error_message = f"{frappe.get_traceback()}\n\nCustomer Data{str(customer.as_dict())}"
+			error_message = f"{frappe.get_traceback()}\n\nCustomer Data{customer.as_dict()}"
 			frappe.log_error("WooCommerce Error", error_message)
 
 		return customer.name
@@ -781,8 +775,8 @@ class SynchroniseSalesOrder(SynchroniseWooCommerce):
 						)
 
 	def set_sales_order_item_fields(
-		self, woocommerce_order_line_item: Dict, so_item: Union[SalesOrderItem, Dict]
-	) -> Tuple[bool, WooCommerceOrder]:
+		self, woocommerce_order_line_item: dict, so_item: SalesOrderItem | dict
+	) -> tuple[bool, WooCommerceOrder]:
 		"""
 		If there exist any Order Item Line Field Mappings on `WooCommerce Server`, attempt to set their values from
 		the WooCommerce Order Line Item to the ERPNext Sales Order Item
@@ -791,20 +785,22 @@ class SynchroniseSalesOrder(SynchroniseWooCommerce):
 		"""
 		so_item_dirty = False
 		if so_item and self.woocommerce_order:
-			wc_server = frappe.get_cached_doc(
-				"WooCommerce Server", self.woocommerce_order.woocommerce_server
-			)
+			wc_server = frappe.get_cached_doc("WooCommerce Server", self.woocommerce_order.woocommerce_server)
 			if wc_server.order_line_item_field_map:
 				for map in wc_server.order_line_item_field_map:
 					erpnext_item_field_name = map.erpnext_field_name.split(" | ")
 
 					# We expect woocommerce_field_name to be valid JSONPath
 					jsonpath_expr = parse(map.woocommerce_field_name)
-					woocommerce_order_line_item_field_matches = jsonpath_expr.find(woocommerce_order_line_item)
+					woocommerce_order_line_item_field_matches = jsonpath_expr.find(
+						woocommerce_order_line_item
+					)
 
 					if len(woocommerce_order_line_item_field_matches) > 0:
 						if type(so_item) is dict:
-							so_item[erpnext_item_field_name[0]] = woocommerce_order_line_item_field_matches[0].value
+							so_item[erpnext_item_field_name[0]] = woocommerce_order_line_item_field_matches[
+								0
+							].value
 						else:
 							setattr(
 								so_item,
@@ -824,12 +820,8 @@ class SynchroniseSalesOrder(SynchroniseWooCommerce):
 			fields=["name", "is_primary_address", "is_shipping_address"],
 		)
 
-		existing_billing_address = next(
-			(addr for addr in addresses if addr.is_primary_address == 1), None
-		)
-		existing_shipping_address = next(
-			(addr for addr in addresses if addr.is_shipping_address == 1), None
-		)
+		existing_billing_address = next((addr for addr in addresses if addr.is_primary_address == 1), None)
+		existing_shipping_address = next((addr for addr in addresses if addr.is_shipping_address == 1), None)
 
 		raw_billing_data = json.loads(wc_order.billing)
 		raw_shipping_data = json.loads(wc_order.shipping)
@@ -908,7 +900,7 @@ class SynchroniseSalesOrder(SynchroniseWooCommerce):
 
 	def create_address(
 		self,
-		raw_data: Dict,
+		raw_data: dict,
 		customer,
 		address_type,
 		is_primary_address=0,
@@ -944,7 +936,7 @@ class SynchroniseSalesOrder(SynchroniseWooCommerce):
 	def update_address(
 		self,
 		address_name,
-		raw_data: Dict,
+		raw_data: dict,
 		customer,
 		is_primary_address=0,
 		is_shipping_address=0,
@@ -976,9 +968,9 @@ class SynchroniseSalesOrder(SynchroniseWooCommerce):
 
 
 def get_list_of_wc_orders(
-	date_time_from: Optional[datetime] = None,
-	sales_order: Optional[SalesOrder] = None,
-	status: Optional[str] = None,
+	date_time_from: datetime | None = None,
+	sales_order: SalesOrder | None = None,
+	status: str | None = None,
 ):
 	"""
 	Fetches a list of WooCommerce Orders within a specified date range or linked with a Sales Order, using pagination.
@@ -1091,7 +1083,7 @@ def add_tax_details(sales_order, price, desc, tax_account_head):
 	)
 
 
-def get_tax_inc_price_for_woocommerce_line_item(line_item: Dict):
+def get_tax_inc_price_for_woocommerce_line_item(line_item: dict):
 	"""
 	WooCommerce's Line Item "price" field will always show the tax excluding amount.
 	This function calculates the tax inclusive rate for an item

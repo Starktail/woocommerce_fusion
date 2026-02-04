@@ -122,7 +122,11 @@ class TestWooCommerceOrder(FrappeTestCase):
 			frappe._dict(
 				{
 					"args": {"page_length": 10, "start": 0},
-					"expected_order_counts": (10, 0, 0),  # expect 10 orders from API 1, and 0 from API 2 and API3
+					"expected_order_counts": (
+						10,
+						0,
+						0,
+					),  # expect 10 orders from API 1, and 0 from API 2 and API3
 				}
 			),
 			frappe._dict({"args": {"page_length": 10, "start": 10}, "expected_order_counts": (0, 10, 0)}),
@@ -143,13 +147,25 @@ class TestWooCommerceOrder(FrappeTestCase):
 
 				# Verify that the orders were combined correctly from the API's
 				order_counts_for_api1 = len(
-					[order for order in orders if order.woocommerce_server == mock_api_list[0].woocommerce_server]
+					[
+						order
+						for order in orders
+						if order.woocommerce_server == mock_api_list[0].woocommerce_server
+					]
 				)
 				order_counts_for_api2 = len(
-					[order for order in orders if order.woocommerce_server == mock_api_list[1].woocommerce_server]
+					[
+						order
+						for order in orders
+						if order.woocommerce_server == mock_api_list[1].woocommerce_server
+					]
 				)
 				order_counts_for_api3 = len(
-					[order for order in orders if order.woocommerce_server == mock_api_list[2].woocommerce_server]
+					[
+						order
+						for order in orders
+						if order.woocommerce_server == mock_api_list[2].woocommerce_server
+					]
 				)
 				self.assertEqual(
 					(order_counts_for_api1, order_counts_for_api2, order_counts_for_api3),
@@ -183,16 +199,13 @@ class TestWooCommerceOrder(FrappeTestCase):
 		mock_api_list[0].api.get.return_value = mock_get_response
 
 		# Patch out the __init__ method
-		with patch.object(WooCommerceOrder, "__init__", return_value=None) as mock_init:
-
+		with patch.object(WooCommerceOrder, "__init__", return_value=None) as _mock_init:
 			# Patch out the call_super_init method
 			with patch.object(WooCommerceOrder, "call_super_init") as mocked_super_call:
-
 				# Patch out the get_additional_order_attributes
 				with patch.object(
 					WooCommerceOrder, "get_additional_order_attributes"
 				) as mock_get_additional_order_attributes:
-
 					# Set the mock_get_additional_order_attributes method to return its argument
 					mock_get_additional_order_attributes.side_effect = lambda x: x
 
@@ -221,7 +234,9 @@ class TestWooCommerceOrder(FrappeTestCase):
 							"woocommerce_date_modified_gmt",
 						]
 						if key not in meta_data_fields:
-							if isinstance(dummy_wc_order.get(key), dict) or isinstance(dummy_wc_order.get(key), list):
+							if isinstance(dummy_wc_order.get(key), dict) or isinstance(
+								dummy_wc_order.get(key), list
+							):
 								self.assertEqual(json.loads(value), dummy_wc_order.get(key))
 							else:
 								self.assertEqual(value, dummy_wc_order.get(key))
@@ -260,7 +275,7 @@ class TestWooCommerceOrder(FrappeTestCase):
 
 		# Prepare the mock order data by dumping lists and dicts to json
 		mock_order_data = deepcopy(dummy_wc_order)
-		for key, value in mock_order_data.items():
+		for key, _value in mock_order_data.items():
 			if isinstance(mock_order_data[key], dict) or isinstance(mock_order_data[key], list):
 				mock_order_data[key] = json.dumps(dummy_wc_order[key])
 
@@ -307,7 +322,7 @@ class TestWooCommerceOrder(FrappeTestCase):
 
 		# Prepare the mock order data by dumping lists and dicts to json
 		mock_order_data = deepcopy(dummy_wc_order)
-		for key, value in mock_order_data.items():
+		for key, _value in mock_order_data.items():
 			if isinstance(mock_order_data[key], dict) or isinstance(mock_order_data[key], list):
 				mock_order_data[key] = json.dumps(dummy_wc_order[key])
 
@@ -353,7 +368,7 @@ class TestWooCommerceOrder(FrappeTestCase):
 
 		# Prepare the mock order data by dumping lists and dicts to json
 		mock_order_data = deepcopy(dummy_wc_order)
-		for key, value in mock_order_data.items():
+		for key, _value in mock_order_data.items():
 			if isinstance(mock_order_data[key], dict) or isinstance(mock_order_data[key], list):
 				mock_order_data[key] = json.dumps(dummy_wc_order[key])
 
@@ -402,7 +417,7 @@ class TestWooCommerceOrder(FrappeTestCase):
 		mock_api_list[0].api.get.return_value = mock_get_response
 
 		# Patch out the __init__ method and set the required fields
-		with patch.object(WooCommerceOrder, "__init__", return_value=None) as mock_init:
+		with patch.object(WooCommerceOrder, "__init__", return_value=None) as _mock_init:
 			woocommerce_order = WooCommerceOrder()
 			woocommerce_order.name = woocommerce_server_url + WC_ORDER_DELIMITER + str(order_id)
 			woocommerce_order.current_wc_api = mock_api_list[0]
@@ -412,13 +427,9 @@ class TestWooCommerceOrder(FrappeTestCase):
 		mock_api_list[0].api.get.assert_called_once()
 
 		# Verify that the shipment-trackings endpoint is called
-		self.assertEqual(
-			mock_api_list[0].api.get.call_args.args[0], f"orders/{order_id}/shipment-trackings"
-		)
+		self.assertEqual(mock_api_list[0].api.get.call_args.args[0], f"orders/{order_id}/shipment-trackings")
 
-	def test_update_shipment_tracking_makes_api_post_when_shipment_trackings_changes(
-		self, mock_init_api
-	):
+	def test_update_shipment_tracking_makes_api_post_when_shipment_trackings_changes(self, mock_init_api):
 		"""
 		Test that the update_shipment_tracking method makes an API POST call
 		"""
@@ -443,7 +454,7 @@ class TestWooCommerceOrder(FrappeTestCase):
 		mock_api_list[0].api.post.return_value = mock_post_response
 
 		# Patch out the __init__ method and set the required fields
-		with patch.object(WooCommerceOrder, "__init__", return_value=None) as mock_init:
+		with patch.object(WooCommerceOrder, "__init__", return_value=None) as _mock_init:
 			woocommerce_order = WooCommerceOrder()
 			woocommerce_order.init_api()
 			woocommerce_order.name = woocommerce_server_url + WC_ORDER_DELIMITER + str(order_id)
@@ -489,7 +500,7 @@ class TestWooCommerceOrder(FrappeTestCase):
 		mock_api_list[0].api.post.return_value = mock_post_response
 
 		# Patch out the __init__ method and set the required fields
-		with patch.object(WooCommerceOrder, "__init__", return_value=None) as mock_init:
+		with patch.object(WooCommerceOrder, "__init__", return_value=None) as _mock_init:
 			woocommerce_order = WooCommerceOrder()
 			woocommerce_order.init_api()
 			woocommerce_order.name = woocommerce_server_url + WC_ORDER_DELIMITER + str(order_id)
@@ -635,9 +646,7 @@ class TestAPIWithRequestLogging(FrappeTestCase):
 	def setUp(self):
 		self.api = APIWithRequestLogging(url="foo", consumer_key="bar", consumer_secret="baz")
 
-	@patch(
-		"woocommerce_fusion.woocommerce.doctype.woocommerce_order.woocommerce_order.frappe.enqueue"
-	)
+	@patch("woocommerce_fusion.woocommerce.doctype.woocommerce_order.woocommerce_order.frappe.enqueue")
 	def test_request_success(self, mock_enqueue):
 		# Mock the parent class's _API__request method
 		with patch.object(API, "_API__request", return_value="success_response") as mock_super:
