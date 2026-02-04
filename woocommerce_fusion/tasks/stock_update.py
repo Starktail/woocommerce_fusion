@@ -61,7 +61,7 @@ def update_stock_levels_for_all_enabled_items_in_background():
 
 
 @frappe.whitelist()
-def update_stock_levels_on_woocommerce_site(item_code):
+def update_stock_levels_on_woocommerce_site(item_code: str):
 	"""
 	Updates stock levels of an item on all its associated WooCommerce sites.
 

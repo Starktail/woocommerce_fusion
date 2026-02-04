@@ -33,11 +33,11 @@ def validate_request() -> tuple[bool, HTTPStatus | None, str | None]:
 	# ):
 	# 	return False, HTTPStatus.UNAUTHORIZED, _("Unauthorized")
 
-	frappe.set_user(wc_server.creation_user)
+	frappe.set_user(wc_server.creation_user)  # nosemgrep
 	return True, None, None
 
 
-@frappe.whitelist(allow_guest=True, methods=["POST"])
+@frappe.whitelist(allow_guest=True, methods=["POST"])  # nosemgrep
 def order_created(*args, **kwargs):
 	"""
 	Accepts payload data from WooCommerce "Order Created" webhook

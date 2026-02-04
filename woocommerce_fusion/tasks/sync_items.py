@@ -45,7 +45,7 @@ def run_item_sync(
 	item: Item | None = None,
 	woocommerce_product_name: str | None = None,
 	woocommerce_product: WooCommerceProduct | None = None,
-	enqueue=False,
+	enqueue: bool = False,
 ) -> tuple[Item, WooCommerceProduct]:
 	"""
 	Helper funtion that prepares arguments for item sync

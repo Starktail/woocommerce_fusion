@@ -41,7 +41,7 @@ class TestCustomSalesOrder(FrappeTestCase):
 		"""
 
 		class DummyWooCommerceOrder:
-			def __init__(self, shipment_trackings):
+			def __init__(self, shipment_trackings: list):
 				self.shipment_trackings = shipment_trackings
 
 			def save(self):

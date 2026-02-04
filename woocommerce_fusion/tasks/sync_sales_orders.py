@@ -33,7 +33,7 @@ def run_sales_order_sync(
 	sales_order: SalesOrder | None = None,
 	woocommerce_order_name: str | None = None,
 	woocommerce_order: WooCommerceOrder | None = None,
-	enqueue=False,
+	enqueue: bool = False,
 ):
 	"""
 	Helper funtion that prepares arguments for order sync

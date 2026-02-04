@@ -151,7 +151,7 @@ class WooCommerceServer(Document):
 
 
 @frappe.whitelist()
-def get_woocommerce_shipment_providers(woocommerce_server):
+def get_woocommerce_shipment_providers(woocommerce_server: str):
 	"""
 	Return the Shipment Providers for a given WooCommerce Server domain
 	"""
