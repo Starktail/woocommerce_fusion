@@ -1,8 +1,8 @@
 app_name = "woocommerce_fusion"
 app_title = "WooCommerce Fusion"
-app_publisher = "Dirk van der Laarse"
-app_description = "WooCommerce connector for ERPNext v14+"
-app_email = "dirk@finfoot.work"
+app_publisher = "Starktail (Pty) Ltd"
+app_description = "WooCommerce connector for ERPNext v15+"
+app_email = "support@starktail.com"
 app_license = "GNU GPLv3"
 
 # Includes in <head>
@@ -127,9 +127,7 @@ doc_events = {
 	"Item Price": {
 		"on_update": "woocommerce_fusion.tasks.sync_item_prices.update_item_price_for_woocommerce_item_from_hook"
 	},
-	"Sales Order": {
-		"on_submit": "woocommerce_fusion.tasks.sync_sales_orders.run_sales_order_sync_from_hook"
-	},
+	"Sales Order": {"on_submit": "woocommerce_fusion.tasks.sync_sales_orders.run_sales_order_sync_from_hook"},
 	"Item": {
 		"on_update": "woocommerce_fusion.tasks.sync_items.run_item_sync_from_hook",
 		"after_insert": "woocommerce_fusion.tasks.sync_items.run_item_sync_from_hook",
@@ -162,7 +160,7 @@ scheduler_events = {
 # Testing
 # -------
 
-before_tests = "woocommerce_fusion.setup.utils.before_tests"
+before_tests = "woocommerce_fusion.utils.before_tests"
 
 # Overriding Methods
 # ------------------------------
@@ -262,3 +260,13 @@ fixtures = [
 default_log_clearing_doctypes = {
 	"WooCommerce Request Log": 7,
 }
+
+
+standard_help_items = [
+	{
+		"item_label": "WooCommerce Fusion Documentation",
+		"item_type": "Route",
+		"route": "/woocommerce_fusion_introduction",
+		"is_standard": 1,
+	},
+]

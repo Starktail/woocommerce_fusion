@@ -148,7 +148,7 @@
   },
   {
    "description": "This company will be used to create Sales Orders.",
-   "documentation_url": "https://woocommerce-fusion-docs.starktail.com/features/sales-order.html",
+   "documentation_url": "https://woocommerce-fusion-docs.starktail.com/woocommerce_fusion_sales-order",
    "fieldname": "company",
    "fieldtype": "Link",
    "label": "Company",
@@ -247,7 +247,7 @@
   },
   {
    "default": "0",
-   "documentation_url": "https://woocommerce-fusion-docs.starktail.com/features/woocommerce-plugins.html",
+   "documentation_url": "https://woocommerce-fusion-docs.starktail.com/woocommerce-plugins",
    "fieldname": "wc_plugin_advanced_shipment_tracking",
    "fieldtype": "Check",
    "label": "Enable integration with 'Advanced Shipment Tracking' WooCommerce Plugin"
@@ -289,7 +289,7 @@
   },
   {
    "default": "0",
-   "documentation_url": "https://woocommerce-fusion-docs.starktail.com/features/item-prices.html",
+   "documentation_url": "https://woocommerce-fusion-docs.starktail.com/woocommerce_fusion_item-prices",
    "fieldname": "enable_price_list_sync",
    "fieldtype": "Check",
    "label": "Enable Price List Sync"
@@ -375,7 +375,7 @@
   },
   {
    "default": "0",
-   "documentation_url": "https://woocommerce-fusion-docs.starktail.com/features/item-stock-levels.html",
+   "documentation_url": "https://woocommerce-fusion-docs.starktail.com/woocommerce_fusion_item-stock-levels",
    "fieldname": "enable_stock_level_synchronisation",
    "fieldtype": "Check",
    "label": "Enable Stock Level Synchronisation"
@@ -423,7 +423,7 @@
    "label": "Item Fields"
   },
   {
-   "documentation_url": "https://woocommerce-fusion-docs.starktail.com/features/items.html#custom-fields-mapping",
+   "documentation_url": "https://woocommerce-fusion-docs.starktail.com/woocommerce_fusion_items.html#fields-mapping",
    "fieldname": "item_field_map",
    "fieldtype": "Table",
    "label": "Fields Mapping",
@@ -462,7 +462,7 @@
   },
   {
    "default": "0",
-   "documentation_url": "https://woocommerce-fusion-docs.starktail.com/features/sales-order.html#shipping-rule-synchronisation",
+   "documentation_url": "https://woocommerce-fusion-docs.starktail.com/woocommerce_fusion_sales-order#shipping-rule-synchronisation",
    "fieldname": "enable_shipping_methods_sync",
    "fieldtype": "Check",
    "label": "Enable Shipping Methods Sync"
@@ -482,7 +482,7 @@
   {
    "default": "0",
    "description": "When enabled the Order Status for both ERPNext and WooCommerce orders will be automatically updated if either changes",
-   "documentation_url": "https://woocommerce-fusion-docs.starktail.com/features/sales-order.html#automatic-order-status-synchronisation",
+   "documentation_url": "https://woocommerce-fusion-docs.starktail.com/woocommerce_fusion_sales-order#automatic-order-status-synchronisation",
    "fieldname": "enable_so_status_sync",
    "fieldtype": "Check",
    "label": "Keep the Status of ERPNext Sales Orders and WooCommerce Orders in sync"
@@ -550,7 +550,7 @@
    "options": "<div class=\"alert alert-warning\">\nMapping item fields is recommended for advanced users only. Make sure to monitor Error Logs after adding field mappings.\n</div>"
   },
   {
-   "documentation_url": "https://woocommerce-fusion-docs.starktail.com/features/items.html#custom-fields-mapping",
+   "documentation_url": "https://woocommerce-fusion-docs.starktail.com/woocommerce_fusion_items.html#fields-mapping",
    "fieldname": "order_line_item_field_map",
    "fieldtype": "Table",
    "label": "Fields Mapping",

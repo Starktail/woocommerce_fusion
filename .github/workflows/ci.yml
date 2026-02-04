@@ -12,34 +12,40 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  TEST_AGAINST_FRAPPE_VERSION: v15.70.0
-  TEST_AGAINST_ERPNEXT_VERSION: v15.57.5
+  TEST_AGAINST_FRAPPE_VERSION: v15.96.0
+
+  TEST_AGAINST_ERPNEXT_VERSION: v15.94.3
+
 
 jobs:
   tests:
-    runs-on: ubuntu-22.04 
+    runs-on: ubuntu-22.04
     strategy:
       fail-fast: false
     name: Backend Unit Tests & UI Tests
 
     services:
       mariadb:
-        image: mariadb:10.11
+        image: mariadb:10.6
         env:
           MYSQL_ROOT_PASSWORD: root
         ports:
           - 3306:3306
-        options: --health-cmd="mysqladmin ping" --health-interval=5s --health-timeout=2s --health-retries=3
+        options: --health-cmd="mariadb-admin ping" --health-interval=5s --health-timeout=2s --health-retries=3
 
     steps:
       - name: Clone
         uses: actions/checkout@v4
 
+      - name: Find tests
+        run: |
+          echo "Finding tests"
+          grep -rn "def test" > /dev/null
+
       - name: Setup Python
         uses: actions/setup-python@v4
         with:
-          python-version: |
-              3.10
+          python-version: '3.10'
 
       - name: Setup Node
         uses: actions/setup-node@v3
@@ -47,8 +53,12 @@ jobs:
           node-version: 22
           check-latest: true
 
+      - name: Add to Hosts
+        run: |
+          echo "127.0.0.1 test_site" | sudo tee -a /etc/hosts
+
       - name: Cache pip
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: ~/.cache/pip
           key: ${{ runner.os }}-pip-${{ hashFiles('**/*requirements.txt', '**/pyproject.toml', '**/setup.py', '**/setup.cfg') }}
@@ -58,7 +68,7 @@ jobs:
 
       - name: Get yarn cache directory path
         id: yarn-cache-dir-path
-        run: echo "dir=$(yarn cache dir)" >> $GITHUB_OUTPUT
+        run: 'echo "dir=$(yarn cache dir)" >> $GITHUB_OUTPUT'
 
       - name: Cache yarn
         uses: actions/cache@v3
@@ -68,6 +78,12 @@ jobs:
           key: ${{ runner.os }}-yarn-${{ hashFiles('**/yarn.lock') }}
           restore-keys: |
             ${{ runner.os }}-yarn-
+
+      - name: Cache cypress binary
+        uses: actions/cache@v3
+        with:
+          path: ~/.cache/Cypress
+          key: ${{ runner.os }}-cypress
 
       - name: Install Caddy and WP-Playground
         run: |
@@ -82,7 +98,7 @@ jobs:
           # Install WP-Playground CLI
           npm install --global @wp-playground/cli@3.0.42
 
-      - name: Install Frappe Bench
+      - name: Install
         run: |
           bash ${GITHUB_WORKSPACE}/.github/helper/install.sh
 
@@ -110,7 +126,7 @@ jobs:
           
           echo "\nServers are up and running!"
 
-      - name: Run Tests
+      - name: Run Unit Tests
         working-directory: /home/runner/frappe-bench
         run: |
           bench --site test_site set-config allow_tests true
@@ -122,17 +138,54 @@ jobs:
           WOO_API_CONSUMER_KEY: "ck_test_123456789"
           WOO_API_CONSUMER_SECRET: "cs_test_abcdefg"
 
+      - name: Run UI Tests
+        working-directory: /home/runner/frappe-bench
+        run: |
+          set -x
+          echo "Setting Up Procfile..."
+
+          sed -i 's/^watch:/# watch:/g' Procfile
+          sed -i 's/^schedule:/# schedule:/g' Procfile
+          if [ "$TYPE" == "server" ]; then
+            sed -i 's/^socketio:/# socketio:/g' Procfile;
+            sed -i 's/^redis_socketio:/# redis_socketio:/g' Procfile;
+          fi
+
+          echo "Starting Bench..."
+          export FRAPPE_TUNE_GC=True
+          bench start &> bench_start.log &
+          bench --site test_site run-ui-tests woocommerce_fusion --headless -- --record
+
+
+        env:
+          TYPE: server
+          CYPRESS_RECORD_KEY: ${{ secrets.CYPRESS_RECORD_KEY }}
+
       - name: Stop WordPress Playground and Caddy
         if: always()
         run: |
           echo "Cleaning up background processes..."
           sudo pkill -f caddy
           sudo pkill -f 'php -S'
-
       - name: Upload coverage data
         uses: codecov/codecov-action@v3
         with:
           name: Backend
           token: ${{ secrets.CODECOV_TOKEN }}
+          # fail_ci_if_error: true
           files: /home/runner/frappe-bench/sites/coverage.xml
           verbose: true
+
+      - name: Upload UI coverage data
+        uses: codecov/codecov-action@v3
+        with:
+          name: Cypress
+          # fail_ci_if_error: true
+          files: /home/runner/frappe-bench/apps/frappe/.cypress-coverage/clover.xml
+          verbose: true
+
+      - name: Show bench output
+        if: ${{ failure() }}
+        run: |
+          cat ~/frappe-bench/bench_start.log
+

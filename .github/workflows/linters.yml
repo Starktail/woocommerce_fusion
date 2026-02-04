@@ -1,29 +1,99 @@
+
 name: Linters
 
 on:
-  pull_request: { }
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: commitcheck-frappe-${{ github.event_name }}-${{ github.event.number }}
+  cancel-in-progress: true
 
 jobs:
-
-  linters:
-    name: linters
+  commit-lint:
+    name: 'Semantic Commits'
     runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
+    if: github.event_name == 'pull_request'
 
-      - name: Set up Python 3.10
-        uses: actions/setup-python@v4
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 200
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          check-latest: true
+
+      - name: Check commit titles
+        env:
+          npm_config_ignore_scripts: "true"
+        run: |
+          npm i -D --no-save \
+            @commitlint/cli @commitlint/config-conventional \
+            conventional-changelog-conventionalcommits
+          npx commitlint --verbose \
+            --from ${{ github.event.pull_request.base.sha }} \
+            --to   ${{ github.event.pull_request.head.sha }}
+
+
+  linter:
+    name: 'Semgrep Rules'
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: '3.10'
-
-      - name: Install and Run Pre-commit
-        uses: pre-commit/action@v3.0.0
+          cache: pip
 
       - name: Download Semgrep rules
         run: git clone --depth 1 https://github.com/frappe/semgrep-rules.git frappe-semgrep-rules
 
-      - name: Download semgrep
-        run: pip install semgrep==1.31.1
-
       - name: Run Semgrep rules
-        run: semgrep ci --config ./frappe-semgrep-rules/rules --config r/python.lang.correctness
+        run: |
+          pip install semgrep
+          semgrep ci --config ./frappe-semgrep-rules/rules --config r/python.lang.correctness
+
+  deps-vulnerable-check:
+    name: 'Vulnerable Dependency Check'
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+
+      - uses: actions/checkout@v5
+
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('**/*requirements.txt', '**/pyproject.toml', '**/setup.py') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+            ${{ runner.os }}-
+
+      - name: Install and run pip-audit
+        run: |
+          pip install pip-audit
+          cd ${GITHUB_WORKSPACE}
+          pip-audit --desc on .
+
+  precommit:
+    name: 'Pre-Commit'
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.10'
+          cache: pip
+      - uses: pre-commit/action@v3.0.1

@@ -1,0 +1,12 @@
+# Ignore vitepress dist files
+www/woocommerce_fusion_*.py
+www/404.py
+www/woocommerce_fusion_*.html
+www/404.html
+www/hashmap.json
+www/vp-icons.css
+www/assets
+public/app.*.js
+public/woocommerce_fusion_*.js
+public/style.*.css
+public/chunks

@@ -6,9 +6,9 @@
 
 ## Type of change
 
-- ⚪ Bug fix (change which fixes an issue)
-- 🟢 New feature (change which adds functionality)
-- ⚪ Breaking change (fix or feature that would cause existing functionality to not work as expected)
+- [ ] Bug fix (change which fixes an issue)
+- [ ] New feature (change which adds functionality)
+- [ ] Breaking change (fix or feature that would cause existing functionality to not work as expected)
 
 
 ## Tests

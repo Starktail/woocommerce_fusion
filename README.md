@@ -1,93 +1,98 @@
-## WooCommerce Fusion
+<div align="center" markdown="1">
+
+<img src="docs/images/woologo.png" width="80" />
+
+# WooCommerce Fusion
+
+**WooCommerce Fusion**
+![demo screenshot](docs/images/screenshot.png)
+</div>
+
+
+### WooCommerce Fusion
 
 ![CI workflow](https://github.com/dvdl16/woocommerce_fusion/actions/workflows/ci.yml/badge.svg?branch=version-15)
 [![codecov](https://codecov.io/gh/dvdl16/woocommerce_fusion/graph/badge.svg?token=A5OR5QIOUX)](https://codecov.io/gh/dvdl16/woocommerce_fusion)
+
+WooCommerce Fusion
+
+### License
+
+GNU GPL V3
+
+The code is licensed as GNU General Public License (v3) and the copyright is owned by Starktail (Pty) Ltd and Contributors.
+
+
+### Features
 
 WooCommerce connector for ERPNext v15
 
 This app allows you to synchronise your ERPNext site with **multiple** WooCommerce websites
 
-### Features
-
-- [Sales Order Synchronisation](https://woocommerce-fusion-docs.starktail.com/features/sales-order)
-- [Item Synchronisation](https://woocommerce-fusion-docs.starktail.com/features/items)
-- [Sync Item Stock Levels](https://woocommerce-fusion-docs.starktail.com/features/item-stock-levels)
-- [Sync Item Prices](https://woocommerce-fusion-docs.starktail.com/features/item-prices)
-- [Integration with WooCommerce Plugins](https://woocommerce-fusion-docs.starktail.com/features/woocommerce-plugins)
+- Sales Order Synchronisation
+- Item Synchronisation
+- Sync Item Stock Levels
+- Sync Item Prices
+- Integration with WooCommerce Plugins
 
 ### User documentation
 
-User documentation is hosted at [woocommerce-fusion-docs.starktail.com](https://woocommerce-fusion-docs.starktail.com)
+📄 User documentation is hosted at [woocommerce-fusion-docs.starktail.com](https://woocommerce-fusion-docs.starktail.com)
 
-### Manual Installation
+### Installation
 
-1. [Install bench](https://github.com/frappe/bench).
-2. [Install ERPNext](https://github.com/frappe/erpnext#installation).
-3. Once ERPNext is installed, add the woocommerce_fusion app to your bench by running
+You can install this app using the [bench](https://github.com/frappe/bench) CLI:
 
-	```sh
-	$ bench get-app https://github.com/dvdl16/woocommerce_fusion
-	```
-4. After that, you can install the woocommerce_fusion app on the required site by running
-	```sh
-	$ bench --site sitename install-app woocommerce_fusion
-	```
-
-
-### Tests
-
-#### Requirements
-For integration tests, we use [WordPress Playground](https://wordpress.org/playground/development-environments/) to spin up temporary Wordpress websites:
-
-```shell
-npm i @wp-playground/cli
-```
-
-You also need to install [Caddy](https://caddyserver.com/docs/install#install), which acts as a reverse proxy. This allows us to call the Wordpress/WooCommerce API over SSL so that the same authentication method is used as production sites
-
-Furthermore, have a Frappe site available with ERPNext and WooCommerce Fusion pre-installed.
-
-#### Run unit and integration tests
-
-1. Navigate to the app directory
-```
-cd frappe-bench/apps/woocommerce_fusion
-```
-
-2. Start Wordpress Playground
-```shell
-npx @wp-playground/cli server --blueprint wp_woo_blueprint.json  --site-url=https://woo-test.localhost
-```
-
-3. Start Caddy
-```shell
-caddy run --config wp_woo_caddy --adapter caddyfile
-```
-
-*Should you want to check out the locally running wordpress instance, navigate to [https://woo-test.localhost](https://woo-test.localhost) in your browser. The default login details are `admin` and `password`. Also, ensure an entry exists in your hosts file that points woo-test.localhost to 127.0.0.1*
-
-4. Set the correct environment variables and run the tests
-```shell
-export WOO_INTEGRATION_TESTS_WEBSERVER="https://woo-test.localhost"
-export WOO_API_CONSUMER_KEY="ck_test_123456789"
-export WOO_API_CONSUMER_SECRET="cs_test_abcdefg"
-export DEV_SERVER=1
-bench --site test_site run-tests --app woocommerce_fusion --coverage
+```bash
+cd $PATH_TO_YOUR_BENCH
+bench get-app $URL_OF_THIS_REPO --branch develop
+bench install-app woocommerce_fusion
 ```
 
 ### Development
 
-We use [pre-commit](https://pre-commit.com/) for linting. First time setup may be required:
-```shell
-# Install pre-commit
-pip install pre-commit
+#### Tests
 
-# Install the git hook scripts
+To run unit tests:
+
+```shell
+bench --site test_site run-tests --app woocommerce_fusion --coverage
+```
+
+To run UI/integration tests:
+
+The following depencies are required
+```shell
+sudo apt update
+# Dependencies for cypress: https://docs.cypress.io/guides/continuous-integration/introduction#UbuntuDebian
+sudo apt-get install libgtk2.0-0 libgtk-3-0 libgbm-dev libnotify-dev libgconf-2-4 libnss3 libxss1 libasound2 libxtst6 xauth xvfb
+
+sudo apt-get install chromium
+```
+
+```shell
+bench --site test_site run-ui-tests woocommerce_fusion --headless --browser chromium
+```
+
+#### Contributing
+
+This app uses `pre-commit` for code formatting and linting. Please [install pre-commit](https://pre-commit.com/#installation) and enable it for this repository:
+
+```bash
+cd apps/woocommerce_fusion
 pre-commit install
 
 #(optional) Run against all the files
 pre-commit run --all-files
 ```
+
+Pre-commit is configured to use the following tools for checking and formatting your code:
+
+- ruff
+- eslint
+- prettier
+- pyupgrade
+
 
 We use [Semgrep](https://semgrep.dev/docs/getting-started/) rules specific to [Frappe Framework](https://github.com/frappe/frappe)
 ```shell
@@ -101,22 +106,14 @@ git clone --depth 1 https://github.com/frappe/semgrep-rules.git frappe-semgrep-r
 semgrep --config=/workspace/development/frappe-semgrep-rules/rules apps/woocommerce_fusion
 ```
 
-If you use VS Code, you can specify the `.flake8` config file in your `settings.json` file:
-```shell
-"python.linting.flake8Args": ["--config=frappe-bench-v15/apps/woocommerce_fusion/.flake8_strict"]
-```
+#### Updating Documentation
 
+For documentation, we use [vitepress](https://vitepress.dev/). You can run `yarn docs:dev` to preview the docs when applying changes
 
-The documentation has been generated using [mdBook](https://rust-lang.github.io/mdBook/guide/creating.html)
+#### CI
 
-Make sure you have [mdbook](https://rust-lang.github.io/mdBook/guide/installation.html) installed/downloaded. To modify and test locally:
-```shell
-cd docs
-mdbook serve --open
-```
+This app can use GitHub Actions for CI. The following workflows are configured:
 
-### License
+- CI: Installs this app and runs unit tests on every push to `develop` branch.
+- Linters: Runs [Frappe Semgrep Rules](https://github.com/frappe/semgrep-rules) and [pip-audit](https://pypi.org/project/pip-audit/) on every pull request, as well as [Semgrep](https://semgrep.dev/docs/getting-started/)
 
-GNU GPL V3
-
-The code is licensed as GNU General Public License (v3) and the copyright is owned by Finfoot Tech (Pty) Ltd and Contributors.

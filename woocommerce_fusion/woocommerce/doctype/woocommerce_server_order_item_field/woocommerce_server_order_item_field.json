@@ -24,7 +24,7 @@
   },
   {
    "description": "e.g. <code>$.short_description</code> or <code>$.meta_data[0].value</code> where <code>$</code> refers to WooCommerce Product",
-   "documentation_url": "https://woocommerce-fusion-docs.starktail.com/features/sales-order.html#fields-mapping",
+   "documentation_url": "https://woocommerce-fusion-docs.starktail.com/woocommerce_fusion_sales-order#fields-mapping",
    "fieldname": "woocommerce_field_name",
    "fieldtype": "Data",
    "in_list_view": 1,

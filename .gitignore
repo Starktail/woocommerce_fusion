@@ -5,3 +5,13 @@
 tags
 woocommerce_fusion/docs/current
 node_modules/
+cypress/videos
+cypress/screenshots
+woocommerce_fusion/public/node_modules
+
+# Package management is managed by bench
+yarn.lock
+
+# Docs
+docs/.vitepress/dist
+docs/.vitepress/cache
