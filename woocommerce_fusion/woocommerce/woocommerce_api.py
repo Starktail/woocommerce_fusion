@@ -421,6 +421,87 @@ class WooCommerceResource(Document):
 	def after_db_update(self):
 		pass
 
+	@classmethod
+	def db_batch(
+		cls,
+		woocommerce_server: str,
+		create: Optional[List[Dict]] = None,
+		update: Optional[List[Dict]] = None,
+		delete: Optional[List[int]] = None,
+	) -> Dict:
+		"""
+		Performs batch operations (create, update, delete) on WooCommerce resources.
+
+		Args:
+		        woocommerce_server: Name of the WooCommerce Server to use
+		        create: List of dictionaries containing data for new resources
+		        update: List of dictionaries containing data for updating existing resources (must include 'id')
+		        delete: List of resource IDs to delete
+
+		Returns:
+		        Dict containing the API response with created, updated, and deleted resources
+
+		Example:
+		        WooCommerceProduct.db_batch(
+		                woocommerce_server="site1.example.com",
+		                update=[
+		                        {"id": 123, "name": "Updated Product 1", "price": "19.99"},
+		                        {"id": 456, "name": "Updated Product 2", "price": "29.99"}
+		                ],
+		                delete=[789]
+		        )
+		"""
+		# Initialise the WC API
+		wc_api_list = cls._init_api()
+
+		# Select the relevant WooCommerce server
+		wc_api = next(
+			(api for api in wc_api_list if api.woocommerce_server == woocommerce_server),
+			None,
+		)
+
+		if not wc_api:
+			frappe.throw(_(f"WooCommerce Server '{woocommerce_server}' not found or not enabled"))
+
+		# Prepare batch data
+		batch_data = {}
+
+		if create:
+			# Process create data
+			processed_create = []
+			for record in create:
+				processed_record = cls.deserialize_attributes_of_type_dict_or_list(record.copy())
+				processed_create.append(processed_record)
+			batch_data["create"] = processed_create
+
+		if update:
+			# Process update data
+			processed_update = []
+			for record in update:
+				if "id" not in record:
+					frappe.throw(_("Each update record must contain an 'id' field"))
+				processed_record = cls.deserialize_attributes_of_type_dict_or_list(record.copy())
+				processed_update.append(processed_record)
+			batch_data["update"] = processed_update
+
+		if delete:
+			batch_data["delete"] = delete
+
+		if not batch_data:
+			frappe.throw(_("At least one operation (create, update, or delete) must be specified"))
+
+		# Make batch API call
+		endpoint = f"{cls.resource}/batch"
+		try:
+			response = wc_api.api.post(endpoint, data=batch_data)
+		except Exception as err:
+			log_and_raise_error(err, error_text="db_batch failed")
+
+		if response.status_code not in [200, 201]:
+			log_and_raise_error(error_text="db_batch failed", response=response)
+
+		return response.json()
+
 	def delete(self):
 		frappe.throw(_("Deleting resources have not been implemented yet"))
 

@@ -140,9 +140,7 @@ doc_events = {
 # ---------------
 
 scheduler_events = {
-	# 	"all": [
-	# 		"woocommerce_fusion.tasks.all"
-	# 	],
+	"all": ["woocommerce_fusion.tasks.batch_queue.process_all_queues"],
 	# 	"weekly": [
 	# 		"woocommerce_fusion.tasks.daily"
 	# 	],

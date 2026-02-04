@@ -7,7 +7,8 @@
  "field_order": [
   "wc_last_sync_date",
   "wc_last_sync_date_items",
-  "minimum_creation_date"
+  "minimum_creation_date",
+  "enable_batch_queue"
  ],
  "fields": [
   {
@@ -29,12 +30,20 @@
    "in_list_view": 1,
    "label": "Last Items Syncronisation Date",
    "reqd": 1
+  },
+  {
+   "default": "0",
+   "description": "Experimental feature to improve performance and reduce load on WooCommerce Server",
+   "fieldname": "enable_batch_queue",
+   "fieldtype": "Check",
+   "label": "Enable Batch Queue"
   }
  ],
+ "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "issingle": 1,
  "links": [],
- "modified": "2024-06-07 06:26:26.940482",
+ "modified": "2025-11-10 12:23:40.844657",
  "modified_by": "Administrator",
  "module": "WooCommerce",
  "name": "WooCommerce Integration Settings",
@@ -51,6 +60,7 @@
    "write": 1
   }
  ],
+ "row_format": "Dynamic",
  "sort_field": "modified",
  "sort_order": "DESC",
  "states": []

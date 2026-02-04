@@ -1,7 +1,7 @@
 import json
 from dataclasses import dataclass
 from datetime import datetime
-from typing import List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 
 import frappe
 from erpnext.stock.doctype.item.item import Item
@@ -32,12 +32,34 @@ def run_item_sync_from_hook(doc, method):
 		and not doc.flags.get("created_by_sync", None)
 		and len(doc.woocommerce_servers) > 0
 	):
-		frappe.msgprint(
-			_("Background sync to WooCommerce triggered for {0} {1}").format(frappe.bold(doc.name), method),
-			indicator="blue",
-			alert=True,
-		)
-		frappe.enqueue(clear_sync_hash_and_run_item_sync, item_code=doc.name)
+		# Check if batch queue is enabled
+		settings = frappe.get_cached_doc("WooCommerce Integration Settings")
+		use_batch_queue = settings.enable_batch_queue
+
+		if use_batch_queue:
+			# Add to batch queue for processing
+			from woocommerce_fusion.tasks.batch_queue import add_to_batch_queue
+
+			for wc_server_row in doc.woocommerce_servers:
+				if wc_server_row.enabled:
+					clear_sync_hash(item_code=doc.name)
+					add_to_batch_queue(doc.name, wc_server_row.woocommerce_server)
+
+			frappe.msgprint(
+				_("Item {0} added to WooCommerce sync queue").format(frappe.bold(doc.name)),
+				indicator="blue",
+				alert=True,
+			)
+		else:
+			# Use legacy immediate sync
+			frappe.msgprint(
+				_("Background sync to WooCommerce triggered for {0} {1}").format(
+					frappe.bold(doc.name), method
+				),
+				indicator="blue",
+				alert=True,
+			)
+			frappe.enqueue(clear_sync_hash_and_run_item_sync, item_code=doc.name)
 
 
 @frappe.whitelist()
@@ -663,11 +685,15 @@ def get_item_price_rate(item: ERPNextItemToSync):
 
 
 def clear_sync_hash_and_run_item_sync(item_code: str):
+	if clear_sync_hash(item_code=item_code) > 0:
+		run_item_sync(item_code=item_code, enqueue=True)
+
+
+def clear_sync_hash(item_code: str) -> int:
 	"""
 	Clear the last sync hash value using db.set_value, as it does not call the ORM triggers
 	and it does not update the modified timestamp (by using the update_modified parameter)
 	"""
-
 	iws = frappe.qb.DocType("Item WooCommerce Server")
 
 	iwss = (
@@ -683,5 +709,329 @@ def clear_sync_hash_and_run_item_sync(item_code: str):
 			update_modified=False,
 		)
 
-	if len(iwss) > 0:
-		run_item_sync(item_code=item_code, enqueue=True)
+	return len(iwss)
+
+
+@frappe.whitelist()
+def batch_update_woocommerce_products(item_codes: Optional[List[str]] = None) -> Dict[str, any]:
+	"""
+	Batch create/update multiple WooCommerce products from ERPNext items.
+
+	This function collects multiple items that need to be synced to WooCommerce,
+	auto-detects whether each needs to be created or updated based on woocommerce_id,
+	groups them by WooCommerce server, and sends batch requests to reduce API calls.
+
+	Logic:
+	- If item has no woocommerce_id → CREATE in WooCommerce
+	- If item has woocommerce_id → UPDATE in WooCommerce (if changed)
+
+	Args:
+	        item_codes: List of ERPNext Item codes to sync. If None, will sync all items
+	                           that need syncing based on their sync hash.
+
+	Returns:
+	        Dict containing summary of batch operations per server, including:
+	        - created_count: Number of products created
+	        - updated_count: Number of products updated
+	        - items: Dict with lists of created and updated IDs
+
+	Example:
+	        batch_update_woocommerce_products(["ITEM-001", "ITEM-002", "ITEM-003"])
+	"""
+	if isinstance(item_codes, str):
+		import json as json_lib
+
+		item_codes = json_lib.loads(item_codes)
+
+	# Get items to sync
+	if item_codes:
+		items_to_sync = [frappe.get_doc("Item", code) for code in item_codes]
+	else:
+		# Get all items that have WooCommerce servers configured
+		items_to_sync = frappe.get_all("Item", filters={"disabled": 0}, fields=["name"])
+		items_to_sync = [
+			frappe.get_doc("Item", item.name)
+			for item in items_to_sync
+			if frappe.get_doc("Item", item.name).woocommerce_servers
+		]
+
+	# Group items by server and collect WooCommerce IDs to fetch
+	items_by_server = {}  # {server: [(item, wc_server_row), ...]}
+	wc_ids_by_server = {}  # {server: [wc_id, ...]}
+	items_to_create_by_server = {}  # {server: [(item, wc_server_row), ...]}
+
+	# Auto-detect operation type based on woocommerce_id
+	for item in items_to_sync:
+		for wc_server_row in item.woocommerce_servers:
+			if not wc_server_row.enabled:
+				continue
+
+			server_name = wc_server_row.woocommerce_server
+
+			if not wc_server_row.woocommerce_id:
+				# No WooCommerce ID = CREATE operation
+				if server_name not in items_to_create_by_server:
+					items_to_create_by_server[server_name] = []
+				items_to_create_by_server[server_name].append((item, wc_server_row))
+			else:
+				# Has WooCommerce ID = UPDATE operation
+				if server_name not in items_by_server:
+					items_by_server[server_name] = []
+					wc_ids_by_server[server_name] = []
+				items_by_server[server_name].append((item, wc_server_row))
+				wc_ids_by_server[server_name].append(str(wc_server_row.woocommerce_id))
+
+	# Now process items for batch operations
+	updates_by_server = {}
+	creates_by_server = {}
+	items_processed = []
+
+	# First, handle CREATE operations (items without woocommerce_id)
+	for server_name, item_tuples in items_to_create_by_server.items():
+		for item, wc_server_row in item_tuples:
+			# Prepare create data for this product
+			item_for_sync = ERPNextItemToSync(item=item, item_woocommerce_server_idx=wc_server_row.idx)
+			sync = SynchroniseItem(item=item_for_sync, woocommerce_product=None)
+
+			# Build the create data
+			create_data = {
+				"type": "simple",
+				"name": item.item_name,
+				"regular_price": get_item_price_rate(item_for_sync) or "0",
+			}
+
+			# Handle variants
+			if item.has_variants:
+				create_data["type"] = "variable"
+				# TODO: Handle attributes for variable products
+			elif item.variant_of:
+				create_data["type"] = "variation"
+				# TODO: Handle parent_id and attributes for variations
+
+			# Get field mappings
+			product_fields_changed, temp_wc_product = sync.set_product_fields(
+				frappe.get_doc({"doctype": "WooCommerce Product", "woocommerce_server": server_name}),
+				item_for_sync,
+			)
+
+			if product_fields_changed:
+				temp_wc_product_dict = temp_wc_product.to_dict()
+				for key, value in temp_wc_product_dict.items():
+					if key not in ["name", "modified", "doctype", "woocommerce_id"] and value:
+						create_data[key] = value
+
+			if server_name not in creates_by_server:
+				creates_by_server[server_name] = []
+
+			# Deserialize the create data
+			create_data_deserialized = WooCommerceProduct.deserialize_attributes_of_type_dict_or_list(
+				create_data
+			)
+			creates_by_server[server_name].append(create_data_deserialized)
+			items_processed.append(
+				{"item_code": item.name, "woocommerce_id": None, "server": server_name, "operation": "create"}
+			)
+
+	# Second, handle UPDATE operations (items with woocommerce_id)
+	for server_name, item_tuples in items_by_server.items():
+		# Fetch all WooCommerce products for this server using filter
+		wc_ids = wc_ids_by_server[server_name]
+		if not wc_ids:
+			continue
+
+		# Build filters - use "in" operator for multiple IDs
+		filters = [["WooCommerce Product", "id", "in", wc_ids]]
+		servers = [server_name]
+
+		try:
+			# Fetch products in bulk
+			woocommerce_product = frappe.get_doc({"doctype": "WooCommerce Product"})
+			wc_products = woocommerce_product.get_list(
+				args={
+					"filters": filters,
+					"page_length": 100,
+					"start": 0,
+					"servers": servers,
+					"as_doc": True,
+				}
+			)
+		except Exception:
+			frappe.log_error("Batch Fetch WooCommerce Products Error", frappe.get_traceback())
+			continue
+
+		# Create a mapping of wc_id -> wc_product for quick lookup
+		# Convert to int to ensure type consistency
+		wc_products_map = {int(wc_product.woocommerce_id): wc_product for wc_product in wc_products}
+
+		# Process each item with its corresponding WooCommerce product
+		for item, wc_server_row in item_tuples:
+			wc_product = wc_products_map.get(int(wc_server_row.woocommerce_id))
+			if not wc_product:
+				# Product doesn't exist in WooCommerce, skip
+				continue
+
+			# Check sync hash - skip if already in sync
+			if wc_product.woocommerce_date_modified == wc_server_row.woocommerce_last_sync_hash:
+				# Already in sync, skip
+				continue
+
+			# Check if update is needed based on modified timestamps
+			# Only sync TO WooCommerce if ERPNext item is newer
+			if get_datetime(wc_product.woocommerce_date_modified) >= get_datetime(item.modified):
+				# WooCommerce is same age or newer, skip (should sync FROM WooCommerce, not TO)
+				continue
+
+			# Prepare update data for this product
+			item_for_sync = ERPNextItemToSync(item=item, item_woocommerce_server_idx=wc_server_row.idx)
+			sync = SynchroniseItem(item=item_for_sync, woocommerce_product=wc_product)
+
+			# Build the update data
+			update_data = {"id": wc_product.woocommerce_id}
+
+			# Update name if changed
+			if wc_product.woocommerce_name != item.item_name:
+				update_data["name"] = item.item_name
+
+			# Get field mappings
+			product_fields_changed, temp_wc_product = sync.set_product_fields(wc_product, item_for_sync)
+
+			if product_fields_changed:
+				# Get the changed fields by comparing
+				wc_product_dict = wc_product.to_dict()
+				temp_wc_product_dict = temp_wc_product.to_dict()
+
+				for key, value in temp_wc_product_dict.items():
+					if wc_product_dict.get(key) != value and key not in ["name", "modified", "doctype"]:
+						update_data[key] = value
+
+			# Only add to batch if there are actual changes
+			if len(update_data) > 1:  # More than just the 'id'
+				if server_name not in updates_by_server:
+					updates_by_server[server_name] = []
+
+				# Deserialize the update data
+				update_data_deserialized = WooCommerceProduct.deserialize_attributes_of_type_dict_or_list(
+					update_data
+				)
+				updates_by_server[server_name].append(update_data_deserialized)
+				items_processed.append(
+					{
+						"item_code": item.name,
+						"woocommerce_id": wc_product.woocommerce_id,
+						"server": server_name,
+						"operation": "update",
+					}
+				)
+
+	# Execute batch operations for each server
+	results = {}
+	all_servers = set(list(creates_by_server.keys()) + list(updates_by_server.keys()))
+
+	for server_name in all_servers:
+		creates = creates_by_server.get(server_name, [])
+		updates = updates_by_server.get(server_name, [])
+
+		if not creates and not updates:
+			continue
+
+		try:
+			result = WooCommerceProduct.db_batch(
+				woocommerce_server=server_name,
+				create=creates if creates else None,
+				update=updates if updates else None,
+			)
+
+			results[server_name] = {
+				"success": True,
+				"created_count": len(result.get("create", [])),
+				"updated_count": len(result.get("update", [])),
+				"items": {
+					"created": [c.get("id") for c in result.get("create", [])],
+					"updated": [u.get("id") for u in result.get("update", [])],
+				},
+			}
+
+			# Update sync hashes and woocommerce_ids for successfully synced items
+			# Handle created items
+			for create_record in result.get("create", []):
+				# Find the corresponding item
+				item_info = next(
+					(
+						i
+						for i in items_processed
+						if i["operation"] == "create" and i["server"] == server_name and i["woocommerce_id"] is None
+					),
+					None,
+				)
+				if item_info:
+					# Update the woocommerce_id and sync hash
+					iws = frappe.qb.DocType("Item WooCommerce Server")
+					iws_records = (
+						frappe.qb.from_(iws)
+						.where(iws.parent == item_info["item_code"])
+						.where(iws.woocommerce_server == server_name)
+						.select(iws.name)
+					).run(as_dict=True)
+
+					if iws_records:
+						frappe.db.set_value(
+							"Item WooCommerce Server",
+							iws_records[0].name,
+							{
+								"woocommerce_id": create_record["id"],
+								"woocommerce_last_sync_hash": create_record.get("date_modified"),
+							},
+							update_modified=False,
+						)
+					# Mark as processed so we don't match it again
+					item_info["woocommerce_id"] = create_record["id"]
+
+			# Handle updated items
+			for update_record in result.get("update", []):
+				# Find the corresponding item
+				item_info = next(
+					(
+						i
+						for i in items_processed
+						if i["operation"] == "update"
+						and i["woocommerce_id"] == update_record["id"]
+						and i["server"] == server_name
+					),
+					None,
+				)
+				if item_info:
+					# Update the sync hash
+					iws = frappe.qb.DocType("Item WooCommerce Server")
+					iws_records = (
+						frappe.qb.from_(iws)
+						.where(iws.parent == item_info["item_code"])
+						.where(iws.woocommerce_server == server_name)
+						.where(iws.woocommerce_id == update_record["id"])
+						.select(iws.name)
+					).run(as_dict=True)
+
+					if iws_records:
+						frappe.db.set_value(
+							"Item WooCommerce Server",
+							iws_records[0].name,
+							"woocommerce_last_sync_hash",
+							update_record.get("date_modified"),
+							update_modified=False,
+						)
+
+		except Exception as err:
+			results[server_name] = {
+				"success": False,
+				"error": str(err),
+				"items": {
+					"created": [c.get("name", "") for c in creates],
+					"updated": [u.get("id", "") for u in updates],
+				},
+			}
+			frappe.log_error("WooCommerce Batch Operation Error", frappe.get_traceback())
+
+	return {
+		"total_items_processed": len(items_processed),
+		"servers": results,
+		"items": items_processed,
+	}
