@@ -53,6 +53,32 @@ bench install-app woocommerce_fusion
 
 #### Tests
 
+1. Navigate to the app directory
+```shell
+cd frappe-bench/apps/woocommerce_fusion
+```
+
+2. Start Wordpress Playground
+```shell
+npx @wp-playground/cli server --blueprint wp_woo_blueprint.json  --site-url=https://woo-test.localhost
+```
+
+3. Start Caddy
+```shell
+caddy run --config wp_woo_caddy --adapter caddyfile
+```
+
+*Should you want to check out the locally running wordpress instance, navigate to [https://woo-test.localhost](https://woo-test.localhost) in your browser. The default login details are `admin` and `password`. Also, ensure an entry exists in your hosts file that points woo-test.localhost to 127.0.0.1*
+
+4. Set the correct environment variables and run the tests
+```shell
+export WOO_INTEGRATION_TESTS_WEBSERVER="https://woo-test.localhost"
+export WOO_API_CONSUMER_KEY="ck_test_123456789"
+export WOO_API_CONSUMER_SECRET="cs_test_abcdefg"
+export DEV_SERVER=1
+bench --site test_site run-tests --app woocommerce_fusion --coverage
+```
+
 To run unit tests:
 
 ```shell
