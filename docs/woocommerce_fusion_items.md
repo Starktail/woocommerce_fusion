@@ -6,7 +6,7 @@ To link your ERPNext Item to a WooCommerce Product:
 - If the WooCommerce Product already exists, specify the WooCommerce ID and WooCommerce Server
 - If you want the item to be created in WooCommerce, specify only the WooCommerce Server
 
-![Linking an item](../images/item-link.png)
+![Linking an item](images/item-link.png)
 
 ## Hooks
 
@@ -52,7 +52,7 @@ Here are a few examples:
 where `$` refers to the **WooCommerce Product** object
 
 
-![Item Fields Mapping](../images/item-fields-mapping-2.png)
+![Item Fields Mapping](images/item-fields-mapping-2.png)
 
 To figure out the correct JSONPath expression, you can:
 1. Go to any **WooCommerce Request Log** and filter for the `products` endpoints

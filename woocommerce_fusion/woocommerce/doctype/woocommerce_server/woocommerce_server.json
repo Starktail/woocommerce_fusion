@@ -247,7 +247,7 @@
   },
   {
    "default": "0",
-   "documentation_url": "https://woocommerce-fusion-docs.starktail.com/woocommerce-plugins",
+   "documentation_url": "https://woocommerce-fusion-docs.starktail.com/woocommerce_fusion_plugins",
    "fieldname": "wc_plugin_advanced_shipment_tracking",
    "fieldtype": "Check",
    "label": "Enable integration with 'Advanced Shipment Tracking' WooCommerce Plugin"

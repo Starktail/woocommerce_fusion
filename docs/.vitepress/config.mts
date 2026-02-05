@@ -21,7 +21,7 @@ export default defineConfig({
       { text: 'Item Price Sync', link: '/woocommerce_fusion_item-prices' },
       { text: 'Item Stock Level Sync', link: '/woocommerce_fusion_item-stock-levels' },
       { text: 'Sales Order Sync', link: '/woocommerce_fusion_sales-order' },
-      { text: 'Plugins', link: '/woocommerce-plugins' }
+      { text: 'Plugins', link: '/woocommerce_fusion_plugins' }
     ],
 
     socialLinks: [

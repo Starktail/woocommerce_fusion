@@ -1,6 +1,6 @@
 # Sync Item Stock Levels from ERPNext to WooCommerce
 
-![Sync item stock level](../images/item-stock-levels.png)
+![Sync item stock level](images/item-stock-levels.png)
 
 ## Background Job
 
