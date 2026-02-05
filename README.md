@@ -37,7 +37,7 @@ This app allows you to synchronise your ERPNext site with **multiple** WooCommer
 
 ### User documentation
 
-📄 User documentation is hosted at [woocommerce-fusion-docs.starktail.com](https://woocommerce-fusion-docs.starktail.com)
+📄 User documentation is hosted at [woocommerce-fusion-docs.starktail.com/woocommerce_fusion_introduction](https://woocommerce-fusion-docs.starktail.com/woocommerce_fusion_introduction)
 
 ### Installation
 
