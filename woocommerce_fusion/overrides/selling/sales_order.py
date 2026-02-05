@@ -2,7 +2,8 @@ import json
 
 import frappe
 from erpnext.selling.doctype.sales_order.sales_order import SalesOrder
-from frappe import Document, _
+from frappe import _
+from frappe.model.document import Document
 from frappe.model.naming import get_default_naming_series, make_autoname
 
 from woocommerce_fusion.tasks.sync_sales_orders import run_sales_order_sync
@@ -70,7 +71,7 @@ class CustomSalesOrder(SalesOrder):
 
 
 @frappe.whitelist()
-def get_woocommerce_order_shipment_trackings(doc: Document):
+def get_woocommerce_order_shipment_trackings(doc: str):
 	"""
 	Fetches shipment tracking details from a WooCommerce order.
 	"""
@@ -84,7 +85,7 @@ def get_woocommerce_order_shipment_trackings(doc: Document):
 
 
 @frappe.whitelist()
-def update_woocommerce_order_shipment_trackings(doc: Document, shipment_trackings: list):
+def update_woocommerce_order_shipment_trackings(doc: str, shipment_trackings: list):
 	"""
 	Updates the shipment tracking details of a specific WooCommerce order.
 	"""

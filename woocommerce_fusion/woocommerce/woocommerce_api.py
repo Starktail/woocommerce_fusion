@@ -6,6 +6,7 @@ import frappe
 from frappe import _
 from frappe.model.document import Document
 from frappe.utils import format_datetime, get_datetime
+from typing_extensions import Self
 
 from woocommerce_fusion.exceptions import SyncDisabledError
 from woocommerce_fusion.tasks.utils import APIWithRequestLogging
@@ -137,7 +138,7 @@ class WooCommerceResource(Document):
 		return record
 
 	@classmethod
-	def get_list_of_records(cls, args) -> list[dict | "WooCommerceResource"]:
+	def get_list_of_records(cls, args) -> list[dict | Self]:
 		"""
 		Returns list of WooCommerce Records (list view and Report view).
 
