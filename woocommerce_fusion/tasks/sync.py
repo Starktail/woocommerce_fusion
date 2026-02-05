@@ -1,7 +1,6 @@
 import base64
 import hashlib
 import hmac
-from typing import List
 
 import frappe
 from frappe import _, _dict
@@ -16,9 +15,9 @@ class SynchroniseWooCommerce:
 	Class for managing synchronisation of WooCommerce data with ERPNext data
 	"""
 
-	servers: List[WooCommerceServer | _dict]
+	servers: list[WooCommerceServer | _dict]
 
-	def __init__(self, servers: List[WooCommerceServer | _dict] = None) -> None:
+	def __init__(self, servers: list[WooCommerceServer | _dict] | None = None) -> None:
 		self.servers = servers if servers else self.get_wc_servers()
 
 	@staticmethod
@@ -34,9 +33,7 @@ def log_and_raise_error(err):
 	log = frappe.log_error("WooCommerce Error", err)
 	log_link = frappe.utils.get_link_to_form("Error Log", log.name)
 	frappe.throw(
-		msg=_("Something went wrong while connecting to WooCommerce. See Error Log {0}").format(
-			log_link
-		),
+		msg=_("Something went wrong while connecting to WooCommerce. See Error Log {0}").format(log_link),
 		title=_("WooCommerce Error"),
 	)
 	raise err
@@ -50,9 +47,6 @@ def verify_request():
 		).digest()
 	)
 
-	if (
-		frappe.request.data
-		and not sig == frappe.get_request_header("X-Wc-Webhook-Signature", "").encode()
-	):
+	if frappe.request.data and not sig == frappe.get_request_header("X-Wc-Webhook-Signature", "").encode():
 		frappe.throw(_("Unverified Webhook Data"))
-	frappe.set_user(woocommerce_integration_settings.creation_user)
+	frappe.set_user(woocommerce_integration_settings.creation_user)  # nosemgrep

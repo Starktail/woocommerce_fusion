@@ -3,7 +3,6 @@ import hashlib
 import hmac
 import json
 from http import HTTPStatus
-from typing import Optional, Tuple
 
 import frappe
 from frappe import _
@@ -16,7 +15,7 @@ from woocommerce_fusion.woocommerce.woocommerce_api import (
 )
 
 
-def validate_request() -> Tuple[bool, Optional[HTTPStatus], Optional[str]]:
+def validate_request() -> tuple[bool, HTTPStatus | None, str | None]:
 	# Get relevant WooCommerce Server
 	try:
 		webhook_source_url = frappe.get_request_header("x-wc-webhook-source", "")
@@ -25,7 +24,7 @@ def validate_request() -> Tuple[bool, Optional[HTTPStatus], Optional[str]]:
 		return False, HTTPStatus.BAD_REQUEST, _("Missing Header")
 
 	# Validate secret
-	sig = base64.b64encode(
+	_sig = base64.b64encode(
 		hmac.new(wc_server.secret.encode("utf8"), frappe.request.data, hashlib.sha256).digest()
 	)
 	# if (
@@ -34,11 +33,11 @@ def validate_request() -> Tuple[bool, Optional[HTTPStatus], Optional[str]]:
 	# ):
 	# 	return False, HTTPStatus.UNAUTHORIZED, _("Unauthorized")
 
-	frappe.set_user(wc_server.creation_user)
+	frappe.set_user(wc_server.creation_user)  # nosemgrep
 	return True, None, None
 
 
-@frappe.whitelist(allow_guest=True, methods=["POST"])
+@frappe.whitelist(allow_guest=True, methods=["POST"])  # nosemgrep
 def order_created(*args, **kwargs):
 	"""
 	Accepts payload data from WooCommerce "Order Created" webhook

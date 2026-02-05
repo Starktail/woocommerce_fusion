@@ -4,7 +4,6 @@
 import json
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Dict, List
 
 import frappe
 
@@ -56,7 +55,7 @@ class WooCommerceOrder(WooCommerceResource):
 	resource: str = "orders"
 
 	@staticmethod
-	def _init_api() -> List[WooCommerceAPI]:
+	def _init_api() -> list[WooCommerceAPI]:
 		"""
 		Initialise the WooCommerce API
 		"""
@@ -89,7 +88,7 @@ class WooCommerceOrder(WooCommerceResource):
 	def get_list(args):
 		return WooCommerceOrder.get_list_of_records(args)
 
-	def after_load_from_db(self, order: Dict):
+	def after_load_from_db(self, order: dict):
 		return self.get_additional_order_attributes(order)
 
 	# use "args" despite frappe-semgrep-rules.rules.overusing-args, following convention in ERPNext
@@ -98,7 +97,7 @@ class WooCommerceOrder(WooCommerceResource):
 	def get_count(args) -> int:
 		return WooCommerceOrder.get_count_of_records(args)
 
-	def before_db_update(self, order: Dict):
+	def before_db_update(self, order: dict):
 		# Drop all fields except for 'status', 'shipment_trackings' and 'line_items'
 		keys_to_pop = [
 			key for key in order.keys() if key not in ("status", "shipment_trackings", "line_items")
@@ -111,7 +110,7 @@ class WooCommerceOrder(WooCommerceResource):
 	def after_db_update(self):
 		self.update_shipment_tracking()
 
-	def get_additional_order_attributes(self, order: Dict):
+	def get_additional_order_attributes(self, order: dict):
 		"""
 		Make API calls to WC to get additional order attributes, such as Tracking Data
 		managed by an additional WooCommerce plugin
@@ -121,7 +120,7 @@ class WooCommerceOrder(WooCommerceResource):
 			# If the "Advanced Shipment Tracking" WooCommerce Plugin is enabled, make an additional
 			# API call to get the tracking information
 			if self.current_wc_api.wc_plugin_advanced_shipment_tracking:
-				wc_server_domain, order_id = get_domain_and_id_from_woocommerce_record_name(self.name)
+				_wc_server_domain, order_id = get_domain_and_id_from_woocommerce_record_name(self.name)
 				try:
 					order["shipment_trackings"] = self.current_wc_api.api.get(
 						f"orders/{order_id}/shipment-trackings"
@@ -148,7 +147,9 @@ class WooCommerceOrder(WooCommerceResource):
 									None,
 								)
 								if shipment_tracking_meta_data:
-									date_shipped = datetime.fromtimestamp(int(shipment_tracking_meta_data["date_shipped"]))
+									date_shipped = datetime.fromtimestamp(
+										int(shipment_tracking_meta_data["date_shipped"])
+									)
 									shipment_tracking["date_shipped"] = date_shipped.strftime("%Y-%m-%d")
 
 					order["shipment_trackings"] = json.dumps(order["shipment_trackings"])
@@ -178,7 +179,6 @@ class WooCommerceOrder(WooCommerceResource):
 		)
 
 		if self.current_wc_api.wc_plugin_advanced_shipment_tracking and self.shipment_trackings:
-
 			# Verify if the 'shipment_trackings' field changed
 			if self.shipment_trackings != self._doc_before_save.shipment_trackings:
 				# Parse JSON

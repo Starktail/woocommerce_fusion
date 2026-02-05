@@ -3,6 +3,7 @@ import json
 import frappe
 from erpnext.selling.doctype.sales_order.sales_order import SalesOrder
 from frappe import _
+from frappe.model.document import Document
 from frappe.model.naming import get_default_naming_series, make_autoname
 
 from woocommerce_fusion.tasks.sync_sales_orders import run_sales_order_sync
@@ -34,11 +35,10 @@ class CustomSalesOrder(SalesOrder):
 				wc_servers = frappe.get_all("WooCommerce Server", fields=["name", "creation"])
 				sorted_list = sorted(wc_servers, key=lambda server: server.creation)
 				idx = next(
-					(index for (index, d) in enumerate(sorted_list) if d["name"] == self.woocommerce_server), None
+					(index for (index, d) in enumerate(sorted_list) if d["name"] == self.woocommerce_server),
+					None,
 				)
-				self.name = "WEB{}-{:06}".format(
-					idx + 1, int(self.woocommerce_id)
-				)  # Format with leading zeros to make it 6 digits
+				self.name = f"WEB{idx + 1}-{int(self.woocommerce_id):06}"  # Format with leading zeros to make it 6 digits
 		else:
 			naming_series = get_default_naming_series("Sales Order")
 			self.name = make_autoname(key=naming_series)
@@ -62,13 +62,16 @@ class CustomSalesOrder(SalesOrder):
 				if mapping:
 					if self.woocommerce_status != mapping.woocommerce_sales_order_status:
 						frappe.db.set_value(
-							"Sales Order", self.name, "woocommerce_status", mapping.woocommerce_sales_order_status
+							"Sales Order",
+							self.name,
+							"woocommerce_status",
+							mapping.woocommerce_sales_order_status,
 						)
 						frappe.enqueue(run_sales_order_sync, queue="long", sales_order_name=self.name)
 
 
 @frappe.whitelist()
-def get_woocommerce_order_shipment_trackings(doc):
+def get_woocommerce_order_shipment_trackings(doc: str):
 	"""
 	Fetches shipment tracking details from a WooCommerce order.
 	"""
@@ -82,7 +85,7 @@ def get_woocommerce_order_shipment_trackings(doc):
 
 
 @frappe.whitelist()
-def update_woocommerce_order_shipment_trackings(doc, shipment_trackings):
+def update_woocommerce_order_shipment_trackings(doc: str, shipment_trackings: list):
 	"""
 	Updates the shipment tracking details of a specific WooCommerce order.
 	"""
@@ -99,9 +102,7 @@ def get_woocommerce_order(woocommerce_server, woocommerce_id):
 	Retrieves a specific WooCommerce order based on its site and ID.
 	"""
 	# First verify if the WooCommerce site exits, and it sync is enabled
-	wc_order_name = generate_woocommerce_record_name_from_domain_and_id(
-		woocommerce_server, woocommerce_id
-	)
+	wc_order_name = generate_woocommerce_record_name_from_domain_and_id(woocommerce_server, woocommerce_id)
 	wc_server = frappe.get_cached_doc("WooCommerce Server", woocommerce_server)
 
 	if not wc_server:

@@ -41,7 +41,7 @@ class TestCustomSalesOrder(FrappeTestCase):
 		"""
 
 		class DummyWooCommerceOrder:
-			def __init__(self, shipment_trackings):
+			def __init__(self, shipment_trackings: list):
 				self.shipment_trackings = shipment_trackings
 
 			def save(self):
@@ -103,7 +103,7 @@ class TestCustomSalesOrder(FrappeTestCase):
 		self.assertEqual(sales_order.name, "WEB1-000123")
 
 
-def create_so(woocommerce_id: str = None, woocommerce_server_url: str = None):
+def create_so(woocommerce_id: str | None = None, woocommerce_server_url: str | None = None):
 	so = frappe.new_doc("Sales Order")
 
 	if woocommerce_server_url:

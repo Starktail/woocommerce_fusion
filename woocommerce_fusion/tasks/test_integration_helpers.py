@@ -1,6 +1,5 @@
 import json
 import os
-from typing import List, Tuple
 
 import frappe
 from erpnext import get_default_company
@@ -36,9 +35,7 @@ class TestIntegrationWooCommerce(FrappeTestCase):
 			raise ValueError("Missing environment variables")
 
 		# Set WooCommerce Settings
-		wc_servers = frappe.get_all(
-			"WooCommerce Server", filters={"woocommerce_server_url": self.wc_url}
-		)
+		wc_servers = frappe.get_all("WooCommerce Server", filters={"woocommerce_server_url": self.wc_url})
 		if len(wc_servers) == 0:
 			wc_server = frappe.new_doc("WooCommerce Server")
 		else:
@@ -62,7 +59,7 @@ class TestIntegrationWooCommerce(FrappeTestCase):
 		wc_server.api_consumer_key = self.wc_consumer_key
 		wc_server.api_consumer_secret = self.wc_consumer_secret
 		wc_server.enable_price_list_sync = 1
-		wc_server.price_list = "_Test Price List"
+		wc_server.price_list = "_Test Price list"
 		bank_account = create_bank_account()
 		gl_account = create_gl_account_for_bank()
 		create_gl_account_for_tax()
@@ -92,16 +89,16 @@ class TestIntegrationWooCommerce(FrappeTestCase):
 		payment_method_title: str = "Direct Bank Transfer",
 		item_price: float = 10,
 		item_qty: int = 1,
-		currency: str = None,
-		customer_id: int = None,
+		currency: str | None = None,
+		customer_id: int | None = None,
 		email: str = "john.doe@example.com",
 		address_1: str = "123 Main St",
-		shipping_method_id: str = None,
-		customer_note: str = None,
-		coupon_code: str = None,
-		line_item_metadata: List[dict] = None,
-		fee_lines: List[dict] = None,
-	) -> Tuple[str, str]:
+		shipping_method_id: str | None = None,
+		customer_note: str | None = None,
+		coupon_code: str | None = None,
+		line_item_metadata: list[dict] | None = None,
+		fee_lines: list[dict] | None = None,
+	) -> tuple[str, str]:
 		"""
 		Create a dummy order on a WooCommerce testing site
 		"""
@@ -176,7 +173,7 @@ class TestIntegrationWooCommerce(FrappeTestCase):
 		id = response.json()["id"]
 		return id, self.wc_server.name + WC_RESOURCE_DELIMITER + str(response.json()["id"])
 
-	def post_woocommerce_coupon(self, coupon_code: int, percent_discount: int) -> Tuple[str, str]:
+	def post_woocommerce_coupon(self, coupon_code: int, percent_discount: int) -> tuple[str, str]:
 		"""
 		Create a coupon on a WooCommerce testing site
 		"""
@@ -215,9 +212,9 @@ class TestIntegrationWooCommerce(FrappeTestCase):
 		opening_stock: float = 0,
 		regular_price: float = 10,
 		type: str = "simple",
-		attributes: List[str] = ["Material Type", "Volume"],
-		image_url: str = None,
-		meta_data: List[dict] = None,
+		attributes: list[str] | None = None,
+		image_url: str | None = None,
+		meta_data: list[dict] | None = None,
 	) -> int:
 		"""
 		Create a dummy product on a WooCommerce testing site
@@ -225,6 +222,9 @@ class TestIntegrationWooCommerce(FrappeTestCase):
 		import json
 
 		from requests_oauthlib import OAuth1Session
+
+		if not attributes:
+			attributes = ["Material Type", "Volume"]
 
 		if type in ["variable", "variation"]:
 			for attr in attributes:
@@ -367,7 +367,7 @@ class TestIntegrationWooCommerce(FrappeTestCase):
 
 		return price
 
-	def get_woocommerce_product(self, product_id: int, parent_id: int = None) -> float:
+	def get_woocommerce_product(self, product_id: int, parent_id: int | None = None) -> float:
 		"""
 		Get a product from a WooCommerce testing site
 		"""
@@ -446,7 +446,7 @@ class TestIntegrationWooCommerce(FrappeTestCase):
 	def update_woocommerce_product_metadata(
 		self,
 		product_id: int,
-		meta_data: List[dict],
+		meta_data: list[dict],
 	) -> int:
 		"""
 		Update a product on a WooCommerce testing site
@@ -474,10 +474,7 @@ class TestIntegrationWooCommerce(FrappeTestCase):
 		return response.json()["id"]
 
 
-def create_bank_account(
-	bank_name=default_bank, account_name="_Test Bank", company=default_company
-):
-
+def create_bank_account(bank_name=default_bank, account_name="_Test Bank", company=default_company):
 	try:
 		gl_account = frappe.get_doc(
 			{
@@ -530,7 +527,7 @@ def create_bank_account(
 
 def create_gl_account_for_bank(account_name="_Test Bank"):
 	try:
-		gl_account = frappe.get_doc(
+		frappe.get_doc(
 			{
 				"doctype": "Account",
 				"company": get_default_company(),
@@ -569,7 +566,6 @@ def get_woocommerce_server(woocommerce_server_url: str):
 
 
 def create_shipping_rule(shipping_rule_type, shipping_rule_name):
-
 	if frappe.db.exists("Shipping Rule", shipping_rule_name):
 		return frappe.get_doc("Shipping Rule", shipping_rule_name)
 

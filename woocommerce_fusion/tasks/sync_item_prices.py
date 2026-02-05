@@ -1,5 +1,4 @@
 from time import sleep
-from typing import List, Optional
 
 import frappe
 from erpnext.stock.doctype.item_price.item_price import ItemPrice
@@ -32,9 +31,7 @@ def run_item_price_sync_in_background():
 
 
 @frappe.whitelist()
-def run_item_price_sync(
-	item_code: Optional[str] = None, item_price_doc: Optional[ItemPrice] = None
-):
+def run_item_price_sync(item_code: str | None = None, item_price_doc: ItemPrice | None = None):
 	sync = SynchroniseItemPrice(item_code=item_code, item_price_doc=item_price_doc)
 	sync.run()
 	return True
@@ -45,14 +42,14 @@ class SynchroniseItemPrice(SynchroniseWooCommerce):
 	Class for managing synchronisation of ERPNext Items with WooCommerce Products
 	"""
 
-	item_code: Optional[str]
-	item_price_list: List
+	item_code: str | None
+	item_price_list: list
 
 	def __init__(
 		self,
-		servers: List[WooCommerceServer | frappe._dict] = None,
-		item_code: Optional[str] = None,
-		item_price_doc: Optional[ItemPrice] = None,
+		servers: list[WooCommerceServer | frappe._dict] | None = None,
+		item_code: str | None = None,
+		item_price_doc: ItemPrice | None = None,
 	) -> None:
 		super().__init__(servers)
 		self.item_code = item_code
@@ -74,11 +71,7 @@ class SynchroniseItemPrice(SynchroniseWooCommerce):
 		Get list of ERPNext Item Prices to synchronise,
 		"""
 		self.item_price_list = []
-		if (
-			self.wc_server.enable_sync
-			and self.wc_server.enable_price_list_sync
-			and self.wc_server.price_list
-		):
+		if self.wc_server.enable_sync and self.wc_server.enable_price_list_sync and self.wc_server.price_list:
 			ip = qb.DocType("Item Price")
 			iwc = qb.DocType("Item WooCommerce Server")
 			item = qb.DocType("Item")
@@ -135,7 +128,7 @@ class SynchroniseItemPrice(SynchroniseWooCommerce):
 					wc_product.regular_price = price_list_rate
 					wc_product.save()
 			except Exception:
-				error_message = f"{frappe.get_traceback()}\n\n Product Data: \n{str(wc_product.as_dict())}"
+				error_message = f"{frappe.get_traceback()}\n\n Product Data: \n{wc_product.as_dict()}"
 				frappe.log_error("WooCommerce Error: Price List Sync", error_message)
 
 			sleep(self.wc_server.price_list_delay_per_item)

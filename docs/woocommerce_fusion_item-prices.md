@@ -1,6 +1,6 @@
 # Sync Item Prices from ERPNext to WooCommerce
 
-![Sync item prices](../images/item-prices.png)
+![Sync item prices](images/item-prices.png)
 
 ## Background Job
 

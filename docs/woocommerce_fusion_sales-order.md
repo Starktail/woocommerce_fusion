@@ -59,7 +59,7 @@ Here are a few examples:
 where `$` refers to the **WooCommerce Order Line** object
 
 
-![Sales Order Item Fields Mapping](../images/sales-order-item-fields-mapping.png)
+![Sales Order Item Fields Mapping](images/sales-order-item-fields-mapping.png)
 
 To figure out the correct JSONPath expression, you can:
 1. Go to any **WooCommerce Order** and look at the 'Line Items' data
@@ -97,7 +97,7 @@ Currently, **Contact** records are not updated when details change. Changes must
 - For this to work, you have to map WooCommerce Shipping Methods to ERPNext Shipping Rules 
   - You can find the *WooCommerce Shipping Method Title* fields by looking at the `method_title` values in **WooCommerce Order** > *Shipping Lines*
 
-![Sales Order Sync Shipping Rule Map](../images/so-shipping-rule-2.png)
+![Sales Order Sync Shipping Rule Map](images/so-shipping-rule-2.png)
 
 
 ## Automatic Order Status Synchronisation
@@ -107,7 +107,7 @@ Currently, **Contact** records are not updated when details change. Changes must
 - For this to work, you have to map **ERPNext Sales Order Statuses** to **WooCommerce Sales Order Statuses**
 - For example, if you map `On Hold` (ERPNext Sales Order Status) to `on-hold` (WooCommerce Sales Order Status), if you change a Sales Order's status to `On Hold`, it'll automatically attempt to set the WooCommerce Order's status to `On  Hold`
 
-![Sales Order Status Sync](../images/so-order-status.png)
+![Sales Order Status Sync](images/so-order-status.png)
 
 
 ## Troubleshooting

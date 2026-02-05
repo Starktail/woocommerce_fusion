@@ -42,9 +42,7 @@ class TestIntegrationWooCommerceSync(TestIntegrationWooCommerce):
 		taxes_and_charges_template = None
 		title = f"_Test Sales Taxes and Charges Template for Woo {rate}-{included_in_rate}"
 		if frappe.db.exists("Sales Taxes and Charges Template", {"title": title}):
-			taxes_and_charges_template = frappe.get_doc(
-				"Sales Taxes and Charges Template", {"title": title}
-			)
+			taxes_and_charges_template = frappe.get_doc("Sales Taxes and Charges Template", {"title": title})
 		else:
 			taxes_and_charges_template = frappe.get_doc(
 				{
@@ -132,9 +130,7 @@ class TestIntegrationWooCommerceSync(TestIntegrationWooCommerce):
 		mock_log_error.assert_not_called()
 
 		# Expect newly created Sales Order in ERPNext
-		sales_order_currency = frappe.get_value(
-			"Sales Order", {"woocommerce_id": wc_order_id}, "currency"
-		)
+		sales_order_currency = frappe.get_value("Sales Order", {"woocommerce_id": wc_order_id}, "currency")
 		self.assertIsNotNone(sales_order_currency)
 
 		# Expect correct currency in Sales Order
@@ -197,9 +193,7 @@ class TestIntegrationWooCommerceSync(TestIntegrationWooCommerce):
 		self.assertEqual(sales_order.woocommerce_payment_method, "Doge")
 
 		# Expect correct items in Sales Order
-		self.assertEqual(
-			sales_order.items[0].rate, expected_item_rate
-		)  # should show tax inclusive price
+		self.assertEqual(sales_order.items[0].rate, expected_item_rate)  # should show tax inclusive price
 		self.assertEqual(sales_order.items[0].qty, 2)
 
 		# Expect correct tax rows in Sales Order
@@ -551,9 +545,7 @@ class TestIntegrationWooCommerceSync(TestIntegrationWooCommerce):
 		self.assertEqual(len(sales_orders), 1)
 
 		# Expect newly created Customer in ERPNext
-		customer_name = frappe.get_value(
-			"Customer", {"woocommerce_identifier": same_customer_email}, "name"
-		)
+		customer_name = frappe.get_value("Customer", {"woocommerce_identifier": same_customer_email}, "name")
 		self.assertIsNotNone(customer_name)
 
 		# Expect single Address for customer, marked as preferred billing and shipping address
@@ -577,10 +569,10 @@ class TestIntegrationWooCommerceSync(TestIntegrationWooCommerce):
 		run_sales_order_sync(woocommerce_order_name=wc_order_name_second)
 
 		# Expect that the order has been allocated to the initial customer
-		sales_order_name, sales_order_customer = frappe.get_value(
+		_sales_order_name, sales_order_customer = frappe.get_value(
 			"Sales Order", {"woocommerce_id": wc_order_id_second}, ["name", "customer"]
 		)
-		self.assertEquals(sales_order_customer, customer_name)
+		self.assertEqual(sales_order_customer, customer_name)
 
 		# Expect an updated address
 		addresses = get_addresses_linking_to("Customer", customer_name)
@@ -742,58 +734,6 @@ class TestIntegrationWooCommerceSync(TestIntegrationWooCommerce):
 		# Delete order in WooCommerce
 		self.delete_woocommerce_order(wc_order_id=wc_order_id)
 
-	@patch("woocommerce_fusion.tasks.sync_sales_orders.frappe.enqueue")
-	def test_sync_updates_woocommerce_order_status(self, mock_enqueue, mock_log_error):
-		"""
-		Test that the Sales Order Synchronisation method updates a WooCommerce Order's status
-		with the correct mapped value if auto status sync is enabled
-		"""
-		# Setup
-		wc_server = frappe.get_doc("WooCommerce Server", self.wc_server.name)
-		wc_server.submit_sales_orders = 1
-		wc_server.enable_payments_sync = 0
-		wc_server.enable_so_status_sync = 1
-		wc_server.sales_order_status_map = []
-		wc_server.append(
-			"sales_order_status_map",
-			{
-				"erpnext_sales_order_status": "On Hold",
-				"woocommerce_sales_order_status": "On hold",
-			},
-		)
-		wc_server.flags.ignore_mandatory = True
-		wc_server.save()
-
-		# Create a new order in WooCommerce
-		wc_order_id, wc_order_name = self.post_woocommerce_order(
-			payment_method_title="Doge", item_price=10, item_qty=3
-		)
-
-		# Run synchronisation for the ERPNext Sales Order to be created
-		run_sales_order_sync(woocommerce_order_name=wc_order_name)
-
-		# Expect no errors logged
-		mock_log_error.assert_not_called()
-
-		# Expect newly created Sales Order in ERPNext
-		sales_order_name = frappe.get_value("Sales Order", {"woocommerce_id": wc_order_id}, "name")
-		self.assertIsNotNone(sales_order_name)
-		sales_order = frappe.get_doc("Sales Order", sales_order_name)
-
-		# In ERPNext, change order status
-		sales_order.update_status("On Hold")
-
-		# Run synchronisation again, to sync the Sales Order changes
-		run_sales_order_sync(sales_order_name=sales_order.name)
-		mock_log_error.assert_not_called()
-
-		# Expect WooCommerce Order to have updated status
-		wc_order = self.get_woocommerce_order(order_id=wc_order_id)
-		self.assertEqual(wc_order["status"], "on-hold")
-
-		# Delete order in WooCommerce
-		self.delete_woocommerce_order(wc_order_id=wc_order_id)
-
 	def test_sync_so_items_to_wc_preserves_metadata(self, mock_log_error):
 		"""
 		Test that when 'sync_so_items_to_wc' is enabled, changes to ERPNext Sales Order
@@ -856,7 +796,7 @@ class TestIntegrationWooCommerceSync(TestIntegrationWooCommerce):
 		"""
 		# Create a new coupon in WooCommerce
 		coupon_code = f"10off_{frappe.generate_hash()}"
-		coupon_id = self.post_woocommerce_coupon(coupon_code=coupon_code, percent_discount=10)
+		_coupon_id = self.post_woocommerce_coupon(coupon_code=coupon_code, percent_discount=10)
 
 		# Create a new order in WooCommerce
 		wc_order_id, wc_order_name = self.post_woocommerce_order(

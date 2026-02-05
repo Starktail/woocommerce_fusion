@@ -67,7 +67,7 @@ def log_woocommerce_request(
 	params: dict,
 	data: dict,
 	res: requests.Response | None = None,
-	traceback: str = None,
+	traceback: str | None = None,
 ):
 	request_log = frappe.get_doc(
 		{
@@ -78,7 +78,7 @@ def log_woocommerce_request(
 			"method": request_method,
 			"params": frappe.as_json(params) if params else None,
 			"data": frappe.as_json(data) if data else None,
-			"response": f"{str(res)}\n{res.text}" if res is not None else None,
+			"response": f"{res}\n{res.text}" if res is not None else None,
 			"error": frappe.get_traceback(),
 			"status": "Success" if res and res.status_code in [200, 201] else "Error",
 			"time_elapsed": res.elapsed.total_seconds() if res is not None else None,

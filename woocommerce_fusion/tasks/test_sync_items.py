@@ -273,9 +273,7 @@ class TestWooCommerceSync(FrappeTestCase):
 
 		wc_product_mock.insert.assert_called_once()
 
-		self.assertEqual(
-			wc_product_mock.woocommerce_server, item_woocommerce_server_mock.woocommerce_server
-		)
+		self.assertEqual(wc_product_mock.woocommerce_server, item_woocommerce_server_mock.woocommerce_server)
 		self.assertEqual(wc_product_mock.woocommerce_name, item_mock.item.item_name)
 		self.assertEqual(wc_product_mock.type, "simple")
 		self.assertEqual(wc_product_mock.regular_price, "100.00")

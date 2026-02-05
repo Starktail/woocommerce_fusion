@@ -14,7 +14,8 @@ def update_stock_levels_for_woocommerce_item(doc, method):
 			if (
 				len(
 					frappe.get_list(
-						"WooCommerce Server", filters={"enable_sync": 1, "enable_stock_level_synchronisation": 1}
+						"WooCommerce Server",
+						filters={"enable_sync": 1, "enable_stock_level_synchronisation": 1},
 					)
 				)
 				> 0
@@ -60,7 +61,7 @@ def update_stock_levels_for_all_enabled_items_in_background():
 
 
 @frappe.whitelist()
-def update_stock_levels_on_woocommerce_site(item_code):
+def update_stock_levels_on_woocommerce_site(item_code: str):
 	"""
 	Updates stock levels of an item on all its associated WooCommerce sites.
 
@@ -129,11 +130,11 @@ def update_stock_levels_on_woocommerce_site(item_code):
 						endpoint = f"products/{woocommerce_id}"
 					response = wc_api.put(endpoint=endpoint, data=data_to_post)
 				except Exception as err:
-					error_message = f"{frappe.get_traceback()}\n\nData in PUT request: \n{str(data_to_post)}"
+					error_message = f"{frappe.get_traceback()}\n\nData in PUT request: \n{data_to_post}"
 					frappe.log_error("WooCommerce Error", error_message)
 					raise err
 				if response.status_code != 200:
-					error_message = f"Status Code not 200\n\nData in PUT request: \n{str(data_to_post)}"
+					error_message = f"Status Code not 200\n\nData in PUT request: \n{data_to_post}"
 					error_message += (
 						f"\n\nResponse: \n{response.status_code}\nResponse Text: {response.text}\nRequest URL: {response.request.url}\nRequest Body: {response.request.body}"
 						if response is not None
