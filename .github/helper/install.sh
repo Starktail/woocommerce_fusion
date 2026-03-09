@@ -49,6 +49,8 @@ bench get-app --overwrite woocommerce_fusion "${GITHUB_WORKSPACE}"
 bench --verbose setup env --python python3.10
 bench --verbose setup requirements --dev
 
+~/frappe-bench/env/bin/python -m pip install --force-reinstall "setuptools==81.0.0"
+
 bench start &>> ~/frappe-bench/bench_start.log &
 CI=Yes bench build --app frappe &
 bench --site test_site reinstall --yes
