@@ -416,6 +416,21 @@ class WooCommerceResource(Document):
 
 		return record
 
+	def validate(self):
+		"""
+		Ensure JSON fields hold JSON strings, not Python lists/dicts.
+
+		Frappe now rejects list/dict values for JSON fields during _validate_length().
+		When a WooCommerceResource document is initialized from the API response, Frappe's
+		Document.__init__ parses JSON strings back into Python objects. This hook re-serializes
+		them before Frappe's validation runs.
+		"""
+		json_fields = self.get_json_fields()
+		for field in json_fields:
+			value = self.get(field.fieldname)
+			if isinstance(value, (list, dict)):
+				self.set(field.fieldname, json.dumps(value))
+
 	def before_db_update(self, record: dict):
 		return record
 
