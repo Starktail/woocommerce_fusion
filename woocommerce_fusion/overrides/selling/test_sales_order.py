@@ -60,7 +60,7 @@ class TestCustomSalesOrder(FrappeTestCase):
 
 		updated_woocommerce_order = mock_get_woocommerce_order.return_value
 
-		self.assertEqual(updated_woocommerce_order.shipment_trackings, [{"foo": "baz"}])
+		self.assertEqual(updated_woocommerce_order.shipment_trackings, json.dumps([{"foo": "baz"}]))
 
 	def test_sales_order_uses_custom_class(self, mock_get_woocommerce_order):
 		"""
