@@ -92,7 +92,7 @@ def update_woocommerce_order_shipment_trackings(doc: str, shipment_trackings: li
 	doc = frappe._dict(json.loads(doc))
 	if doc.woocommerce_server and doc.woocommerce_id:
 		wc_order = get_woocommerce_order(doc.woocommerce_server, doc.woocommerce_id)
-	wc_order.shipment_trackings = shipment_trackings
+	wc_order.shipment_trackings = json.dumps(shipment_trackings)
 	wc_order.save()
 	return wc_order.shipment_trackings
 
