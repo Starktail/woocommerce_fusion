@@ -97,6 +97,7 @@ frappe.listview_settings["Sales Order"] = {
         "Picked up": "light-green",
         Delivered: "green",
         "Processing LP": "purple",
+        "Dispatched Pickup": "purple",
         Draft: "grey",
         "Quote Sent": "grey",
         Trash: "red",
