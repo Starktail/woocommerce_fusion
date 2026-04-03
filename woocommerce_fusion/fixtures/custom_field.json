@@ -822,7 +822,7 @@
   "name": "Sales Order-woocommerce_status",
   "no_copy": 0,
   "non_negative": 0,
-  "options": "\nPending Payment\nOn hold\nFailed\nCancelled\nProcessing\nRefunded\nShipped\nReady for Pickup\nPicked up\nDelivered\nProcessing LP\nDraft\nQuote Sent\nTrash\nPartially Shipped",
+  "options": "\nPending Payment\nOn hold\nFailed\nCancelled\nProcessing\nRefunded\nShipped\nReady for Pickup\nPicked up\nDelivered\nProcessing LP\nDraft\nQuote Sent\nTrash\nPartially Shipped\nDispatched Pickup",
   "permlevel": 0,
   "precision": "",
   "print_hide": 0,
