@@ -124,6 +124,9 @@ class WooCommerceProduct(WooCommerceResource):
 		Perform some tasks to make sure that an product is in the correct format for the WC API
 		"""
 
+		if product.get("type") == "variation" or product.get("parent_id"):
+			product["status"] = "publish"
+
 		# Convert back to string
 		product["weight"] = str(product["weight"])
 		product["regular_price"] = str(product["regular_price"])
