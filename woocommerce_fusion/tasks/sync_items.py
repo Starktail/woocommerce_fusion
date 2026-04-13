@@ -120,7 +120,7 @@ def sync_woocommerce_products_modified_since(date_time_from=None):
 		except Exception:
 			pass
 
-	frappe.db.set_single_value("WooCommerce Settings", "wc_last_sync_date_items", now())
+	frappe.db.set_single_value("WooCommerce Integration Settings", "wc_last_sync_date_items", now())
 
 
 @dataclass

@@ -89,10 +89,10 @@ def sync_woocommerce_orders_modified_since(date_time_from=None):
 	# Validate
 	if not date_time_from:
 		error_text = _(
-			"'Last Items Syncronisation Date' field on 'WooCommerce Integration Settings' is missing"
+			"'Last Sales Orders Syncronisation Date' field on 'WooCommerce Integration Settings' is missing"
 		)
 		frappe.log_error(
-			"WooCommerce Items Sync Task Error",
+			"WooCommerce Sales Orders Sync Task Error",
 			error_text,
 		)
 		raise ValueError(error_text)
@@ -106,7 +106,7 @@ def sync_woocommerce_orders_modified_since(date_time_from=None):
 		except Exception:
 			pass
 
-	frappe.db.set_single_value("WooCommerce Settings", "wc_last_sync_date_items", now())
+	frappe.db.set_single_value("WooCommerce Integration Settings", "wc_last_sync_date", now())
 
 
 class SynchroniseSalesOrder(SynchroniseWooCommerce):
