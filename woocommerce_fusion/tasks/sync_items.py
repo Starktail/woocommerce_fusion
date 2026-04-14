@@ -11,6 +11,7 @@ from jsonpath_ng.ext import parse
 
 from woocommerce_fusion.exceptions import SyncDisabledError
 from woocommerce_fusion.tasks.sync import SynchroniseWooCommerce
+from woocommerce_fusion.tasks.sync_item_prices import _format_sale_date
 from woocommerce_fusion.woocommerce.doctype.woocommerce_product.woocommerce_product import (
 	WooCommerceProduct,
 )
@@ -360,6 +361,12 @@ class SynchroniseItem(SynchroniseWooCommerce):
 			wc_product.woocommerce_name = item.item.item_name
 			wc_product.regular_price = get_item_price_rate(item) or "0"
 
+			sale_price_data = get_item_sale_price_data(item)
+			if sale_price_data:
+				wc_product.sale_price = sale_price_data.price_list_rate
+				wc_product.date_on_sale_from = _format_sale_date(sale_price_data.valid_from)
+				wc_product.date_on_sale_to = _format_sale_date(sale_price_data.valid_upto)
+
 			self.set_product_fields(wc_product, item)
 
 			wc_product.insert()
@@ -637,7 +644,6 @@ def get_item_price_rate(item: ERPNextItemToSync):
 	"""
 	Get the Item Price if Item Price sync is enabled
 	"""
-	# Check if the Item Price sync is enabled
 	wc_server = frappe.get_cached_doc("WooCommerce Server", item.item_woocommerce_server.woocommerce_server)
 	if wc_server.enable_price_list_sync:
 		item_prices = frappe.get_all(
@@ -653,6 +659,33 @@ def get_item_price_rate(item: ERPNextItemToSync):
 			),
 			None,
 		)
+
+
+def get_item_sale_price_data(item: ERPNextItemToSync) -> frappe._dict | None:
+	"""
+	Get the sale price rate and validity dates for an Item if Sales Price List
+	sync is enabled on the linked WooCommerce Server.
+
+	Returns a _dict with price_list_rate, valid_from, valid_upto or None if
+	sale price sync is not enabled or no valid price record is found.
+	"""
+	wc_server = frappe.get_cached_doc("WooCommerce Server", item.item_woocommerce_server.woocommerce_server)
+	if not (
+		wc_server.enable_price_list_sync
+		and wc_server.enable_sales_price_list_sync
+		and wc_server.sales_price_list
+	):
+		return None
+
+	item_prices = frappe.get_all(
+		"Item Price",
+		filters={"item_code": item.item.item_name, "price_list": wc_server.sales_price_list},
+		fields=["price_list_rate", "valid_from", "valid_upto"],
+	)
+	return next(
+		(price for price in item_prices if not price.valid_upto or price.valid_upto > now()),
+		None,
+	)
 
 
 def clear_sync_hash_and_run_item_sync(item_code: str):

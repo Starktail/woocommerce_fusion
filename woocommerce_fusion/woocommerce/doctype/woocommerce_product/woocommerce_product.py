@@ -119,23 +119,34 @@ class WooCommerceProduct(WooCommerceResource):
 		pass
 
 	@staticmethod
-	def clean_up_product_before_write(product):
+	def clean_up_product_before_write(product: dict) -> dict:
 		"""
-		Perform some tasks to make sure that an product is in the correct format for the WC API
+		Perform some tasks to make sure that a product is in the correct format for the WC API
 		"""
 
 		if product.get("type") == "variation" or product.get("parent_id"):
 			product["status"] = "publish"
 
-		# Convert back to string
+		# Convert numeric fields back to strings required by WC API
 		product["weight"] = str(product["weight"])
 		product["regular_price"] = str(product["regular_price"])
 
-		# Do not post Sale Price if it is 0
-		if product["sale_price"] and float(product["sale_price"]) > 0:
+		# Sale price: send empty string to clear an existing sale, or string value to set one.
+		# Popping the field entirely has no effect on an existing WC sale price.
+		if product.get("sale_price") and float(product["sale_price"]) > 0:
 			product["sale_price"] = str(product["sale_price"])
 		else:
-			product.pop("sale_price")
+			product["sale_price"] = ""
+
+		# Sale date fields: normalise to ISO 8601 string, or None to clear via API
+		for date_field in ("date_on_sale_from", "date_on_sale_to"):
+			value = product.get(date_field)
+			if value:
+				product[date_field] = (
+					value.strftime("%Y-%m-%dT%H:%M:%S") if hasattr(value, "strftime") else str(value)
+				)
+			else:
+				product[date_field] = None
 
 		# Set corrected properties
 		product["name"] = str(product["woocommerce_name"])
