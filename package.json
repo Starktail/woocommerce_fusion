@@ -1,6 +1,6 @@
 {
   "name": "woocommerce_fusion",
-  "version": "1.16.6",
+  "version": "1.16.8",
   "author": "Starktail (Pty) Ltd <support@starktail.com>",
   "main": "index.js",
   "devDependencies": {
