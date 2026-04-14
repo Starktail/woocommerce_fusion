@@ -82,6 +82,8 @@
   "enable_price_list_sync",
   "price_list",
   "price_list_delay_per_item",
+  "enable_sales_price_list_sync",
+  "sales_price_list",
   "tab_plugins",
   "advanced_shipment_tracking_section",
   "wc_plugin_advanced_shipment_tracking",
@@ -316,6 +318,23 @@
    "fieldname": "price_list_delay_per_item",
    "fieldtype": "Int",
    "label": "Delay per POST Request"
+  },
+  {
+   "default": "0",
+   "depends_on": "eval: doc.enable_price_list_sync",
+   "description": "When enabled, prices from the Sales Price List below will be pushed to the 'Sale Price' field on WooCommerce Products. Sale validity dates (valid from / valid to) on the Item Price record are also synced.",
+   "fieldname": "enable_sales_price_list_sync",
+   "fieldtype": "Check",
+   "label": "Enable Sales Price List Sync"
+  },
+  {
+   "depends_on": "eval: doc.enable_price_list_sync && doc.enable_sales_price_list_sync",
+   "description": "Prices from this Price List will be synced to the WooCommerce 'Sale Price' field. If an Item Price record in this list has 'Valid From' or 'Valid Upto' dates set, these will be synced to WooCommerce as sale start/end dates.",
+   "fieldname": "sales_price_list",
+   "fieldtype": "Link",
+   "label": "Sales Price List",
+   "mandatory_depends_on": "eval: doc.enable_price_list_sync && doc.enable_sales_price_list_sync",
+   "options": "Price List"
   },
   {
    "fieldname": "tab_details",

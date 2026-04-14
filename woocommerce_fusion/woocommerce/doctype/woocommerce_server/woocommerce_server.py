@@ -71,7 +71,7 @@ class WooCommerceServer(Document):
 				except Exception as e:
 					frappe.throw(
 						_("Invalid JSONPath syntax in Item Field Map Row {0}:<br><br><pre>{1}</pre>").format(
-							map.idx, e
+							map.idx, str(e)
 						)
 					)
 

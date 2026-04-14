@@ -59,4 +59,24 @@ Click on the "Items" tab if you want to turn on Stock Level Synchronisation
 
 ---
 
+---
+
+Click on the "Price List" tab to configure price synchronisation
+
+**Settings**:
+- Enable Price List Sync
+  - Turns on synchronisation of Item Prices from ERPNext to WooCommerce
+- Price List
+  - Prices from this list are pushed to the WooCommerce *Regular Price* field
+- Delay per POST Request
+  - Seconds to wait between each product price update (increase if your WooCommerce server is rate-limiting requests)
+- Enable Sales Price List Sync
+  - When enabled, a second price list can be synced to the WooCommerce *Sale Price* field
+- Sales Price List
+  - Prices from this list are pushed to the WooCommerce *Sale Price* field. If an Item Price record in this list has *Valid From* or *Valid Upto* dates, these are synced to WooCommerce as sale start/end dates.
+
+See [Sync Item Prices](woocommerce_fusion_item-prices.md) for full details on how price and sale price sync works.
+
+---
+
 Click on the "Save" - and you are ready to go!
