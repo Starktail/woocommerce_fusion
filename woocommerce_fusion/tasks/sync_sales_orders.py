@@ -584,7 +584,7 @@ class SynchroniseSalesOrder(SynchroniseWooCommerce):
 			# Edit Customer
 			customer = frappe.get_doc("Customer", existing_customer)
 
-		customer.customer_name = company_name if company_name else individual_name
+		customer.customer_name = company_name if customer.customer_type == "Company" else individual_name
 		customer.woocommerce_identifier = customer_identifier
 
 		# Check if vat_id exists in raw_billing_data and is a valid string
