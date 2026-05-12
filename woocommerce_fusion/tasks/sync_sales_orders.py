@@ -9,7 +9,10 @@ from frappe.utils import get_datetime
 from frappe.utils.data import cstr, now
 from jsonpath_ng.ext import parse
 
-from woocommerce_fusion.exceptions import SyncDisabledError, WooCommerceOrderNotFoundError
+from woocommerce_fusion.exceptions import (
+	SyncDisabledError,
+	WooCommerceOrderNotFoundError,
+)
 from woocommerce_fusion.tasks.sync import SynchroniseWooCommerce
 from woocommerce_fusion.tasks.sync_items import run_item_sync
 from woocommerce_fusion.woocommerce.doctype.woocommerce_order.woocommerce_order import (
@@ -575,13 +578,13 @@ class SynchroniseSalesOrder(SynchroniseWooCommerce):
 			# Create Customer
 			customer = frappe.new_doc("Customer")
 			customer.woocommerce_identifier = customer_identifier
-			customer.customer_type = "Company" if company_name else "Individual"
+			customer.customer_type = "Individual" if company_name in ["Private", "Pvt"] else "Company"
 			customer.woocommerce_is_guest = is_guest
 		else:
 			# Edit Customer
 			customer = frappe.get_doc("Customer", existing_customer)
 
-		customer.customer_name = company_name if company_name else individual_name
+		customer.customer_name = company_name if customer.customer_type == "Company" else individual_name
 		customer.woocommerce_identifier = customer_identifier
 
 		# Check if vat_id exists in raw_billing_data and is a valid string
