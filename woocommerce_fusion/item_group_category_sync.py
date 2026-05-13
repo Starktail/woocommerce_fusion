@@ -322,16 +322,32 @@ def _item_group_names_with_any_category_map() -> list[str]:
 	has_legacy = bool(frappe.get_meta("Item Group").get_field(LEGACY_PARAGUAY_CATEGORY_MAP_FIELD))
 	if not has_wc and not has_legacy:
 		return []
-	cond_parts = []
-	if has_wc:
-		cond_parts.append(f"COALESCE(`{WC_ITEM_GROUP_CATEGORY_MAP_FIELD}`, '') NOT IN ('', '{{}}')")
-	if has_legacy:
-		cond_parts.append(f"COALESCE(`{LEGACY_PARAGUAY_CATEGORY_MAP_FIELD}`, '') NOT IN ('', '{{}}')")
-	where = " OR ".join(cond_parts)
-	return frappe.db.sql(
-		f"SELECT name FROM `tabItem Group` WHERE {where}",
-		pluck=True,
-	) or []
+	if has_wc and has_legacy:
+		rows = frappe.db.sql(
+			"""
+			SELECT name FROM `tabItem Group`
+			WHERE COALESCE(`wc_item_group_category_map`, '') NOT IN ('', '{}')
+			   OR COALESCE(`paraguay_wc_category_map`, '') NOT IN ('', '{}')
+			""",
+			pluck=True,
+		)
+	elif has_wc:
+		rows = frappe.db.sql(
+			"""
+			SELECT name FROM `tabItem Group`
+			WHERE COALESCE(`wc_item_group_category_map`, '') NOT IN ('', '{}')
+			""",
+			pluck=True,
+		)
+	else:
+		rows = frappe.db.sql(
+			"""
+			SELECT name FROM `tabItem Group`
+			WHERE COALESCE(`paraguay_wc_category_map`, '') NOT IN ('', '{}')
+			""",
+			pluck=True,
+		)
+	return list(rows) if rows else []
 
 
 def _remove_stale_woo_categories_for_server(
@@ -365,11 +381,7 @@ def _remove_stale_woo_categories_for_server(
 
 	remaining = set(cids)
 	while remaining:
-		leaves = [
-			c
-			for c in remaining
-			if not any(int(parent_by_cid.get(d, 0) or 0) == c for d in remaining)
-		]
+		leaves = [c for c in remaining if not any(int(parent_by_cid.get(d, 0) or 0) == c for d in remaining)]
 		if not leaves:
 			leaves = [min(remaining)]
 
@@ -512,7 +524,6 @@ def sync_item_groups_to_woocommerce(
 		synced_item_group_names=set(woo_map.keys()),
 		stats=stats,
 	)
-	frappe.db.commit()
 
 	return woo_map, stats
 
@@ -564,8 +575,10 @@ def run(
 	srv = woocommerce_server_name or os.environ.get("WOO_SERVER_NAME") or BENCH_EXECUTE_SERVER_KEY
 	if not woo_url or not woo_consumer_key or not woo_consumer_secret:
 		frappe.throw(
-			"Set woo_url, woo_consumer_key, woo_consumer_secret (or WOO_URL / "
-			"WOO_CONSUMER_KEY / WOO_CONSUMER_SECRET)."
+			_(
+				"Set woo_url, woo_consumer_key, woo_consumer_secret (or WOO_URL / "
+				"WOO_CONSUMER_KEY / WOO_CONSUMER_SECRET)."
+			)
 		)
 	root = (os.environ.get("WOO_ITEM_GROUP_SYNC_ROOT") or "").strip() or None
 	mapping, stats = sync_item_groups_to_woocommerce(
@@ -621,5 +634,3 @@ def rename_wc_categories_after_item_group_rename(
 				title=f"WooCommerce Fusion: rename category for Item Group {new_name}",
 				message=frappe.get_traceback(),
 			)
-
-	frappe.db.commit()

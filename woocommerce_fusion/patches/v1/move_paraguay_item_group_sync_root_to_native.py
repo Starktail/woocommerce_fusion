@@ -28,9 +28,9 @@ def execute():
 	if not cf_name:
 		return
 
-	if frappe.db.has_column("WooCommerce Server", "paraguay_wc_item_group_sync_root") and frappe.db.has_column(
-		"WooCommerce Server", "item_group_category_sync_root"
-	):
+	if frappe.db.has_column(
+		"WooCommerce Server", "paraguay_wc_item_group_sync_root"
+	) and frappe.db.has_column("WooCommerce Server", "item_group_category_sync_root"):
 		frappe.db.sql(
 			"""
 			UPDATE `tabWooCommerce Server`
@@ -41,5 +41,4 @@ def execute():
 		)
 
 	frappe.delete_doc("Custom Field", cf_name, force=True, ignore_permissions=True)
-	frappe.db.commit()
 	frappe.clear_cache(doctype="WooCommerce Server")

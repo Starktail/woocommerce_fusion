@@ -106,7 +106,11 @@ frappe.ui.form.on("WooCommerce Server", {
     // Utilities: sync Item Groups → WooCommerce categories (manual / one-off)
     if (!frm.is_new() && frm.fields_dict.item_group_category_sync_root) {
       const anchor = frm.fields_dict.item_group_category_sync_root;
-      if (anchor.$wrapper && anchor.$wrapper.length && !anchor.$wrapper.data("wc-fusion-item-group-sync")) {
+      if (
+        anchor.$wrapper &&
+        anchor.$wrapper.length &&
+        !anchor.$wrapper.data("wc-fusion-item-group-sync")
+      ) {
         anchor.$wrapper.data("wc-fusion-item-group-sync", 1);
         const $row = $(`
 			<div class="form-group wc-fusion-sync-item-groups" style="margin-top: 0.5rem;">
@@ -125,7 +129,8 @@ frappe.ui.form.on("WooCommerce Server", {
             return;
           }
           frappe.call({
-            method: "woocommerce_fusion.item_group_category_sync.sync_item_groups_from_woocommerce_server",
+            method:
+              "woocommerce_fusion.item_group_category_sync.sync_item_groups_from_woocommerce_server",
             args: { woocommerce_server: frm.doc.name },
             freeze: true,
             freeze_message: __("Syncing item groups to WooCommerce..."),
@@ -143,7 +148,10 @@ frappe.ui.form.on("WooCommerce Server", {
               if (d) {
                 msg +=
                   " " +
-                  __("Removed {0} stale categories no longer under this root.", [d]);
+                  __(
+                    "Removed {0} stale categories no longer under this root.",
+                    [d],
+                  );
               }
               if (de) {
                 msg +=
