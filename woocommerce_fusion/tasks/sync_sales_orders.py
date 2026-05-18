@@ -578,7 +578,15 @@ class SynchroniseSalesOrder(SynchroniseWooCommerce):
 			# Create Customer
 			customer = frappe.new_doc("Customer")
 			customer.woocommerce_identifier = customer_identifier
-			customer.customer_type = "Individual" if company_name in ["Private", "Pvt"] else "Company"
+
+			if company_name:
+				if company_name in ["Private", "Pvt"]:
+					customer.customer_type = "Individual"
+				else:
+					customer.customer_type = "Company"
+			else:
+				customer.customer_type = "Individual"
+
 			customer.woocommerce_is_guest = is_guest
 		else:
 			# Edit Customer
