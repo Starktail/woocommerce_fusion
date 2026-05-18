@@ -580,7 +580,7 @@ class SynchroniseSalesOrder(SynchroniseWooCommerce):
 			customer.woocommerce_identifier = customer_identifier
 
 			if company_name:
-				if company_name in ["Private", "Pvt"]:
+				if company_name.lower() in ["private", "pvt"]:
 					customer.customer_type = "Individual"
 				else:
 					customer.customer_type = "Company"
