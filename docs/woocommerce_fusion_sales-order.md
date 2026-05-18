@@ -82,7 +82,7 @@ Each **Customer** record has a `woocommerce_identifier` custom field. This ident
 | Company (`billing.company` on **WooCommerce Order** is set), **Only if *Enable Dual Accounts for Same Email (Private/Company)* is checked** | `{billing.email}-{company}` |
 | Individual (`billing.company` on **WooCommerce Order** is not set)                                                                          | `billing.email`             |
 
-ERPNext **Customer** records are created as Individual by default. If the WooCommerce Order company field contains a value other than "Private" or "Pvt" (case-sensitive), the **Customer** record is created as Company instead.
+ERPNext **Customer** records are created as Individual by default. If the WooCommerce Order company field contains a value other than "Private" or "Pvt", the **Customer** record is created as Company instead.
 
 ## Contact Synchronisation
 
