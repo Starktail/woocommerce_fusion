@@ -26,7 +26,12 @@ from woocommerce_fusion.woocommerce.woocommerce_api import (
 
 
 def run_sales_order_sync_from_hook(doc, method):
-	if doc.doctype == "Sales Order" and not doc.flags.get("created_by_sync", None) and doc.woocommerce_server:
+	if (
+		doc.doctype == "Sales Order"
+		and not doc.flags.get("created_by_sync", None)
+		and doc.woocommerce_server
+		and frappe.get_cached_doc("WooCommerce Server", doc.woocommerce_server).enable_sync
+	):
 		frappe.enqueue(run_sales_order_sync, queue="long", sales_order_name=doc.name)
 
 

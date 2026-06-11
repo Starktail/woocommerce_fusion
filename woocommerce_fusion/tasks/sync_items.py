@@ -31,6 +31,11 @@ def run_item_sync_from_hook(doc, method):
 		doc.doctype == "Item"
 		and not doc.flags.get("created_by_sync", None)
 		and len(doc.woocommerce_servers) > 0
+		and any(
+			frappe.get_cached_doc("WooCommerce Server", row.woocommerce_server).enable_sync
+			for row in doc.woocommerce_servers
+			if row.woocommerce_server
+		)
 	):
 		frappe.msgprint(
 			_("Background sync to WooCommerce triggered for {0} {1}").format(frappe.bold(doc.name), method),
