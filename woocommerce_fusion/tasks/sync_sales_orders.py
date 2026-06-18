@@ -526,6 +526,8 @@ class SynchroniseSalesOrder(SynchroniseWooCommerce):
 		self.sales_order = new_sales_order
 		new_sales_order.customer = customer_docname
 		new_sales_order.po_no = new_sales_order.woocommerce_id = wc_order.id
+		# Carry the customer-facing WooCommerce order number for autonaming
+		new_sales_order.flags.woocommerce_number = wc_order.get("number")
 		new_sales_order.custom_woocommerce_customer_note = wc_order.customer_note
 
 		new_sales_order.woocommerce_status = WC_ORDER_STATUS_MAPPING_REVERSE[wc_order.status]

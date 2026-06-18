@@ -5,6 +5,7 @@ from erpnext.selling.doctype.sales_order.sales_order import SalesOrder
 from frappe import _
 from frappe.model.document import Document
 from frappe.model.naming import get_default_naming_series, make_autoname
+from frappe.utils import cstr
 
 from woocommerce_fusion.tasks.sync_sales_orders import run_sales_order_sync
 from woocommerce_fusion.woocommerce.woocommerce_api import (
@@ -23,7 +24,11 @@ class CustomSalesOrder(SalesOrder):
 	def autoname(self):
 		"""
 		If this is a WooCommerce-linked order, use the naming series defined in "WooCommerce Server"
-		or default to WEB[WooCommerce Order ID], e.g. WEB012142.
+		or default to WEB[site idx]-[WooCommerce order number], e.g. WEB1-002740.
+
+		The customer-facing WooCommerce order ``number`` (carried via flags from the sync) is used
+		when available, falling back to the WooCommerce ``id`` (post id). Because the order number
+		is not guaranteed unique (the post id is), a collision falls back to appending the id.
 		Else, name it normally.
 		"""
 		if self.woocommerce_id and self.woocommerce_server:
@@ -38,7 +43,19 @@ class CustomSalesOrder(SalesOrder):
 					(index for (index, d) in enumerate(sorted_list) if d["name"] == self.woocommerce_server),
 					None,
 				)
-				self.name = f"WEB{idx + 1}-{int(self.woocommerce_id):06}"  # Format with leading zeros to make it 6 digits
+				prefix = f"WEB{idx + 1}-"
+
+				order_number = cstr(self.flags.get("woocommerce_number")).strip()
+				# Use the customer-facing order number when available, else the legacy
+				# zero-padded post id format.
+				base = order_number if order_number else f"{int(self.woocommerce_id):06}"
+
+				name = f"{prefix}{base}"
+				# Order numbers are not guaranteed unique; the post id is, so disambiguate with it
+				if frappe.db.exists("Sales Order", name):
+					name = f"{prefix}{base}-{self.woocommerce_id}"
+
+				self.name = name
 		else:
 			naming_series = get_default_naming_series("Sales Order")
 			self.name = make_autoname(key=naming_series)
