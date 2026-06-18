@@ -142,9 +142,12 @@ def sync_woocommerce_orders_modified_since(date_time_from=None):
 				)
 			else:
 				run_sales_order_sync(woocommerce_order=wc_order, enqueue=True)
-		# Skip orders with errors, as these exceptions will be logged
 		except Exception:
-			pass
+			frappe.log_error(
+				"WooCommerce Sales Orders Sync Task Error",
+				f"Failed to queue/sync WooCommerce order {getattr(wc_order, 'id', '?')}:\n"
+				f"{frappe.get_traceback()}",
+			)
 
 	frappe.db.set_single_value("WooCommerce Integration Settings", "wc_last_sync_date", now())
 
