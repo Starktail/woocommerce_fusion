@@ -108,6 +108,9 @@ override_doctype_class = {
 # 	}
 # }
 doc_events = {
+	"Item Group": {
+		"after_rename": "woocommerce_fusion.item_group_category_sync.item_group_after_rename",
+	},
 	"Stock Entry": {
 		"on_submit": "woocommerce_fusion.tasks.stock_update.update_stock_levels_for_woocommerce_item",
 		"on_cancel": "woocommerce_fusion.tasks.stock_update.update_stock_levels_for_woocommerce_item",
@@ -251,6 +254,8 @@ fixtures = [
 					"Address-woocommerce_identifier",
 					"Item-woocommerce_servers",
 					"Item-custom_woocommerce_tab",
+					"Item Group-wc_catalog_section",
+					"Item Group-wc_item_group_category_map",
 				),
 			]
 		],

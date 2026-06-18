@@ -90,6 +90,10 @@
   "wc_ast_shipment_providers",
   "germanized_for_woocommerce_section",
   "html_emjq",
+  "tab_utilities",
+  "utilities_item_group_sync_section",
+  "utilities_item_group_sync_help",
+  "item_group_category_sync_root",
   "tab_logs",
   "enable_woocommerce_request_logs"
  ],
@@ -627,6 +631,28 @@
    "options": "<p class=\"help-box small text-muted\">'Germanized for WooCommerce' handles Coupons marked as 'Vouchers' as Negative Fees. Enable \"Order Fee Lines Sync\" on the Sales Order tab to handle this functionality</p>"
   },
   {
+   "fieldname": "tab_utilities",
+   "fieldtype": "Tab Break",
+   "label": "Utilities"
+  },
+  {
+   "fieldname": "utilities_item_group_sync_section",
+   "fieldtype": "Section Break",
+   "label": "Item Group → WooCommerce categories"
+  },
+  {
+   "fieldname": "utilities_item_group_sync_help",
+   "fieldtype": "HTML",
+   "options": "<p class=\"help-box small text-muted\">Manual / one-off: create or update WooCommerce product categories from ERPNext Item Groups and store category IDs on each Item Group (JSON). Set a root Item Group below to limit which branch is synced — the root itself is not created as a category. Leave empty to sync each direct child of <strong>All Item Groups</strong> as a top-level category. Categories previously synced for this server but outside the subtree may be removed when the API allows.</p>"
+  },
+  {
+   "description": "Only descendants of this Item Group are synced as WooCommerce categories (the root itself is skipped). Leave empty to sync each direct child of All Item Groups as top-level categories.",
+   "fieldname": "item_group_category_sync_root",
+   "fieldtype": "Link",
+   "label": "Item Group root for category sync",
+   "options": "Item Group"
+  },
+  {
    "depends_on": "eval: doc.enable_order_fees_sync",
    "fieldname": "account_for_negative_order_fee_lines",
    "fieldtype": "Link",
@@ -638,7 +664,7 @@
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2025-10-22 09:36:31.805564",
+ "modified": "2026-05-08 14:00:00.000000",
  "modified_by": "Administrator",
  "module": "WooCommerce",
  "name": "WooCommerce Server",

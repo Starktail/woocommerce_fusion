@@ -102,6 +102,78 @@ frappe.ui.form.on("WooCommerce Server", {
       warningHTML,
     );
     frm.refresh_field("enable_so_status_sync_warning_html");
+
+    // Utilities: sync Item Groups → WooCommerce categories (manual / one-off)
+    if (!frm.is_new() && frm.fields_dict.item_group_category_sync_root) {
+      const anchor = frm.fields_dict.item_group_category_sync_root;
+      if (
+        anchor.$wrapper &&
+        anchor.$wrapper.length &&
+        !anchor.$wrapper.data("wc-fusion-item-group-sync")
+      ) {
+        anchor.$wrapper.data("wc-fusion-item-group-sync", 1);
+        const $row = $(`
+			<div class="form-group wc-fusion-sync-item-groups" style="margin-top: 0.5rem;">
+				<button type="button" class="btn btn-default btn-sm">
+					${__("Sync Item Groups to WooCommerce")}
+				</button>
+			</div>
+		`);
+        $row.find("button").on("click", () => {
+          if (frm.is_dirty()) {
+            frappe.msgprint(
+              __(
+                "Save the WooCommerce Server document before syncing so the Item Group root (if any) is applied.",
+              ),
+            );
+            return;
+          }
+          frappe.call({
+            method:
+              "woocommerce_fusion.item_group_category_sync.sync_item_groups_from_woocommerce_server",
+            args: { woocommerce_server: frm.doc.name },
+            freeze: true,
+            freeze_message: __("Syncing item groups to WooCommerce..."),
+            callback(r) {
+              const m = r.message || {};
+              const c = m.created || 0;
+              const u = m.updated || 0;
+              const d = m.deleted || 0;
+              const de = m.delete_errors || 0;
+              const ig = m.item_groups || 0;
+              let msg = __(
+                "Synced {0} item groups: {1} created, {2} updated in WooCommerce.",
+                [ig, c, u],
+              );
+              if (d) {
+                msg +=
+                  " " +
+                  __(
+                    "Removed {0} stale categories no longer under this root.",
+                    [d],
+                  );
+              }
+              if (de) {
+                msg +=
+                  " " +
+                  __(
+                    "{0} categories could not be removed (see Error Log); remove products or reassign them in WooCommerce first.",
+                    [de],
+                  );
+              }
+              frappe.show_alert(
+                {
+                  message: msg,
+                  indicator: de ? "orange" : "green",
+                },
+                de ? 12 : 8,
+              );
+            },
+          });
+        });
+        anchor.$wrapper.after($row);
+      }
+    }
   },
   // Handle click of 'Keep the Status of ERPNext Sales Orders and WooCommerce Orders in sync'
   enable_so_status_sync: function (frm) {
