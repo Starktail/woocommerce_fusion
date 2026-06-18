@@ -401,7 +401,7 @@
    "documentation_url": "https://woocommerce-fusion-docs.starktail.com/woocommerce_fusion_item-stock-levels",
    "fieldname": "enable_stock_level_synchronisation",
    "fieldtype": "Check",
-   "label": "Enable Stock Level Synchronisation"
+   "label": "Sync stock levels from ERPNext to WooCommerce (1-way)"
   },
   {
    "default": "WooCommerce ID",
@@ -670,7 +670,7 @@
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-06-18 13:41:35.615517",
+ "modified": "2026-06-18 15:20:52.859238",
  "modified_by": "Administrator",
  "module": "WooCommerce",
  "name": "WooCommerce Server",
