@@ -23,7 +23,7 @@ def get_dashboard_data(
 	if direction:
 		row_filters["direction"] = direction
 
-	# Queue summary by (status, direction, sync_type) — covers both inbound and outbound
+	# Queue summary by (status, direction, sync_type) - covers both inbound and outbound
 	queue_summary = frappe.db.get_all(
 		"WooCommerce Sync Queue",
 		filters=filters,

@@ -12,7 +12,7 @@ class WooCommerceSyncQueue(Document):
 	def clear_old_logs(days=30):
 		"""
 		Called by Frappe's log cleanup scheduler (Log Settings).
-		Only purge terminal rows — Pending and Failed are kept for manual review.
+		Only purge terminal rows - Pending and Failed are kept for manual review.
 		"""
 		frappe.db.delete(
 			"WooCommerce Sync Queue",
@@ -75,7 +75,7 @@ def enqueue_item(
 
 	Deduplicates by (woocommerce_server, reference_name, sync_type, direction): if a Pending
 	row already exists for this combination, it is marked "Superseded" before inserting the new
-	row. This preserves full history — each enqueue event gets its own row.
+	row. This preserves full history - each enqueue event gets its own row.
 	"""
 	_supersede_pending(
 		woocommerce_server,

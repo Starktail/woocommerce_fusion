@@ -77,7 +77,7 @@ class BatchProcessor:
 		batch_create: list[tuple] = []
 		batch_update: list[tuple] = []
 
-		# Creates — build payload from ERPNext item data
+		# Creates - build payload from ERPNext item data
 		for row in rows_to_create:
 			# Variation orphaning: a variation cannot be created without its parent's WC ID
 			if row.wc_resource_type == "product_variation" and not row.parent_woocommerce_id:
@@ -101,7 +101,7 @@ class BatchProcessor:
 				self._mark_failed(row.name, frappe.get_traceback(), None)
 				pre_fail += 1
 
-		# Updates — conflict resolution against fresh WC data
+		# Updates - conflict resolution against fresh WC data
 		for row in rows_to_update:
 			wc_product = wc_products_map.get(str(row.woocommerce_id))
 			if not wc_product:
@@ -116,7 +116,7 @@ class BatchProcessor:
 				iws = item_for_sync.item_woocommerce_server
 
 				# Skip (don't break the batch) if the WC product type no longer matches the
-				# ERPNext item — sending such an update would corrupt the product.
+				# ERPNext item - sending such an update would corrupt the product.
 				expected_type = _expected_wc_type(item)
 				if wc_product.type and expected_type != wc_product.type:
 					frappe.log_error(
@@ -275,20 +275,27 @@ class BatchProcessor:
 		)
 
 		try:
-			wc_orders = frappe.get_doc({"doctype": "WooCommerce Order"}).get_list(
-				args={
-					"filters": [["WooCommerce Order", "id", "in", [str(i) for i in wc_ids]]],
-					"page_length": 100,
-					"start": 0,
-					"servers": [self.server_name],
-					"as_doc": True,
-				}
-			)
-			wc_orders_map = {str(o.id): o for o in (wc_orders or [])}
+			wc_orders_map = self._bulk_get_orders(wc_ids)
 		except Exception:
 			self._mark_all_failed(rows, f"Bulk GET failed: {frappe.get_traceback()}", batch_log.name)
 			self._finalise_batch_log(batch_log, 0, len(rows))
 			return 0, len(rows)
+
+		# Orders not returned by the default lookup are trashed or permanently deleted. Trashed
+		# orders are excluded from the default WooCommerce listing and there is no endpoint that
+		# returns trashed + non-trashed together, so re-fetch (with status=trash) only those that
+		# have a linked Sales Order - those are the ones whose status we still need to update.
+		linked_so_map = {}
+		for row in rows:
+			if str(row.woocommerce_id) not in wc_orders_map:
+				linked_so = self._linked_sales_order(row.woocommerce_id)
+				if linked_so:
+					linked_so_map[str(row.woocommerce_id)] = linked_so
+		if linked_so_map:
+			try:
+				wc_orders_map.update(self._bulk_get_orders(list(linked_so_map.keys()), status="trash"))
+			except Exception:
+				pass  # fall through; any still-missing order is flagged below
 
 		from woocommerce_fusion.tasks.sync_sales_orders import run_sales_order_sync
 
@@ -298,23 +305,14 @@ class BatchProcessor:
 		for row in rows:
 			wc_order = wc_orders_map.get(str(row.woocommerce_id))
 			if not wc_order:
-				# Not returned by the lookup → the order is trashed or permanently deleted.
-				# Inbound sync only has anything to do if a Sales Order was already created from
-				# it; with no linked Sales Order there is nothing to update, so this is a no-op
-				# (Skipped), not a failure.
-				linked_so = frappe.db.get_value(
-					"Sales Order",
-					{
-						"woocommerce_id": str(row.woocommerce_id),
-						"woocommerce_server": self.server_name,
-					},
-					"name",
-				)
+				# Still not found. If a Sales Order is linked, the order was permanently deleted
+				# (not just trashed) - flag it. Otherwise there is nothing to sync, so it is a no-op.
+				linked_so = linked_so_map.get(str(row.woocommerce_id))
 				if linked_so:
 					self._mark_failed(
 						row.name,
-						f"Order {row.woocommerce_id} is trashed/deleted in WooCommerce but is linked to "
-						f"Sales Order {linked_so}; it could not be re-fetched to update the status.",
+						f"Order {row.woocommerce_id} could not be fetched from WooCommerce "
+						f"(permanently deleted?) but is linked to Sales Order {linked_so}.",
 						batch_log.name,
 					)
 					fail_count += 1
@@ -322,7 +320,7 @@ class BatchProcessor:
 					self._mark_skipped(
 						row,
 						f"Order {row.woocommerce_id} is not present in WooCommerce (trashed/deleted) "
-						"and has no linked Sales Order — nothing to sync.",
+						"and has no linked Sales Order - nothing to sync.",
 					)
 					skipped_count += 1
 				continue
@@ -350,6 +348,31 @@ class BatchProcessor:
 			}
 		)
 		return {str(p.woocommerce_id): p for p in (wc_products or [])}
+
+	def _bulk_get_orders(self, wc_ids: list, status: str | None = None) -> dict:
+		"""Bulk-fetch WooCommerce Orders by id. Pass status='trash' to fetch trashed orders
+		(which the default listing excludes)."""
+		filters = [["WooCommerce Order", "id", "in", [str(i) for i in wc_ids]]]
+		if status:
+			filters.append(["WooCommerce Order", "status", "=", status])
+		wc_orders = frappe.get_doc({"doctype": "WooCommerce Order"}).get_list(
+			args={
+				"filters": filters,
+				"page_length": 100,
+				"start": 0,
+				"servers": [self.server_name],
+				"as_doc": True,
+			}
+		)
+		return {str(o.id): o for o in (wc_orders or [])}
+
+	def _linked_sales_order(self, woocommerce_id: str) -> str | None:
+		"""Return the name of the Sales Order linked to this WooCommerce order id, if any."""
+		return frappe.db.get_value(
+			"Sales Order",
+			{"woocommerce_id": str(woocommerce_id), "woocommerce_server": self.server_name},
+			"name",
+		)
 
 	def _create_batch_log(self, resource_type: str, flush_reason: str, total_items: int, payload: dict):
 		batch_log = frappe.get_doc(

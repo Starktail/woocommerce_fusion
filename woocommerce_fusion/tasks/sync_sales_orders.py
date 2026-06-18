@@ -234,6 +234,11 @@ class SynchroniseSalesOrder(SynchroniseWooCommerce):
 			# create missing order in WooCommerce
 			pass
 		elif self.woocommerce_order and not self.sales_order:
+			# Don't create a Sales Order for an order that is trashed/cancelled in WooCommerce and
+			# was never synced to ERPNext - there is nothing to represent. Trashed/cancelled orders
+			# that DO have a linked Sales Order still flow through the update path below.
+			if self.woocommerce_order.status in ("trash", "cancelled"):
+				return
 			# create missing order in ERPNext
 			self.create_sales_order(self.woocommerce_order)
 		elif self.sales_order and self.woocommerce_order:

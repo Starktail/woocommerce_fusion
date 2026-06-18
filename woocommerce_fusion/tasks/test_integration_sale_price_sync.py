@@ -116,7 +116,7 @@ class TestIntegrationSalePriceSync(TestIntegrationWooCommerce):
 
 		product_data = self.get_woocommerce_product(wc_product_id)
 		self.assertEqual(float(product_data["sale_price"]), 60)
-		# WooCommerce returns dates in ISO 8601 — just check the date portion
+		# WooCommerce returns dates in ISO 8601 - just check the date portion
 		self.assertTrue(product_data["date_on_sale_from"].startswith(valid_from))
 		self.assertTrue(product_data["date_on_sale_to"].startswith(valid_upto))
 
