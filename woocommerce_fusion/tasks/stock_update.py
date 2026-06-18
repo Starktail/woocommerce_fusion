@@ -118,6 +118,7 @@ def update_stock_levels_on_woocommerce_site(item_code: str):
 					parent_item_id = item.variant_of
 					if parent_item_id:
 						parent_item = frappe.get_doc("Item", parent_item_id)
+						parent_woocommerce_id = None
 						# Get the parent item's woocommerce_id
 						for parent_wc_site in parent_item.woocommerce_servers:
 							if parent_wc_site.woocommerce_server == woocommerce_server:
@@ -127,7 +128,22 @@ def update_stock_levels_on_woocommerce_site(item_code: str):
 							continue
 						endpoint = f"products/{parent_woocommerce_id}/variations/{woocommerce_id}"
 					else:
+						parent_woocommerce_id = None
 						endpoint = f"products/{woocommerce_id}"
+
+					if wc_server.enable_batch_api:
+						from woocommerce_fusion.tasks.batch.sync_stock_batch import enqueue_stock_update
+
+						enqueue_stock_update(
+							woocommerce_server=woocommerce_server,
+							item_code=item_code,
+							woocommerce_id=woocommerce_id,
+							stock_quantity=data_to_post["stock_quantity"],
+							resource_type="product_variation" if parent_item_id else "product",
+							parent_woocommerce_id=parent_woocommerce_id,
+						)
+						continue
+
 					response = wc_api.put(endpoint=endpoint, data=data_to_post)
 				except Exception as err:
 					error_message = f"{frappe.get_traceback()}\n\nData in PUT request: \n{data_to_post}"

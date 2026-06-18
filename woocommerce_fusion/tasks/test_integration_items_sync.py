@@ -3,12 +3,15 @@ from unittest.mock import patch
 import frappe
 from erpnext.stock.doctype.item.test_item import create_item
 from frappe.utils.data import cstr
+from parameterized import parameterized
 
 from woocommerce_fusion.tasks.sync_items import run_item_sync
 from woocommerce_fusion.tasks.test_integration_helpers import TestIntegrationWooCommerce
 from woocommerce_fusion.woocommerce.woocommerce_api import (
 	generate_woocommerce_record_name_from_domain_and_id,
 )
+
+BATCH_MODES = [("single_call", False), ("batch_api", True)]
 
 
 @patch("woocommerce_fusion.tasks.sync_items.frappe.log_error")
@@ -17,11 +20,16 @@ class TestIntegrationWooCommerceItemsSync(TestIntegrationWooCommerce):
 	def setUpClass(cls):
 		super().setUpClass()  # important to call super() methods when extending TestCase.
 
-	def test_sync_create_new_item_when_synchronising_with_woocommerce(self, mock_log_error):
+	@parameterized.expand(BATCH_MODES)
+	def test_sync_create_new_item_when_synchronising_with_woocommerce(
+		self, mock_log_error, _name, batch_enabled
+	):
 		"""
 		Test that the Item Synchronisation method creates new Items when there are new
 		WooCommerce products.
 		"""
+		self._set_batch_mode(batch_enabled)
+
 		# Create a new product in WooCommerce
 		wc_product_id = self.post_woocommerce_product(product_name="SOME_ITEM")
 
@@ -30,6 +38,7 @@ class TestIntegrationWooCommerceItemsSync(TestIntegrationWooCommerce):
 			self.wc_server.name, wc_product_id
 		)
 		run_item_sync(woocommerce_product_name=woocommerce_product_name)
+		self._flush_if_batch()
 
 		# Expect no errors logged
 		mock_log_error.assert_not_called()
@@ -44,11 +53,16 @@ class TestIntegrationWooCommerceItemsSync(TestIntegrationWooCommerce):
 		self.assertEqual(item.item_code, str(wc_product_id))
 		self.assertEqual(item.item_name, "SOME_ITEM")
 
-	def test_sync_create_new_item_with_image_when_synchronising_with_woocommerce(self, mock_log_error):
+	@parameterized.expand(BATCH_MODES)
+	def test_sync_create_new_item_with_image_when_synchronising_with_woocommerce(
+		self, mock_log_error, _name, batch_enabled
+	):
 		"""
 		Test that the Item Synchronisation method creates a new Item with image when there are new
 		WooCommerce products.
 		"""
+		self._set_batch_mode(batch_enabled)
+
 		# Setup
 		wc_server = frappe.get_doc("WooCommerce Server", self.wc_server.name)
 		wc_server.enable_image_sync = 1
@@ -65,6 +79,7 @@ class TestIntegrationWooCommerceItemsSync(TestIntegrationWooCommerce):
 			self.wc_server.name, wc_product_id
 		)
 		run_item_sync(woocommerce_product_name=woocommerce_product_name)
+		self._flush_if_batch()
 
 		# Expect no errors logged
 		mock_log_error.assert_not_called()
@@ -78,12 +93,15 @@ class TestIntegrationWooCommerceItemsSync(TestIntegrationWooCommerce):
 		# Expect correct image in item
 		self.assertTrue("chrislema-hat" in item.image)
 
+	@parameterized.expand(BATCH_MODES)
 	def test_sync_create_new_item_with_custom_metadata_when_synchronising_with_woocommerce(
-		self, mock_log_error
+		self, mock_log_error, _name, batch_enabled
 	):
 		"""
 		Test that the Item Synchronisation method creates a new ERPNext Item with mapped custom fields.
 		"""
+		self._set_batch_mode(batch_enabled)
+
 		dummy_meta_data = [
 			{"id": 52824, "key": "_short_description_1", "value": "Test 1"},
 			{"id": 52825, "key": "_short_description_2", "value": "Test 2"},
@@ -109,6 +127,7 @@ class TestIntegrationWooCommerceItemsSync(TestIntegrationWooCommerce):
 			self.wc_server.name, wc_product_id
 		)
 		run_item_sync(woocommerce_product_name=woocommerce_product_name)
+		self._flush_if_batch()
 
 		# Expect no errors logged
 		mock_log_error.assert_not_called()
@@ -122,10 +141,15 @@ class TestIntegrationWooCommerceItemsSync(TestIntegrationWooCommerce):
 		# Expect value in mapped field in Item
 		self.assertEqual(item.description, "Test 2")
 
-	def test_sync_create_new_template_item_when_synchronising_with_woocommerce(self, mock_log_error):
+	@parameterized.expand(BATCH_MODES)
+	def test_sync_create_new_template_item_when_synchronising_with_woocommerce(
+		self, mock_log_error, _name, batch_enabled
+	):
 		"""
 		Test that the Item Synchronisation method creates new Template Item from a WooCommerce Product with Variations
 		"""
+		self._set_batch_mode(batch_enabled)
+
 		# Create a new product in WooCommerce
 		wc_product_id = self.post_woocommerce_product(
 			product_name="T-SHIRT", type="variable", attributes=["Material Type", "Volume"]
@@ -136,6 +160,7 @@ class TestIntegrationWooCommerceItemsSync(TestIntegrationWooCommerce):
 			self.wc_server.name, wc_product_id
 		)
 		run_item_sync(woocommerce_product_name=woocommerce_product_name)
+		self._flush_if_batch()
 
 		# Expect no errors logged
 		mock_log_error.assert_not_called()
@@ -154,11 +179,16 @@ class TestIntegrationWooCommerceItemsSync(TestIntegrationWooCommerce):
 		self.assertEqual(item.attributes[0].attribute, "Material Type")
 		self.assertEqual(item.attributes[1].attribute, "Volume")
 
-	def test_sync_create_new_variant_item_when_synchronising_with_woocommerce(self, mock_log_error):
+	@parameterized.expand(BATCH_MODES)
+	def test_sync_create_new_variant_item_when_synchronising_with_woocommerce(
+		self, mock_log_error, _name, batch_enabled
+	):
 		"""
 		Test that the Item Synchronisation method creates new Item Variant from a
 		WooCommerce Product Variant
 		"""
+		self._set_batch_mode(batch_enabled)
+
 		# Create a new product in WooCommerce
 		wc_product_id = self.post_woocommerce_product(
 			product_name="T-SHIRT", type="variation", attributes=["Material Type"]
@@ -169,6 +199,7 @@ class TestIntegrationWooCommerceItemsSync(TestIntegrationWooCommerce):
 			self.wc_server.name, wc_product_id
 		)
 		run_item_sync(woocommerce_product_name=woocommerce_product_name)
+		self._flush_if_batch()
 
 		# Expect no errors logged
 		mock_log_error.assert_not_called()
@@ -189,11 +220,16 @@ class TestIntegrationWooCommerceItemsSync(TestIntegrationWooCommerce):
 		self.assertIsNotNone(item.attributes[0].attribute_value)
 		self.assertEqual(item.item_name, "T-SHIRT parent - Option 1")
 
-	def test_sync_create_new_wc_product_when_synchronising_with_woocommerce(self, mock_log_error):
+	@parameterized.expand(BATCH_MODES)
+	def test_sync_create_new_wc_product_when_synchronising_with_woocommerce(
+		self, mock_log_error, _name, batch_enabled
+	):
 		"""
 		Test that the Item Synchronisation method creates a new WooCommerce product when there are new
 		Items.
 		"""
+		self._set_batch_mode(batch_enabled)
+
 		# Create a new item in ERPNext and set a WooCommerce server but not a product ID
 		item = create_item("ITEM101", valuation_rate=10)
 		row = item.append("woocommerce_servers")
@@ -202,6 +238,7 @@ class TestIntegrationWooCommerceItemsSync(TestIntegrationWooCommerce):
 
 		# Run synchronisation
 		run_item_sync(item_code=item.name)
+		self._flush_if_batch()
 
 		# Expect no errors logged
 		mock_log_error.assert_not_called()
@@ -219,11 +256,16 @@ class TestIntegrationWooCommerceItemsSync(TestIntegrationWooCommerce):
 		# Expect correct item name in item
 		self.assertEqual(wc_product["name"], item.item_name)
 
-	def test_sync_create_new_variable_wc_product_when_synchronising_with_woocommerce(self, mock_log_error):
+	@parameterized.expand(BATCH_MODES)
+	def test_sync_create_new_variable_wc_product_when_synchronising_with_woocommerce(
+		self, mock_log_error, _name, batch_enabled
+	):
 		"""
 		Test that the Item Synchronisation method creates a new Variable WooCommerce product
 		when there is a new Template Item in ERPNext
 		"""
+		self._set_batch_mode(batch_enabled)
+
 		# Create a new item in ERPNext and set a WooCommerce server but not a product ID
 		item = create_item("ITEM100", valuation_rate=10)
 		row = item.append("woocommerce_servers")
@@ -240,6 +282,7 @@ class TestIntegrationWooCommerceItemsSync(TestIntegrationWooCommerce):
 
 		# Run synchronisation
 		run_item_sync(item_code=item.name)
+		self._flush_if_batch()
 
 		# Expect no errors logged
 		mock_log_error.assert_not_called()
@@ -258,11 +301,16 @@ class TestIntegrationWooCommerceItemsSync(TestIntegrationWooCommerce):
 		self.assertEqual(wc_product["attributes"][1]["name"], "Volume")
 		self.assertEqual(wc_product["attributes"][1]["variation"], True)
 
-	def test_sync_create_new_wc_product_variant_when_synchronising_with_woocommerce(self, mock_log_error):
+	@parameterized.expand(BATCH_MODES)
+	def test_sync_create_new_wc_product_variant_when_synchronising_with_woocommerce(
+		self, mock_log_error, _name, batch_enabled
+	):
 		"""
 		Test that the Item Synchronisation method creates a new WooCommerce product variant
 		when there is a new Item Variant in ERPNext
 		"""
+		self._set_batch_mode(batch_enabled)
+
 		# Create a new parent item in ERPNext and set a WooCommerce server but not a product ID
 		parent_item = create_item("ITEM200-Parent", valuation_rate=10)
 		row = parent_item.append("woocommerce_servers")
@@ -288,6 +336,7 @@ class TestIntegrationWooCommerceItemsSync(TestIntegrationWooCommerce):
 
 		# Run synchronisation
 		run_item_sync(item_code=item.name)
+		self._flush_if_batch()
 
 		# Expect no errors logged
 		mock_log_error.assert_not_called()
@@ -309,13 +358,16 @@ class TestIntegrationWooCommerceItemsSync(TestIntegrationWooCommerce):
 		self.assertEqual(wc_product["attributes"][0]["name"], "Material Type")
 		self.assertEqual(wc_product["attributes"][0]["option"], "Option 2")
 
+	@parameterized.expand(BATCH_MODES)
 	def test_sync_create_new_wc_product_with_custom_fields_when_synchronising_with_woocommerce(
-		self, mock_log_error
+		self, mock_log_error, _name, batch_enabled
 	):
 		"""
 		Test that the Item Synchronisation method syncs the mapped custom fields between
 		a WooCommerce product and ERPNext Item.
 		"""
+		self._set_batch_mode(batch_enabled)
+
 		dummy_meta_data = [{"id": 52824, "key": "_short_description_1", "value": "Test 1"}]
 		# Setup
 		wc_server = frappe.get_doc("WooCommerce Server", self.wc_server.name)
@@ -333,6 +385,7 @@ class TestIntegrationWooCommerceItemsSync(TestIntegrationWooCommerce):
 
 		# Run synchronisation
 		run_item_sync(item_code=item.name)
+		self._flush_if_batch()
 
 		# Expect no errors logged
 		mock_log_error.assert_not_called()
@@ -348,6 +401,7 @@ class TestIntegrationWooCommerceItemsSync(TestIntegrationWooCommerce):
 		item.description = "Description from ERPNext"
 		item.save()
 		run_item_sync(item_code=item.name)
+		self._flush_if_batch()
 
 		# Expect correct custom mapped field values
 		wc_product = self.get_woocommerce_product(product_id=item.woocommerce_servers[0].woocommerce_id)
@@ -360,6 +414,7 @@ class TestIntegrationWooCommerceItemsSync(TestIntegrationWooCommerce):
 		]
 		self.update_woocommerce_product_metadata(wc_product["id"], new_meta_data)
 		run_item_sync(item_code=item.name)
+		self._flush_if_batch()
 
 		# Get the updated item
 		item.reload()

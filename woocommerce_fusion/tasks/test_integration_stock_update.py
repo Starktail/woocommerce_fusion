@@ -4,6 +4,7 @@ from urllib.parse import urlparse
 import frappe
 from erpnext import get_default_company
 from erpnext.stock.doctype.item.test_item import create_item
+from parameterized import parameterized
 
 from woocommerce_fusion.tasks.stock_update import update_stock_levels_on_woocommerce_site
 from woocommerce_fusion.tasks.test_integration_helpers import (
@@ -11,16 +12,21 @@ from woocommerce_fusion.tasks.test_integration_helpers import (
 	get_woocommerce_server,
 )
 
+BATCH_MODES = [("single_call", False), ("batch_api", True)]
+
 
 class TestIntegrationWooCommerceStockSync(TestIntegrationWooCommerce):
 	@classmethod
 	def setUpClass(cls):
 		super().setUpClass()  # important to call super() methods when extending TestCase.
 
-	def test_stock_sync_when_synchronising_with_woocommerce(self):
+	@parameterized.expand(BATCH_MODES)
+	def test_stock_sync_when_synchronising_with_woocommerce(self, _name, batch_enabled):
 		"""
 		Test that the Stock Synchronisation method posts the correct stock level to a WooCommerce website.
 		"""
+		self._set_batch_mode(batch_enabled)
+
 		# Create a new product in WooCommerce, set opening stock to 1
 		wc_product_id = self.post_woocommerce_product(product_name="ITEM009", opening_stock=1)
 
@@ -40,6 +46,7 @@ class TestIntegrationWooCommerceStockSync(TestIntegrationWooCommerce):
 
 		# Run synchronisation
 		stock_update_result = update_stock_levels_on_woocommerce_site(item_code=item.name)
+		self._flush_if_batch()
 
 		# Expect successful update
 		self.assertEqual(stock_update_result, True)
@@ -48,11 +55,14 @@ class TestIntegrationWooCommerceStockSync(TestIntegrationWooCommerce):
 		wc_stock_level = self.get_woocommerce_product_stock_level(product_id=wc_product_id)
 		self.assertEqual(wc_stock_level, 5)
 
-	def test_stock_sync_with_decimal_when_synchronising_with_woocommerce(self):
+	@parameterized.expand(BATCH_MODES)
+	def test_stock_sync_with_decimal_when_synchronising_with_woocommerce(self, _name, batch_enabled):
 		"""
 		Test that the Stock Synchronisation method posts the correct stock level to a WooCommerce website
 		while handling decimals.
 		"""
+		self._set_batch_mode(batch_enabled)
+
 		# Create a new product in WooCommerce, set opening stock to 1
 		wc_product_id = self.post_woocommerce_product(product_name="ITEM002", opening_stock=1)
 
@@ -72,6 +82,7 @@ class TestIntegrationWooCommerceStockSync(TestIntegrationWooCommerce):
 
 		# Run synchronisation
 		stock_update_result = update_stock_levels_on_woocommerce_site(item_code=item.name)
+		self._flush_if_batch()
 
 		# Expect successful update
 		self.assertEqual(stock_update_result, True)

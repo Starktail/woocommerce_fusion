@@ -41,6 +41,17 @@ class WooCommerceServer(Document):
 		self.validate_so_status_map()
 		self.validate_item_map()
 		self.validate_reserved_stock_setting()
+		self.validate_batch_settings()
+
+	def validate_batch_settings(self):
+		"""
+		Validate Batch API flush interval and batch size limits
+		"""
+		if self.enable_batch_api:
+			if not 1 <= (self.batch_flush_interval_minutes or 1) <= 60:
+				frappe.throw(_("Flush Interval must be between 1 and 60 minutes"))
+			if not 1 <= (self.batch_size_limit or 100) <= 100:
+				frappe.throw(_("Batch Size Limit must be between 1 and 100"))
 
 	def validate_so_status_map(self):
 		"""

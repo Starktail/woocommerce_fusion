@@ -1,0 +1,24 @@
+{
+ "content": null,
+ "creation": "2026-06-16 00:00:00.000000",
+ "doctype": "Page",
+ "idx": 0,
+ "modified": "2026-06-16 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "WooCommerce",
+ "name": "woocommerce-sync-status",
+ "owner": "Administrator",
+ "page_name": "woocommerce-sync-status",
+ "roles": [
+  {
+   "role": "System Manager"
+  },
+  {
+   "role": "Stock Manager"
+  }
+ ],
+ "script": null,
+ "standard": "Yes",
+ "style": null,
+ "title": "WooCommerce Sync Status"
+}

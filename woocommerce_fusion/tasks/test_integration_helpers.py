@@ -83,6 +83,41 @@ class TestIntegrationWooCommerce(FrappeTestCase):
 		settings.wc_last_sync_date_items = one_year_ago
 		settings.save()
 
+	def tearDown(self):
+		# FrappeTestCase only rolls back once per class, so batch-mode tests would otherwise
+		# share a transaction and leak Sync Queue rows / fixed item codes into each other (e.g. a
+		# Pending row for a since-deleted order, or the two parameterised variants colliding on the
+		# same item code). Roll back after each batch-mode test to keep them isolated. Batch code
+		# avoids committing under tests (see commit_unless_in_test) so this fully reverts the test's
+		# database changes. Gated on _batch_mode (set by _set_batch_mode and by the batch test
+		# classes' setUp) so non-batch tests keep their existing class-level cleanup behaviour.
+		if getattr(self, "_batch_mode", None) is not None:
+			frappe.db.rollback()
+		super().tearDown()
+
+	def _set_batch_mode(self, enabled: bool):
+		"""
+		Enable or disable batch API on the test WooCommerce Server.
+		Called at the top of each parameterised test variant.
+		"""
+		wc_server = frappe.get_doc("WooCommerce Server", self.wc_server.name)
+		wc_server.enable_batch_api = 1 if enabled else 0
+		wc_server.batch_flush_interval_minutes = 1
+		wc_server.batch_size_limit = 100
+		wc_server.save()
+		self.wc_server.reload()
+		self._batch_mode = enabled
+
+	def _flush_if_batch(self):
+		"""
+		In batch mode: flush the pending queue for this server so that enqueued operations
+		actually reach WooCommerce before assertions run. No-op in single-call mode.
+		"""
+		if getattr(self, "_batch_mode", False):
+			from woocommerce_fusion.tasks.batch.queue_manager import flush_pending
+
+			flush_pending(self.wc_server.name, reason="manual")
+
 	def post_woocommerce_order(
 		self,
 		set_paid: bool = False,

@@ -19,7 +19,7 @@ build-backend = "flit_core.buildapi"
 # These dependencies are only installed when developer mode is enabled
 [tool.bench.dev-dependencies]
 hypothesis = "~=6.31.0"
-parameterized = "~=0.9.0 "
+parameterized = "~=0.9.0"
 
 [tool.ruff]
 line-length = 110

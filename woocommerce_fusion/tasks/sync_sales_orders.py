@@ -32,7 +32,26 @@ def run_sales_order_sync_from_hook(doc, method):
 		and doc.woocommerce_server
 		and frappe.get_cached_doc("WooCommerce Server", doc.woocommerce_server).enable_sync
 	):
-		frappe.enqueue(run_sales_order_sync, queue="long", sales_order_name=doc.name)
+		server = frappe.get_cached_doc("WooCommerce Server", doc.woocommerce_server)
+		if server.enable_batch_api and server.enable_so_status_sync and doc.woocommerce_id:
+			from woocommerce_fusion.woocommerce.doctype.woocommerce_sync_queue.woocommerce_sync_queue import (
+				enqueue_order,
+			)
+
+			new_status = WC_ORDER_STATUS_MAPPING[doc.woocommerce_status] if doc.woocommerce_status else None
+			enqueue_order(
+				woocommerce_server=doc.woocommerce_server,
+				woocommerce_order_id=str(doc.woocommerce_id),
+				new_status=new_status,
+				direction="outbound",
+				triggered_by="Hook",
+			)
+			frappe.enqueue(
+				"woocommerce_fusion.tasks.batch.queue_manager.check_and_flush_all_servers",
+				enqueue_after_commit=True,
+			)
+		else:
+			frappe.enqueue(run_sales_order_sync, queue="long", sales_order_name=doc.name)
 
 
 @frappe.whitelist()
@@ -109,7 +128,20 @@ def sync_woocommerce_orders_modified_since(date_time_from=None):
 	wc_orders += get_list_of_wc_orders(date_time_from=date_time_from, status="trash")
 	for wc_order in wc_orders:
 		try:
-			run_sales_order_sync(woocommerce_order=wc_order, enqueue=True)
+			server = frappe.get_cached_doc("WooCommerce Server", wc_order.woocommerce_server)
+			if server.enable_batch_api:
+				from woocommerce_fusion.woocommerce.doctype.woocommerce_sync_queue.woocommerce_sync_queue import (
+					enqueue_order,
+				)
+
+				enqueue_order(
+					woocommerce_server=wc_order.woocommerce_server,
+					woocommerce_order_id=str(wc_order.id),
+					direction="inbound",
+					triggered_by="Scheduled",
+				)
+			else:
+				run_sales_order_sync(woocommerce_order=wc_order, enqueue=True)
 		# Skip orders with errors, as these exceptions will be logged
 		except Exception:
 			pass

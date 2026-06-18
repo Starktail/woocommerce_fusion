@@ -286,6 +286,45 @@ class WooCommerceResource(Document):
 	def get_stats(args):
 		pass
 
+	@classmethod
+	def batch_update(
+		cls,
+		server_name: str,
+		payload: dict,
+		parent_id: str | None = None,
+	) -> dict:
+		"""
+		Execute a batch create/update/delete against the WooCommerce batch endpoint.
+
+		Args:
+			server_name: Name of the WooCommerce Server doc
+			payload: Dict with keys 'create', 'update', 'delete' (any subset)
+			parent_id: For child resources (e.g. variations), the parent's WooCommerce ID
+
+		Returns:
+			Parsed JSON response dict from WooCommerce
+		"""
+		wc_api_list = cls._init_api()
+		wc_api = next((api for api in wc_api_list if api.woocommerce_server == server_name), None)
+		if not wc_api:
+			frappe.throw(_("WooCommerce Server {0} not found or not enabled").format(server_name))
+
+		endpoint = (
+			f"{cls.resource}/{parent_id}/{cls.child_resource}/batch"
+			if parent_id and cls.child_resource
+			else f"{cls.resource}/batch"
+		)
+
+		try:
+			response = wc_api.api.post(endpoint, data=payload)
+		except Exception as err:
+			log_and_raise_error(err, error_text="batch_update failed")
+
+		if response.status_code not in (200, 201):
+			log_and_raise_error(error_text="batch_update failed", response=response)
+
+		return response.json()
+
 	def db_insert(self, *args, **kwargs):
 		"""
 		Creates a new WooCommerce Record
