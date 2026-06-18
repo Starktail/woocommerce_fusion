@@ -16,6 +16,7 @@ def commit_unless_in_test() -> None:
 	each parameterised test.
 	"""
 	if not frappe.flags.in_test:
+		# nosemgrep
 		frappe.db.commit()
 
 
