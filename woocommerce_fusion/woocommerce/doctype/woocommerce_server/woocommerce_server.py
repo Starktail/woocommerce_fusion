@@ -77,7 +77,9 @@ class WooCommerceServer(Document):
 						"On Frappe v16, '{0}' ({1}) may not re-use a tax account from the Sales Taxes "
 						"and Charges Template '{2}'. Sharing a tax account zeroes the calculated tax on "
 						"synced Sales Orders. Please configure a separate tax account."
-					).format(self.meta.get_label(fieldname), account, self.sales_taxes_and_charges_template)
+					).format(
+						_(self.meta.get_label(fieldname)), account, self.sales_taxes_and_charges_template
+					)
 				)
 
 	def validate_batch_settings(self):
