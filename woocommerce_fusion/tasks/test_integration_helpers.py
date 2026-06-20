@@ -592,6 +592,30 @@ def create_gl_account_for_tax():
 		pass
 
 
+def create_gl_account_for_shipping_tax():
+	"""Create a tax account for shipping tax that is distinct from the VAT account.
+
+	On Frappe v16, ERPNext keys the per-item tax map by account head (last-write-wins), so
+	re-using the VAT account for shipping tax would zero the calculated VAT row. Use a
+	separate tax account.
+	"""
+	if frappe.db.exists("Account", "Shipping Tax - SC"):
+		return "Shipping Tax - SC"
+	return (
+		frappe.get_doc(
+			{
+				"doctype": "Account",
+				"company": default_company,
+				"account_name": "Shipping Tax",
+				"parent_account": "Duties and Taxes - SC",
+				"account_type": "Tax",
+			}
+		)
+		.insert(ignore_if_duplicate=True)
+		.name
+	)
+
+
 def get_woocommerce_server(woocommerce_server_url: str):
 	wc_servers = frappe.get_all(
 		"WooCommerce Server", filters={"woocommerce_server_url": woocommerce_server_url}

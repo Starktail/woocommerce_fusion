@@ -13,6 +13,7 @@ from woocommerce_fusion.tasks.sync_sales_orders import (
 )
 from woocommerce_fusion.tasks.test_integration_helpers import (
 	TestIntegrationWooCommerce,
+	create_gl_account_for_shipping_tax,
 	create_shipping_rule,
 	get_woocommerce_server,
 )
@@ -187,6 +188,10 @@ class TestIntegrationWooCommerceSync(TestIntegrationWooCommerce):
 		)
 		wc_server.use_actual_tax_type = 0
 		wc_server.sales_taxes_and_charges_template = template_name
+		# On Frappe v16 the shipping tax account must differ from the template's VAT account,
+		# otherwise ERPNext's account-keyed tax map zeroes the calculated VAT (see
+		# WooCommerceServer.validate_tax_account_uniqueness).
+		wc_server.f_n_f_tax_account = create_gl_account_for_shipping_tax()
 		wc_server.flags.ignore_mandatory = True
 		wc_server.shipping_rule_map = []
 		wc_server.save()
@@ -700,6 +705,9 @@ class TestIntegrationWooCommerceSync(TestIntegrationWooCommerce):
 		)
 		wc_server.use_actual_tax_type = 0
 		wc_server.sales_taxes_and_charges_template = template_name
+		# v16 requires a distinct shipping tax account when a tax template is used (see
+		# WooCommerceServer.validate_tax_account_uniqueness).
+		wc_server.f_n_f_tax_account = create_gl_account_for_shipping_tax()
 		wc_server.flags.ignore_mandatory = True
 		wc_server.save()
 
