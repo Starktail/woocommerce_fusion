@@ -18,6 +18,8 @@ from woocommerce_fusion.woocommerce.doctype.woocommerce_order.woocommerce_order 
 from woocommerce_fusion.woocommerce.woocommerce_api import (
 	generate_woocommerce_record_name_from_domain_and_id,
 	get_domain_and_id_from_woocommerce_record_name,
+	get_wc_parameters_from_filters,
+	get_woocommerce_servers_from_filters,
 )
 
 
@@ -532,6 +534,97 @@ class TestWooCommerceOrder(FrappeTestCase):
 		domain, order_id = get_domain_and_id_from_woocommerce_record_name(name, delimiter)
 		self.assertEqual(domain, "site2.example.com")
 		self.assertEqual(order_id, 3)
+
+
+# Mirrors WooCommerceProduct.field_setter_map
+PRODUCT_FIELD_SETTER_MAP = {"woocommerce_name": "name", "woocommerce_id": "id"}
+
+
+class TestGetWcParametersFromFilters(FrappeTestCase):
+	"""
+	Unit tests for get_wc_parameters_from_filters
+	"""
+
+	def test_order_id_equals_maps_to_include(self):
+		params = get_wc_parameters_from_filters([["WooCommerce Order", "id", "=", "11"]])
+		self.assertEqual(params, {"include": ["11"]})
+
+	def test_product_woocommerce_id_equals_maps_to_include(self):
+		params = get_wc_parameters_from_filters(
+			[["WooCommerce Product", "woocommerce_id", "=", "11"]], self.PRODUCT_FIELD_SETTER_MAP
+		)
+		self.assertEqual(params, {"include": ["11"]})
+
+	def test_product_woocommerce_id_in_maps_to_include(self):
+		params = get_wc_parameters_from_filters(
+			[["WooCommerce Product", "woocommerce_id", "in", ["11", "12"]]], self.PRODUCT_FIELD_SETTER_MAP
+		)
+		self.assertEqual(params, {"include": "11,12"})
+
+	def test_product_woocommerce_name_like_maps_to_search(self):
+		params = get_wc_parameters_from_filters(
+			[["WooCommerce Product", "woocommerce_name", "like", "%hoodie%"]], self.PRODUCT_FIELD_SETTER_MAP
+		)
+		self.assertEqual(params, {"search": "hoodie"})
+
+	def test_order_name_equals_extracts_id_and_maps_to_include(self):
+		params = get_wc_parameters_from_filters([["WooCommerce Order", "name", "=", "woo-test.localhost~75"]])
+		self.assertEqual(params, {"include": [75]})
+
+	def test_order_name_equals_without_delimiter_uses_raw_value(self):
+		params = get_wc_parameters_from_filters([["WooCommerce Order", "name", "=", "75"]])
+		self.assertEqual(params, {"include": ["75"]})
+
+	def test_order_name_in_extracts_ids_and_maps_to_include(self):
+		params = get_wc_parameters_from_filters(
+			[["WooCommerce Order", "name", "in", ["woo-test.localhost~75", "woo-test.localhost~76"]]]
+		)
+		self.assertEqual(params, {"include": "75,76"})
+
+	def test_order_name_like_still_maps_to_search(self):
+		params = get_wc_parameters_from_filters([["WooCommerce Order", "name", "like", "%11%"]])
+		self.assertEqual(params, {"search": "11"})
+
+	def test_woocommerce_server_filter_is_not_a_wc_param(self):
+		params = get_wc_parameters_from_filters(
+			[["WooCommerce Order", "woocommerce_server", "=", "woo-test.localhost"]]
+		)
+		self.assertEqual(params, {})
+
+	def test_unsupported_field_reports_original_field_name(self):
+		with self.assertRaises(frappe.exceptions.ValidationError) as context:
+			get_wc_parameters_from_filters(
+				[["WooCommerce Product", "sku", "=", "ABC"]], self.PRODUCT_FIELD_SETTER_MAP
+			)
+		self.assertIn("sku", str(context.exception))
+
+
+class TestGetWoocommerceServersFromFilters(FrappeTestCase):
+	"""Unit tests for get_woocommerce_servers_from_filters (GitHub issue #220)."""
+
+	def test_name_equals_scopes_to_servers_domain(self):
+		servers = get_woocommerce_servers_from_filters(
+			[["WooCommerce Order", "name", "=", "woo-test.localhost~75"]]
+		)
+		self.assertEqual(servers, {"woo-test.localhost"})
+
+	def test_name_in_scopes_to_all_referenced_servers(self):
+		servers = get_woocommerce_servers_from_filters(
+			[["WooCommerce Order", "name", "in", ["woo-test.localhost~75", "shop2.example.com~3"]]]
+		)
+		self.assertEqual(servers, {"woo-test.localhost", "shop2.example.com"})
+
+	def test_woocommerce_server_equals_scopes_to_that_server(self):
+		servers = get_woocommerce_servers_from_filters(
+			[["WooCommerce Order", "woocommerce_server", "=", "woo-test.localhost"]]
+		)
+		self.assertEqual(servers, {"woo-test.localhost"})
+
+	def test_no_server_constraint_returns_none(self):
+		self.assertIsNone(
+			get_woocommerce_servers_from_filters([["WooCommerce Order", "status", "=", "processing"]])
+		)
+		self.assertIsNone(get_woocommerce_servers_from_filters([["WooCommerce Order", "id", "=", "75"]]))
 
 
 def wc_response_for_list_of_orders(nr_of_orders=5, site="example.com"):
