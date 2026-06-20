@@ -407,16 +407,19 @@ class SynchroniseSalesOrder(SynchroniseWooCommerce):
 		Update the WooCommerce Order with fields from it's corresponding ERPNext Sales Order
 		"""
 		wc_order_dirty = False
+		wc_server = frappe.get_cached_doc("WooCommerce Server", wc_order.woocommerce_server)
 
-		# Update the woocommerce_status field if necessary
-		sales_order_wc_status = (
-			WC_ORDER_STATUS_MAPPING[sales_order.woocommerce_status]
-			if sales_order.woocommerce_status
-			else None
-		)
-		if sales_order_wc_status != wc_order.status:
-			wc_order.status = sales_order_wc_status
-			wc_order_dirty = True
+		# Update the woocommerce_status field if necessary. Only push the status to WooCommerce when
+		# Sales Order Status Sync is enabled.
+		if wc_server.enable_so_status_sync:
+			sales_order_wc_status = (
+				WC_ORDER_STATUS_MAPPING[sales_order.woocommerce_status]
+				if sales_order.woocommerce_status
+				else None
+			)
+			if sales_order_wc_status != wc_order.status:
+				wc_order.status = sales_order_wc_status
+				wc_order_dirty = True
 
 		# Get the Item WooCommerce ID's
 		for so_item in sales_order.items:
@@ -430,7 +433,6 @@ class SynchroniseSalesOrder(SynchroniseWooCommerce):
 			)
 
 		# Update the line_items field if necessary
-		wc_server = frappe.get_cached_doc("WooCommerce Server", wc_order.woocommerce_server)
 		if wc_server.sync_so_items_to_wc:
 			sales_order_items_changed = False
 			line_items = json.loads(wc_order.line_items)

@@ -801,6 +801,66 @@ class TestIntegrationWooCommerceSync(TestIntegrationWooCommerce):
 		self.delete_woocommerce_order(wc_order_id=wc_order_id)
 
 	@parameterized.expand(BATCH_MODES)
+	@patch("woocommerce_fusion.tasks.sync_sales_orders.frappe.enqueue")
+	def test_sync_does_not_update_woocommerce_order_status_when_disabled(
+		self, _name, batch_enabled, mock_enqueue, mock_log_error
+	):
+		"""
+		When Sales Order Status Sync is DISABLED, syncing
+		an ERPNext Sales Order that is newer than its WooCommerce Order (e.g. after submitting it)
+		must not change the linked WooCommerce Order's status.
+		"""
+		self._set_batch_mode(batch_enabled)
+
+		# Setup: status sync disabled, but a status map is present, so the only thing preventing
+		# an outbound status push is the disabled flag
+		wc_server = frappe.get_doc("WooCommerce Server", self.wc_server.name)
+		wc_server.submit_sales_orders = 0
+		wc_server.enable_payments_sync = 0
+		wc_server.enable_so_status_sync = 0
+		wc_server.sales_order_status_map = []
+		wc_server.append(
+			"sales_order_status_map",
+			{
+				"erpnext_sales_order_status": "On Hold",
+				"woocommerce_sales_order_status": "On hold",
+			},
+		)
+		wc_server.flags.ignore_mandatory = True
+		wc_server.save()
+
+		# Create a new order in WooCommerce and sync it to ERPNext
+		wc_order_id, wc_order_name = self.post_woocommerce_order(
+			payment_method_title="Doge", item_price=10, item_qty=3
+		)
+		run_sales_order_sync(woocommerce_order_name=wc_order_name)
+		self._flush_if_batch()
+		mock_log_error.assert_not_called()
+
+		sales_order_name = frappe.get_value("Sales Order", {"woocommerce_id": wc_order_id}, "name")
+		self.assertIsNotNone(sales_order_name)
+
+		# In WooCommerce change the order's status
+		self.update_woocommerce_order_status(wc_order_id, "completed")
+
+		# Submit the ERPNext Sales Order so it becomes newer than the WooCommerce Order, routing
+		# the next sync through the outbound (ERPNext -> WooCommerce) path
+		sales_order = frappe.get_doc("Sales Order", sales_order_name)
+		sales_order.submit()
+
+		# Run synchronisation again
+		run_sales_order_sync(sales_order_name=sales_order.name)
+		self._flush_if_batch()
+		mock_log_error.assert_not_called()
+
+		# Expect the WooCommerce Order status to be unchanged (not reverted by ERPNext)
+		wc_order = self.get_woocommerce_order(order_id=wc_order_id)
+		self.assertEqual(wc_order["status"], "completed")
+
+		# Delete order in WooCommerce
+		self.delete_woocommerce_order(wc_order_id=wc_order_id)
+
+	@parameterized.expand(BATCH_MODES)
 	def test_sync_so_items_to_wc_preserves_metadata(self, mock_log_error, _name, batch_enabled):
 		"""
 		Test that when 'sync_so_items_to_wc' is enabled, changes to ERPNext Sales Order

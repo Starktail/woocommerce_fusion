@@ -451,6 +451,29 @@ class TestIntegrationWooCommerce(FrappeTestCase):
 
 		return order_data
 
+	def update_woocommerce_order_status(self, order_id: int, status: str) -> dict:
+		"""
+		Update an order's status directly on a WooCommerce testing site (i.e. as if changed in
+		WooCommerce).
+		"""
+		import json
+
+		from requests_oauthlib import OAuth1Session
+
+		# Initialize OAuth1 session
+		oauth = OAuth1Session(self.wc_consumer_key, client_secret=self.wc_consumer_secret)
+		if not verify_ssl:
+			oauth.verify = False
+
+		# API Endpoint
+		url = f"{self.wc_url}/wp-json/wc/v3/orders/{order_id}"
+		headers = {"Content-Type": "application/json"}
+
+		# Making the API call
+		response = oauth.put(url, headers=headers, data=json.dumps({"status": status}))
+
+		return response.json()
+
 	def post_product_attribute(self, attribute_name: str, attribute_slug: str):
 		"""
 		Post product attribute to WooCommerce
