@@ -6,20 +6,6 @@ from frappe.utils.caching import redis_cache
 from woocommerce import API
 
 
-def commit_unless_in_test() -> None:
-	"""
-	Commit the current transaction, unless running under the test runner.
-
-	The batch flush relies on intermediate commits (to release the row lock and to persist
-	batch-log progress). Tests, however, rely on transaction rollback for isolation; committing
-	inside a test would leak data across test methods and across the two batch-mode variants of
-	each parameterised test.
-	"""
-	if not frappe.flags.in_test:
-		# nosemgrep
-		frappe.db.commit()
-
-
 class APIWithRequestLogging(API):
 	"""WooCommerce API with Request Logging."""
 

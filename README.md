@@ -25,7 +25,7 @@ The code is licensed as GNU General Public License (v3) and the copyright is own
 
 ### Features
 
-WooCommerce connector for ERPNext v15
+WooCommerce connector for ERPNext v15 and v16
 
 This app allows you to synchronise your ERPNext site with **multiple** WooCommerce websites
 

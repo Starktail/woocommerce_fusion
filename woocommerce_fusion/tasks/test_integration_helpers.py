@@ -8,7 +8,7 @@ from frappe.utils import add_to_date, now
 
 from woocommerce_fusion.woocommerce.woocommerce_api import WC_RESOURCE_DELIMITER
 
-default_company = get_default_company()
+default_company = get_default_company() or "Some Company (Pty) Ltd"
 default_bank = "Test Bank"
 default_bank_account = "Checking Account"
 
@@ -88,8 +88,8 @@ class TestIntegrationWooCommerce(FrappeTestCase):
 		# share a transaction and leak Sync Queue rows / fixed item codes into each other (e.g. a
 		# Pending row for a since-deleted order, or the two parameterised variants colliding on the
 		# same item code). Roll back after each batch-mode test to keep them isolated. Batch code
-		# avoids committing under tests (see commit_unless_in_test) so this fully reverts the test's
-		# database changes. Gated on _batch_mode (set by _set_batch_mode and by the batch test
+		# guards its frappe.db.commit() calls with `not frappe.flags.in_test`, so this fully reverts
+		# the test's database changes. Gated on _batch_mode (set by _set_batch_mode and by the batch test
 		# classes' setUp) so non-batch tests keep their existing class-level cleanup behaviour.
 		if getattr(self, "_batch_mode", None) is not None:
 			frappe.db.rollback()
@@ -565,7 +565,7 @@ def create_gl_account_for_bank(account_name="_Test Bank"):
 		frappe.get_doc(
 			{
 				"doctype": "Account",
-				"company": get_default_company(),
+				"company": default_company,
 				"account_name": account_name,
 				"parent_account": "Bank Accounts - SC",
 				"type": "Bank",
@@ -582,7 +582,7 @@ def create_gl_account_for_tax():
 		frappe.get_doc(
 			{
 				"doctype": "Account",
-				"company": get_default_company(),
+				"company": default_company,
 				"account_name": "VAT",
 				"parent_account": "Duties and Taxes - SC",
 				"type": "Bank",

@@ -4,7 +4,6 @@ import frappe
 from frappe.utils import get_datetime, now_datetime
 
 from woocommerce_fusion.tasks.sync_items import ERPNextItemToSync, SynchroniseItem
-from woocommerce_fusion.tasks.utils import commit_unless_in_test
 from woocommerce_fusion.woocommerce.doctype.woocommerce_order.woocommerce_order import (
 	WooCommerceOrder,
 )
@@ -388,7 +387,8 @@ class BatchProcessor:
 			}
 		)
 		batch_log.insert(ignore_permissions=True)
-		commit_unless_in_test()
+		if not frappe.flags.in_test:
+			frappe.db.commit()
 		return batch_log
 
 	def _finalise_batch_log(self, batch_log, success_count: int, fail_count: int):
@@ -396,7 +396,8 @@ class BatchProcessor:
 		batch_log.failed_items = fail_count
 		batch_log.status = "Completed" if fail_count == 0 else "Failed" if success_count == 0 else "Partial"
 		batch_log.save(ignore_permissions=True)
-		commit_unless_in_test()
+		if not frappe.flags.in_test:
+			frappe.db.commit()
 
 	def _execute_product_batch(
 		self,
@@ -428,7 +429,8 @@ class BatchProcessor:
 			batch_log.status = "Failed"
 			batch_log.failed_items = total
 			batch_log.save(ignore_permissions=True)
-			commit_unless_in_test()
+			if not frappe.flags.in_test:
+				frappe.db.commit()
 			return 0, total
 
 		batch_log.response_payload = json.dumps(result)
@@ -456,7 +458,8 @@ class BatchProcessor:
 		batch_log.failed_items = fail_count
 		batch_log.status = "Completed" if fail_count == 0 else "Partial"
 		batch_log.save(ignore_permissions=True)
-		commit_unless_in_test()
+		if not frappe.flags.in_test:
+			frappe.db.commit()
 
 		return success_count, fail_count
 
@@ -474,7 +477,8 @@ class BatchProcessor:
 			batch_log.status = "Failed"
 			batch_log.failed_items = total
 			batch_log.save(ignore_permissions=True)
-			commit_unless_in_test()
+			if not frappe.flags.in_test:
+				frappe.db.commit()
 			return 0, total
 
 		batch_log.response_payload = json.dumps(result)
@@ -493,7 +497,8 @@ class BatchProcessor:
 		batch_log.failed_items = fail_count
 		batch_log.status = "Completed" if fail_count == 0 else "Partial"
 		batch_log.save(ignore_permissions=True)
-		commit_unless_in_test()
+		if not frappe.flags.in_test:
+			frappe.db.commit()
 
 		return success_count, fail_count
 

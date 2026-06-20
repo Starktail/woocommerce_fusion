@@ -27,6 +27,8 @@ def run_item_sync_from_hook(doc, method):
 	"""
 	Intended to be triggered by a Document Controller hook from Item
 	"""
+	if frappe.flags.in_test:
+		return
 	if (
 		doc.doctype == "Item"
 		and not doc.flags.get("created_by_sync", None)

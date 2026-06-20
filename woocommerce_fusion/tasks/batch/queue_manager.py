@@ -4,7 +4,6 @@ import frappe
 from frappe.utils import get_datetime, now_datetime
 
 from woocommerce_fusion.tasks.batch.batch_processor import BatchProcessor
-from woocommerce_fusion.tasks.utils import commit_unless_in_test
 
 
 def should_flush(server_name: str) -> tuple[bool, str]:
@@ -75,7 +74,8 @@ def flush_pending(server_name: str, reason: str = "manual") -> dict:
 		"Processing",
 		update_modified=False,
 	)
-	commit_unless_in_test()
+	if not frappe.flags.in_test:
+		frappe.db.commit()
 
 	# Group by (wc_resource_type, parent_woocommerce_id, sync_type, direction)
 	groups: dict[tuple, list] = {}
