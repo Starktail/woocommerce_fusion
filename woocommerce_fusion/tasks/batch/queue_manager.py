@@ -75,7 +75,9 @@ def flush_pending(server_name: str, reason: str = "manual") -> dict:
 		update_modified=False,
 	)
 	if not frappe.flags.in_test:
-		frappe.db.commit()
+		# Commit the row claim (status=Processing) immediately so a concurrent flush worker
+		# cannot re-claim and double-process the same queue rows.
+		frappe.db.commit()  # nosemgrep
 
 	# Group by (wc_resource_type, parent_woocommerce_id, sync_type, direction)
 	groups: dict[tuple, list] = {}

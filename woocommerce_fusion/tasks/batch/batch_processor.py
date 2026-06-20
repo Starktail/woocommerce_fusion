@@ -388,7 +388,9 @@ class BatchProcessor:
 		)
 		batch_log.insert(ignore_permissions=True)
 		if not frappe.flags.in_test:
-			frappe.db.commit()
+			# Commit the WooCommerce Batch Log now so the audit record of what was sent to
+			# WooCommerce survives a later failure in the same flush.
+			frappe.db.commit()  # nosemgrep
 		return batch_log
 
 	def _finalise_batch_log(self, batch_log, success_count: int, fail_count: int):
@@ -397,7 +399,9 @@ class BatchProcessor:
 		batch_log.status = "Completed" if fail_count == 0 else "Failed" if success_count == 0 else "Partial"
 		batch_log.save(ignore_permissions=True)
 		if not frappe.flags.in_test:
-			frappe.db.commit()
+			# Commit the WooCommerce Batch Log now so the audit record of what was sent to
+			# WooCommerce survives a later failure in the same flush.
+			frappe.db.commit()  # nosemgrep
 
 	def _execute_product_batch(
 		self,
@@ -430,7 +434,9 @@ class BatchProcessor:
 			batch_log.failed_items = total
 			batch_log.save(ignore_permissions=True)
 			if not frappe.flags.in_test:
-				frappe.db.commit()
+				# Commit the WooCommerce Batch Log now so the audit record of what was sent to
+				# WooCommerce survives a later failure in the same flush.
+				frappe.db.commit()  # nosemgrep
 			return 0, total
 
 		batch_log.response_payload = json.dumps(result)
@@ -459,7 +465,9 @@ class BatchProcessor:
 		batch_log.status = "Completed" if fail_count == 0 else "Partial"
 		batch_log.save(ignore_permissions=True)
 		if not frappe.flags.in_test:
-			frappe.db.commit()
+			# Commit the WooCommerce Batch Log now so the audit record of what was sent to
+			# WooCommerce survives a later failure in the same flush.
+			frappe.db.commit()  # nosemgrep
 
 		return success_count, fail_count
 
@@ -478,7 +486,9 @@ class BatchProcessor:
 			batch_log.failed_items = total
 			batch_log.save(ignore_permissions=True)
 			if not frappe.flags.in_test:
-				frappe.db.commit()
+				# Commit the WooCommerce Batch Log now so the audit record of what was sent to
+				# WooCommerce survives a later failure in the same flush.
+				frappe.db.commit()  # nosemgrep
 			return 0, total
 
 		batch_log.response_payload = json.dumps(result)
@@ -498,7 +508,10 @@ class BatchProcessor:
 		batch_log.status = "Completed" if fail_count == 0 else "Partial"
 		batch_log.save(ignore_permissions=True)
 		if not frappe.flags.in_test:
-			frappe.db.commit()
+			# Commit the WooCommerce Batch Log now so the audit record of what was sent to
+			# WooCommerce survives a later failure in the same flush. Skipped under test to keep
+			# FrappeTestCase rollback isolation.
+			frappe.db.commit()  # nosemgrep
 
 		return success_count, fail_count
 
