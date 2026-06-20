@@ -551,19 +551,19 @@ class TestGetWcParametersFromFilters(FrappeTestCase):
 
 	def test_product_woocommerce_id_equals_maps_to_include(self):
 		params = get_wc_parameters_from_filters(
-			[["WooCommerce Product", "woocommerce_id", "=", "11"]], self.PRODUCT_FIELD_SETTER_MAP
+			[["WooCommerce Product", "woocommerce_id", "=", "11"]], PRODUCT_FIELD_SETTER_MAP
 		)
 		self.assertEqual(params, {"include": ["11"]})
 
 	def test_product_woocommerce_id_in_maps_to_include(self):
 		params = get_wc_parameters_from_filters(
-			[["WooCommerce Product", "woocommerce_id", "in", ["11", "12"]]], self.PRODUCT_FIELD_SETTER_MAP
+			[["WooCommerce Product", "woocommerce_id", "in", ["11", "12"]]], PRODUCT_FIELD_SETTER_MAP
 		)
 		self.assertEqual(params, {"include": "11,12"})
 
 	def test_product_woocommerce_name_like_maps_to_search(self):
 		params = get_wc_parameters_from_filters(
-			[["WooCommerce Product", "woocommerce_name", "like", "%hoodie%"]], self.PRODUCT_FIELD_SETTER_MAP
+			[["WooCommerce Product", "woocommerce_name", "like", "%hoodie%"]], PRODUCT_FIELD_SETTER_MAP
 		)
 		self.assertEqual(params, {"search": "hoodie"})
 
@@ -594,7 +594,7 @@ class TestGetWcParametersFromFilters(FrappeTestCase):
 	def test_unsupported_field_reports_original_field_name(self):
 		with self.assertRaises(frappe.exceptions.ValidationError) as context:
 			get_wc_parameters_from_filters(
-				[["WooCommerce Product", "sku", "=", "ABC"]], self.PRODUCT_FIELD_SETTER_MAP
+				[["WooCommerce Product", "sku", "=", "ABC"]], PRODUCT_FIELD_SETTER_MAP
 			)
 		self.assertIn("sku", str(context.exception))
 
