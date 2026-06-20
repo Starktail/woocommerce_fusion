@@ -8,7 +8,7 @@ def before_tests():
 	# complete setup if missing
 	from frappe.desk.page.setup_wizard.setup_wizard import setup_complete
 
-	if not frappe.db.a_row_exists("Company"):
+	if not frappe.db.exists("Company", "Some Company (Pty) Ltd"):
 		current_year = now_datetime().year
 		setup_complete(
 			{
@@ -28,46 +28,22 @@ def before_tests():
 				"chart_of_accounts": "Standard",
 			}
 		)
-	elif not frappe.db.exists("Company", "Some Company (Pty) Ltd"):
-		# For running tests in v16
-		frappe.get_doc(
-			{
-				"doctype": "Company",
-				"company_name": "Some Company (Pty) Ltd",
-				"abbr": "SC",
-				"default_currency": "INR",
-				"country": "South Africa",
-				"chart_of_accounts": "Standard",
-			}
-		).insert()
-
-	if not frappe.db.exists("User", "test@erpnext.com"):
-		# For running tests in v16
-		frappe.get_doc(
-			{
-				"doctype": "User",
-				"email": "test@erpnext.com",
-				"first_name": "Test",
-				"send_welcome_email": 0,
-			}
-		).insert(ignore_permissions=True)
-
-	# For running tests in v16
-	global_defaults = frappe.get_single("Global Defaults")
-	if global_defaults.default_company != "Some Company (Pty) Ltd":
-		global_defaults.default_company = "Some Company (Pty) Ltd"
-		global_defaults.save()
 
 	_enable_all_roles_for_admin()
 
 	set_defaults_for_tests()
 	create_curr_exchange_record()
 
-	# v16 scenario
+	# set_defaults_for_tests() points the default customer_group at the ROOT (a group) node, which
+	# v16 rejects as a Customer's group; point it at a real (non-group) customer group instead.
 	non_group_customer_group = frappe.db.get_value("Customer Group", {"is_group": 0}, "name")
 	if non_group_customer_group:
 		frappe.db.set_default("customer_group", non_group_customer_group)
 		frappe.db.set_single_value("Selling Settings", "customer_group", non_group_customer_group)
+
+	# Set default for v16
+	if frappe.db.exists("Warehouse", "Stores - SC"):
+		frappe.db.set_single_value("Stock Settings", "default_warehouse", "Stores - SC")
 
 	# following same practice as in erpnext app to commit manually inside before_tests
 	# nosemgrep
