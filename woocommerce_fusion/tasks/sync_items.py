@@ -983,15 +983,21 @@ def get_item_price_rate(item: ERPNextItemToSync):
 	"""
 	wc_server = frappe.get_cached_doc("WooCommerce Server", item.item_woocommerce_server.woocommerce_server)
 	if wc_server.enable_price_list_sync:
+		filters = {
+			"item_code": item.item.item_code,
+			"price_list": wc_server.price_list,
+			"batch_no": ("is", "not set"),
+			"customer": ("is", "not set"),
+			"supplier": ("is", "not set"),
+		}
+		# When quantities are published in the Sales UOM, the price has to be the
+		# price of that same unit, or the shop shows a per-piece price against a
+		# per-box quantity.
+		if wc_server.sync_in_sales_uom and item.item.sales_uom:
+			filters["uom"] = item.item.sales_uom
 		item_prices = frappe.get_all(
 			"Item Price",
-			filters={
-				"item_code": item.item.item_code,
-				"price_list": wc_server.price_list,
-				"batch_no": ("is", "not set"),
-				"customer": ("is", "not set"),
-				"supplier": ("is", "not set"),
-			},
+			filters=filters,
 			fields=["price_list_rate", "valid_upto"],
 		)
 		return next(
