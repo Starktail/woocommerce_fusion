@@ -230,3 +230,52 @@ class TestWooCommerceStockSync(UnitTestCase):
 		update_stock_levels_for_all_enabled_items_in_background()
 
 		self.assertEqual(mock_get_all.call_args.kwargs["filters"], {})
+
+
+class TestUOMConversion(FrappeTestCase):
+	"""Tests for `sync_in_sales_uom`: publishing quantities in the Sales UOM.
+
+	A distributor may keep stock in Pieces and sell in Boxes of 1000. Without
+	the conversion the shop advertises 52900 items where there are 52 boxes.
+	"""
+
+	def test_conversion_factor_is_one_without_a_sales_uom(self):
+		"""No Sales UOM means nothing changes: the common case stays a no-op."""
+		item = frappe._dict(sales_uom=None, stock_uom="Nos", uoms=[])
+		with patch("woocommerce_fusion.tasks.utils.frappe.get_cached_doc", return_value=item):
+			from woocommerce_fusion.tasks.utils import get_sales_uom_conversion_factor
+
+			self.assertEqual(get_sales_uom_conversion_factor("ITEM-1"), 1.0)
+
+	def test_conversion_factor_is_one_when_sales_uom_equals_stock_uom(self):
+		item = frappe._dict(sales_uom="Nos", stock_uom="Nos", uoms=[])
+		with patch("woocommerce_fusion.tasks.utils.frappe.get_cached_doc", return_value=item):
+			from woocommerce_fusion.tasks.utils import get_sales_uom_conversion_factor
+
+			self.assertEqual(get_sales_uom_conversion_factor("ITEM-1"), 1.0)
+
+	def test_conversion_factor_is_read_from_the_item(self):
+		item = frappe._dict(
+			sales_uom="Box",
+			stock_uom="Piece",
+			uoms=[
+				frappe._dict(uom="Piece", conversion_factor=1),
+				frappe._dict(uom="Box", conversion_factor=1000),
+			],
+		)
+		with patch("woocommerce_fusion.tasks.utils.frappe.get_cached_doc", return_value=item):
+			from woocommerce_fusion.tasks.utils import get_sales_uom_conversion_factor
+
+			self.assertEqual(get_sales_uom_conversion_factor("ITEM-1"), 1000.0)
+
+	def test_conversion_factor_is_one_when_the_sales_uom_has_no_conversion(self):
+		"""A Sales UOM that is not in the conversion table must not break the sync."""
+		item = frappe._dict(
+			sales_uom="Box",
+			stock_uom="Piece",
+			uoms=[frappe._dict(uom="Piece", conversion_factor=1)],
+		)
+		with patch("woocommerce_fusion.tasks.utils.frappe.get_cached_doc", return_value=item):
+			from woocommerce_fusion.tasks.utils import get_sales_uom_conversion_factor
+
+			self.assertEqual(get_sales_uom_conversion_factor("ITEM-1"), 1.0)
