@@ -1,0 +1,51 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "creation": "2026-08-14 00:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "woocommerce_tax_rate_id",
+  "item_tax_template",
+  "tax_account"
+ ],
+ "fields": [
+  {
+   "description": "WooCommerce tax rate identifier: the <code>id</code> of an entry in a line item's <code>taxes</code> array, or the line item's <code>tax_class</code> slug.",
+   "fieldname": "woocommerce_tax_rate_id",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "WooCommerce Tax Rate ID / Tax Class",
+   "reqd": 1
+  },
+  {
+   "description": "Applied per Sales Order Item on the template tax path (<code>use_actual_tax_type = 0</code>).",
+   "fieldname": "item_tax_template",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Item Tax Template",
+   "options": "Item Tax Template"
+  },
+  {
+   "description": "Reserved for the actual tax path (per-rate tax account). Not used by the template path.",
+   "fieldname": "tax_account",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Tax Account",
+   "options": "Account"
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "istable": 1,
+ "links": [],
+ "modified": "2026-08-14 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "WooCommerce",
+ "name": "WooCommerce Server Tax Rate",
+ "owner": "Administrator",
+ "permissions": [],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}

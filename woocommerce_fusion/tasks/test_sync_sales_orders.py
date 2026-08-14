@@ -1,11 +1,16 @@
 import json
+from types import SimpleNamespace
 from unittest.mock import Mock, call, patch
 
 import frappe
 from erpnext import get_default_company
 from frappe.tests.utils import FrappeTestCase
 
-from woocommerce_fusion.tasks.sync_sales_orders import SynchroniseSalesOrder, find_existing_contact
+from woocommerce_fusion.tasks.sync_sales_orders import (
+	SynchroniseSalesOrder,
+	find_existing_contact,
+	get_item_tax_template_for_line_item,
+)
 from woocommerce_fusion.woocommerce.woocommerce_api import (
 	generate_woocommerce_record_name_from_domain_and_id,
 )
@@ -543,3 +548,52 @@ def create_gl_account_for_bank(account_name="_Test Bank"):
 		pass
 
 	return frappe.get_doc("Account", {"account_name": account_name})
+
+
+def _tax_rate_map(*pairs):
+	"""Build a fake `tax_rate_map` child table: pairs of (woocommerce_tax_rate_id, item_tax_template)."""
+	return [
+		SimpleNamespace(woocommerce_tax_rate_id=rate_id, item_tax_template=template)
+		for rate_id, template in pairs
+	]
+
+
+class TestGetItemTaxTemplateForLineItem(FrappeTestCase):
+	"""Unit tests for the WooCommerce tax rate -> Item Tax Template resolution (issue #259)."""
+
+	def test_matches_by_woocommerce_tax_rate_id(self):
+		wc_server = SimpleNamespace(tax_rate_map=_tax_rate_map(("1", "VAT 10% - SC"), ("2", "VAT 20% - SC")))
+		line_item = {"taxes": [{"id": 2, "total": "15.30"}], "tax_class": ""}
+		self.assertEqual(get_item_tax_template_for_line_item(wc_server, line_item), "VAT 20% - SC")
+
+	def test_rate_id_is_matched_as_string(self):
+		# WooCommerce sends the rate id as an int; the map stores a Data (string) value.
+		wc_server = SimpleNamespace(tax_rate_map=_tax_rate_map(("7", "VAT 10% - SC")))
+		line_item = {"taxes": [{"id": 7, "total": "1.00"}]}
+		self.assertEqual(get_item_tax_template_for_line_item(wc_server, line_item), "VAT 10% - SC")
+
+	def test_falls_back_to_tax_class_slug(self):
+		wc_server = SimpleNamespace(tax_rate_map=_tax_rate_map(("reduced-rate", "VAT 10% - SC")))
+		line_item = {"taxes": [], "tax_class": "reduced-rate"}
+		self.assertEqual(get_item_tax_template_for_line_item(wc_server, line_item), "VAT 10% - SC")
+
+	def test_rate_id_takes_priority_over_tax_class(self):
+		wc_server = SimpleNamespace(
+			tax_rate_map=_tax_rate_map(("2", "VAT 20% - SC"), ("reduced-rate", "VAT 10% - SC"))
+		)
+		line_item = {"taxes": [{"id": 2}], "tax_class": "reduced-rate"}
+		self.assertEqual(get_item_tax_template_for_line_item(wc_server, line_item), "VAT 20% - SC")
+
+	def test_no_map_returns_none(self):
+		self.assertIsNone(
+			get_item_tax_template_for_line_item(SimpleNamespace(tax_rate_map=[]), {"taxes": []})
+		)
+		self.assertIsNone(
+			get_item_tax_template_for_line_item(SimpleNamespace(tax_rate_map=None), {"taxes": []})
+		)
+
+	def test_map_configured_but_no_match_returns_none(self):
+		# Unchanged (order-level template) behaviour is preserved when nothing matches.
+		wc_server = SimpleNamespace(tax_rate_map=_tax_rate_map(("99", "VAT 20% - SC")))
+		line_item = {"taxes": [{"id": 2}], "tax_class": "", "id": 5}
+		self.assertIsNone(get_item_tax_template_for_line_item(wc_server, line_item))

@@ -43,6 +43,7 @@
   "tax_account",
   "use_actual_tax_type",
   "sales_taxes_and_charges_template",
+  "tax_rate_map",
   "column_break_4b4vn",
   "f_n_f_account",
   "f_n_f_tax_account",
@@ -210,6 +211,14 @@
    "label": "Sales Taxes and Charges Template",
    "mandatory_depends_on": "eval: doc.enable_tax_lines_sync && !doc.use_actual_tax_type;",
    "options": "Sales Taxes and Charges Template"
+  },
+  {
+   "depends_on": "eval:doc.enable_tax_lines_sync && !doc.use_actual_tax_type",
+   "description": "Map WooCommerce tax rates to ERPNext Item Tax Templates so mixed-rate orders are taxed per item (issue #259). Empty = single order-level template (unchanged behaviour).",
+   "fieldname": "tax_rate_map",
+   "fieldtype": "Table",
+   "label": "WooCommerce Tax Rate Map",
+   "options": "WooCommerce Server Tax Rate"
   },
   {
    "fieldname": "secret",

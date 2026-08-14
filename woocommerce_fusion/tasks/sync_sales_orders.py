@@ -725,6 +725,7 @@ class SynchroniseSalesOrder(SynchroniseWooCommerce):
 				found_item = frappe.get_doc("Item", item_codes[0].parent) if item_codes else None
 
 			rate = item.get("price")
+			item_tax_template = None
 			# If we are applying a Sales Taxes and Charges Template (as opposed to Actual Tax), then we need to
 			# determine if the item price should include tax or not
 			if wc_server.enable_tax_lines_sync and not wc_server.use_actual_tax_type:
@@ -734,6 +735,10 @@ class SynchroniseSalesOrder(SynchroniseWooCommerce):
 				)
 				if tax_template.taxes[0].included_in_print_rate:
 					rate = get_tax_inc_price_for_woocommerce_line_item(item)
+				# Resolve this line's WooCommerce tax rate to an Item Tax Template, so that a mixed-rate
+				# order is taxed per item instead of at the single order-level template rate (issue #259).
+				# With no map configured/matched, item_tax_template stays None and behaviour is unchanged.
+				item_tax_template = get_item_tax_template_for_line_item(wc_server, item)
 
 			new_sales_order_line = {
 				"item_code": found_item.name,
@@ -745,6 +750,9 @@ class SynchroniseSalesOrder(SynchroniseWooCommerce):
 				"warehouse": wc_server.warehouse,
 				"discount_percentage": 100 if item.get("price") == 0 else 0,
 			}
+
+			if item_tax_template:
+				new_sales_order_line["item_tax_template"] = item_tax_template
 
 			# Process Order Item Line Field Mappings
 			self.set_sales_order_item_fields(woocommerce_order_line_item=item, so_item=new_sales_order_line)
@@ -1141,6 +1149,45 @@ def add_tax_details(sales_order, price, desc, tax_account_head):
 			"description": desc,
 		},
 	)
+
+
+def get_item_tax_template_for_line_item(wc_server, line_item):
+	"""
+	Resolve a WooCommerce order line item to an ERPNext Item Tax Template using the `tax_rate_map`
+	child table on WooCommerce Server. Matching is attempted first on the tax rate ids in the line
+	item's `taxes` array, then on its `tax_class` slug.
+
+	Returns the mapped Item Tax Template name, or None when no map is configured or none of the
+	line's rates match a map entry. In that case the caller keeps the existing behaviour (the single
+	order-level Sales Taxes and Charges Template), so single-rate setups are unaffected. See #259.
+	"""
+	tax_rate_map = getattr(wc_server, "tax_rate_map", None)
+	if not tax_rate_map:
+		return None
+
+	# Candidate keys in priority order: WooCommerce tax rate ids on the line, then the tax_class slug
+	candidate_keys = [
+		str(tax.get("id")) for tax in (line_item.get("taxes") or []) if tax.get("id") is not None
+	]
+	if line_item.get("tax_class"):
+		candidate_keys.append(str(line_item.get("tax_class")))
+
+	lookup = {
+		str(row.woocommerce_tax_rate_id): row.item_tax_template
+		for row in tax_rate_map
+		if row.woocommerce_tax_rate_id and row.item_tax_template
+	}
+	for key in candidate_keys:
+		if key in lookup:
+			return lookup[key]
+
+	# A map is configured but nothing matched this line: keep default behaviour, but make it visible.
+	frappe.logger("woocommerce_fusion").warning(
+		"No WooCommerce Tax Rate Map entry matched line item "
+		f"{line_item.get('id') or line_item.get('product_id')} (tax keys {candidate_keys}); "
+		"falling back to the order-level tax template."
+	)
+	return None
 
 
 def get_tax_inc_price_for_woocommerce_line_item(line_item: dict):
