@@ -1,0 +1,197 @@
+{
+ "actions": [],
+ "autoname": "hash",
+ "creation": "2026-06-16 00:00:00.000000",
+ "default_view": "List",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "woocommerce_server",
+  "sync_type",
+  "direction",
+  "wc_resource_type",
+  "status",
+  "column_break_main",
+  "reference_doctype",
+  "reference_name",
+  "woocommerce_id",
+  "parent_woocommerce_id",
+  "item_woocommerce_server_idx",
+  "trigger_section",
+  "triggered_by",
+  "trigger_reference_doctype",
+  "trigger_reference_name",
+  "result_section",
+  "batch_log",
+  "retry_count",
+  "error_message",
+  "extra_data"
+ ],
+ "fields": [
+  {
+   "fieldname": "woocommerce_server",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "WooCommerce Server",
+   "options": "WooCommerce Server",
+   "reqd": 1
+  },
+  {
+   "fieldname": "sync_type",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Sync Type",
+   "options": "item\nitem_price\nstock\norder",
+   "reqd": 1
+  },
+  {
+   "description": "outbound = ERPNext → WC; inbound = WC → ERPNext. item_price and stock are always outbound.",
+   "fieldname": "direction",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Direction",
+   "options": "outbound\ninbound",
+   "reqd": 1
+  },
+  {
+   "description": "Determines which WC endpoint is called",
+   "fieldname": "wc_resource_type",
+   "fieldtype": "Select",
+   "label": "WC Resource Type",
+   "options": "product\nproduct_variation\norder",
+   "reqd": 1
+  },
+  {
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Status",
+   "options": "Pending\nProcessing\nCompleted\nFailed\nSkipped\nSuperseded"
+  },
+  {
+   "fieldname": "column_break_main",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "reference_doctype",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Reference DocType"
+  },
+  {
+   "description": "item_code for Item rows; WC status string for outbound order rows",
+   "fieldname": "reference_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Reference Name"
+  },
+  {
+   "description": "WC product/order ID at time of enqueue (may be empty for creates)",
+   "fieldname": "woocommerce_id",
+   "fieldtype": "Data",
+   "label": "WooCommerce ID"
+  },
+  {
+   "description": "For product variations: the parent product's WooCommerce ID",
+   "fieldname": "parent_woocommerce_id",
+   "fieldtype": "Data",
+   "label": "Parent WooCommerce ID"
+  },
+  {
+   "description": "idx of the Item WooCommerce Server child row",
+   "fieldname": "item_woocommerce_server_idx",
+   "fieldtype": "Int",
+   "label": "Item WooCommerce Server Row Index"
+  },
+  {
+   "fieldname": "trigger_section",
+   "fieldtype": "Section Break",
+   "label": "Trigger"
+  },
+  {
+   "fieldname": "triggered_by",
+   "fieldtype": "Select",
+   "label": "Triggered By",
+   "options": "Hook\nScheduled\nManual\nBatch Flush"
+  },
+  {
+   "fieldname": "trigger_reference_doctype",
+   "fieldtype": "Data",
+   "label": "Trigger Reference DocType"
+  },
+  {
+   "fieldname": "trigger_reference_name",
+   "fieldtype": "Data",
+   "label": "Trigger Reference Name"
+  },
+  {
+   "fieldname": "result_section",
+   "fieldtype": "Section Break",
+   "label": "Result"
+  },
+  {
+   "fieldname": "batch_log",
+   "fieldtype": "Link",
+   "label": "Batch Log",
+   "options": "WooCommerce Batch Log",
+   "read_only": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "retry_count",
+   "fieldtype": "Int",
+   "label": "Retry Count"
+  },
+  {
+   "fieldname": "error_message",
+   "fieldtype": "Text",
+   "label": "Error Message",
+   "read_only": 1
+  },
+  {
+   "description": "Pre-computed payload data (e.g. stock_quantity) stored at enqueue time",
+   "fieldname": "extra_data",
+   "fieldtype": "Code",
+   "label": "Extra Data",
+   "options": "JSON"
+  }
+ ],
+ "grid_page_length": 50,
+ "in_create": 1,
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2026-06-16 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "WooCommerce",
+ "name": "WooCommerce Sync Queue",
+ "naming_rule": "Random",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "read": 1,
+   "role": "Stock Manager"
+  }
+ ],
+ "row_format": "Dynamic",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 0
+}

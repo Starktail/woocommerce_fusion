@@ -13,6 +13,12 @@ from woocommerce_fusion.tasks.utils import APIWithRequestLogging
 
 WC_RESOURCE_DELIMITER = "~"
 
+# Appended to "unsupported filter" errors so users know they can request it.
+REQUEST_FILTER_FEATURE_MESSAGE = (
+	"If you need this filter, please request it "
+	'<a href="https://github.com/Starktail/woocommerce_fusion/issues" target="_blank">here</a>.'
+)
+
 verify_ssl = not frappe._dev_server
 
 if frappe._dev_server:
@@ -163,9 +169,11 @@ class WooCommerceResource(Document):
 			params["per_page"] = min(per_page + offset, wc_records_per_page_limit)
 
 			# Map Frappe filters to WooCommerce parameters
+			filter_servers = None
 			if args.get("filters"):
-				updated_params = get_wc_parameters_from_filters(args["filters"])
+				updated_params = get_wc_parameters_from_filters(args["filters"], cls.field_setter_map)
 				params.update(updated_params)
+				filter_servers = get_woocommerce_servers_from_filters(args["filters"])
 
 			# Initialse required variables
 			all_results = []
@@ -176,6 +184,9 @@ class WooCommerceResource(Document):
 				if args.get("servers", None):
 					if wc_server.woocommerce_server not in args["servers"]:
 						continue
+				# Skip servers not targeted by a name / woocommerce_server filter
+				if filter_servers and wc_server.woocommerce_server not in filter_servers:
+					continue
 
 				current_offset = 0
 
@@ -285,6 +296,45 @@ class WooCommerceResource(Document):
 	@staticmethod
 	def get_stats(args):
 		pass
+
+	@classmethod
+	def batch_update(
+		cls,
+		server_name: str,
+		payload: dict,
+		parent_id: str | None = None,
+	) -> dict:
+		"""
+		Execute a batch create/update/delete against the WooCommerce batch endpoint.
+
+		Args:
+			server_name: Name of the WooCommerce Server doc
+			payload: Dict with keys 'create', 'update', 'delete' (any subset)
+			parent_id: For child resources (e.g. variations), the parent's WooCommerce ID
+
+		Returns:
+			Parsed JSON response dict from WooCommerce
+		"""
+		wc_api_list = cls._init_api()
+		wc_api = next((api for api in wc_api_list if api.woocommerce_server == server_name), None)
+		if not wc_api:
+			frappe.throw(_("WooCommerce Server {0} not found or not enabled").format(server_name))
+
+		endpoint = (
+			f"{cls.resource}/{parent_id}/{cls.child_resource}/batch"
+			if parent_id and cls.child_resource
+			else f"{cls.resource}/batch"
+		)
+
+		try:
+			response = wc_api.api.post(endpoint, data=payload)
+		except Exception as err:
+			log_and_raise_error(err, error_text="batch_update failed")
+
+		if response.status_code not in (200, 201):
+			log_and_raise_error(error_text="batch_update failed", response=response)
+
+		return response.json()
 
 	def db_insert(self, *args, **kwargs):
 		"""
@@ -501,7 +551,7 @@ def generate_woocommerce_record_name_from_domain_and_id(
 	return f"{domain}{delimiter}{resource_id}"
 
 
-def get_wc_parameters_from_filters(filters):
+def get_wc_parameters_from_filters(filters, field_setter_map=None):
 	"""
 	http://woocommerce.github.io/woocommerce-rest-api-docs/#list-all-orders
 	https://woocommerce.github.io/woocommerce-rest-api-docs/#list-all-products
@@ -519,17 +569,22 @@ def get_wc_parameters_from_filters(filters):
 	params = {}
 
 	for filter in filters:
-		if filter[1] not in supported_filter_fields:
-			frappe.throw(f"Unsupported filter for field: {filter[1]}")
-		if filter[1] == "date_created" and filter[2] == "<":
+		# Normalise field aliases (e.g. Product's "woocommerce_id" -> "id") via field_setter_map.
+		field = filter[1]
+		if field_setter_map and field in field_setter_map:
+			field = field_setter_map[field]
+
+		if field not in supported_filter_fields:
+			frappe.throw(f"Unsupported filter for field: {filter[1]}\n\n{REQUEST_FILTER_FEATURE_MESSAGE}")
+		if field == "date_created" and filter[2] == "<":
 			# e.g. ['WooCommerce Order', 'date_created', '<', '2023-01-01']
 			params["before"] = filter[3]
 			continue
-		if filter[1] == "date_created" and filter[2] == ">":
+		if field == "date_created" and filter[2] == ">":
 			# e.g. ['WooCommerce Order', 'date_created', '>', '2023-01-01']
 			params["after"] = filter[3]
 			continue
-		if filter[1] == "date_created" and filter[2] == "Between":
+		if field == "date_created" and filter[2] == "Between":
 			# e.g. ['WooCommerce Order', 'date_created', 'Between', '[2023-01-01, 2023-01-20]']
 			if not filter[3]:
 				continue
@@ -538,15 +593,15 @@ def get_wc_parameters_from_filters(filters):
 				get_datetime(f"{filter[3][1]} 00:00:00"), "yyyy-MM-dd HH:mm:ss"
 			)
 			continue
-		if filter[1] == "date_modified" and filter[2] == "<":
+		if field == "date_modified" and filter[2] == "<":
 			# e.g. ['WooCommerce Order', 'date_modified', '<', '2023-01-01']
 			params["modified_before"] = filter[3]
 			continue
-		if filter[1] == "date_modified" and filter[2] == ">":
+		if field == "date_modified" and filter[2] == ">":
 			# e.g. ['WooCommerce Order', 'date_modified', '>', '2023-01-01']
 			params["modified_after"] = filter[3]
 			continue
-		if filter[1] == "date_modified" and filter[2] == "Between":
+		if field == "date_modified" and filter[2] == "Between":
 			# e.g. ['WooCommerce Order', 'date_created', 'Between', '[2023-01-01, 2023-01-20]']
 			if not filter[3]:
 				continue
@@ -555,29 +610,75 @@ def get_wc_parameters_from_filters(filters):
 				get_datetime(f"{filter[3][1]} 00:00:00"), "yyyy-MM-dd HH:mm:ss"
 			)
 			continue
-		if filter[1] == "id" and filter[2] == "=":
+		if field == "id" and filter[2] == "=":
 			# e.g. ['WooCommerce Order', 'id', '=', '11']
 			params["include"] = [filter[3]]
 			continue
-		if filter[1] == "id" and filter[2] == "in":
+		if field == "id" and filter[2] == "in":
 			# e.g. ['WooCommerce Order', 'id', 'in', ['11', '12', '13']]
 			params["include"] = ",".join(filter[3])
 			continue
-		if filter[1] == "name" and filter[2] == "like":
+		if field == "name" and filter[2] == "=":
+			# name is the document id '<domain>~<id>'; filter the API by the WooCommerce id.
+			# e.g. ['WooCommerce Order', 'name', '=', 'woo-test.localhost~75']
+			value = filter[3]
+			if WC_RESOURCE_DELIMITER in value:
+				_domain, resource_id = get_domain_and_id_from_woocommerce_record_name(value)
+			else:
+				resource_id = value
+			params["include"] = [resource_id]
+			continue
+		if field == "name" and filter[2] == "in":
+			# e.g. ['WooCommerce Order', 'name', 'in', ['woo-test.localhost~75', 'woo-test.localhost~76']]
+			resource_ids = [
+				get_domain_and_id_from_woocommerce_record_name(value)[1]
+				if WC_RESOURCE_DELIMITER in value
+				else value
+				for value in filter[3]
+			]
+			params["include"] = ",".join(str(resource_id) for resource_id in resource_ids)
+			continue
+		if field == "name" and filter[2] == "like":
 			# e.g. ['WooCommerce Order', 'name', 'like', '%11%']
 			params["search"] = filter[3].strip("%")
 			continue
-		if filter[1] == "customer_id" and filter[2] == "like":
+		if field == "customer_id" and filter[2] == "like":
 			# e.g. ['WooCommerce Order', 'customer_id', 'like', '%11%']
 			params["search"] = filter[3].strip("%")
 			continue
-		if filter[1] == "status" and filter[2] == "=":
+		if field == "status" and filter[2] == "=":
 			# e.g. ['WooCommerce Order', 'status', '=', 'trash']
 			params["status"] = filter[3]
 			continue
-		frappe.throw(f"Unsupported filter '{filter[2]}' for field '{filter[1]}'")
+		if field == "woocommerce_server":
+			# Scopes the query to a server (see get_woocommerce_servers_from_filters), not a WC param.
+			continue
+		frappe.throw(
+			f"Unsupported filter '{filter[2]}' for field '{filter[1]}'\n\n{REQUEST_FILTER_FEATURE_MESSAGE}"
+		)
 
 	return params
+
+
+def get_woocommerce_servers_from_filters(filters):
+	"""
+	Return the server name(s) the filters are scoped to (from a 'name' or 'woocommerce_server'
+	filter), or None. Used so a 'name =' filter only queries the matching server.
+	"""
+	servers = set()
+	for filter in filters:
+		field, operator, value = filter[1], filter[2], filter[3]
+		if field == "name" and operator == "=" and isinstance(value, str) and WC_RESOURCE_DELIMITER in value:
+			servers.add(get_domain_and_id_from_woocommerce_record_name(value)[0])
+		elif field == "name" and operator == "in":
+			servers.update(
+				get_domain_and_id_from_woocommerce_record_name(v)[0]
+				for v in value
+				if isinstance(v, str) and WC_RESOURCE_DELIMITER in v
+			)
+		elif field == "woocommerce_server" and operator == "=":
+			servers.add(value)
+	return servers or None
 
 
 def log_and_raise_error(exception=None, error_text=None, response=None):

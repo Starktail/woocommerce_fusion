@@ -235,8 +235,10 @@ class TestWooCommerceSync(FrappeTestCase):
 	@patch("frappe.get_cached_doc")
 	@patch("frappe.get_doc")
 	@patch("woocommerce_fusion.tasks.sync_items.get_item_price_rate")
+	@patch("woocommerce_fusion.tasks.sync_items.get_item_sale_price_data")
 	def test_create_woocommerce_product(
 		self,
+		mock_get_item_sale_price_data,
 		mock_get_item_price_rate,
 		mock_get_doc,
 		mock_get_cached_doc,
@@ -249,6 +251,7 @@ class TestWooCommerceSync(FrappeTestCase):
 
 		mock_get_doc.return_value = wc_product_mock
 		mock_get_item_price_rate.return_value = "100.00"
+		mock_get_item_sale_price_data.return_value = None
 
 		# Create a mock ERPNextItemToSync
 		item_woocommerce_server_mock = MagicMock()
@@ -284,8 +287,10 @@ class TestWooCommerceSync(FrappeTestCase):
 	@patch("frappe.get_cached_doc")
 	@patch("frappe.get_doc")
 	@patch("woocommerce_fusion.tasks.sync_items.get_item_price_rate")
+	@patch("woocommerce_fusion.tasks.sync_items.get_item_sale_price_data")
 	def test_create_woocommerce_product_from_variant(
 		self,
+		mock_get_item_sale_price_data,
 		mock_get_item_price_rate,
 		mock_get_doc,
 		mock_get_cached_doc,
@@ -301,6 +306,7 @@ class TestWooCommerceSync(FrappeTestCase):
 		mock_get_doc.side_effect = [wc_product_mock, parent_item_mock]
 
 		mock_get_item_price_rate.return_value = "100.00"
+		mock_get_item_sale_price_data.return_value = None
 
 		mock_run_item_sync.return_value = (None, parent_item_mock)
 
@@ -335,8 +341,10 @@ class TestWooCommerceSync(FrappeTestCase):
 	@patch("frappe.get_cached_doc")
 	@patch("frappe.get_doc")
 	@patch("woocommerce_fusion.tasks.sync_items.get_item_price_rate")
+	@patch("woocommerce_fusion.tasks.sync_items.get_item_sale_price_data")
 	def test_create_woocommerce_product_from_template_item(
 		self,
+		mock_get_item_sale_price_data,
 		mock_get_item_price_rate,
 		mock_get_doc,
 		mock_get_cached_doc,
@@ -349,6 +357,7 @@ class TestWooCommerceSync(FrappeTestCase):
 		mock_get_doc.return_value = wc_product_mock
 
 		mock_get_item_price_rate.return_value = "100.00"
+		mock_get_item_sale_price_data.return_value = None
 
 		# Create a mock ERPNextItemToSync
 		item_woocommerce_server_mock = MagicMock()

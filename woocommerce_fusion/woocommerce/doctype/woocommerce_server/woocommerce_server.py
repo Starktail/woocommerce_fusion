@@ -41,6 +41,56 @@ class WooCommerceServer(Document):
 		self.validate_so_status_map()
 		self.validate_item_map()
 		self.validate_reserved_stock_setting()
+		self.validate_batch_settings()
+		self.validate_tax_account_uniqueness()
+
+	def validate_tax_account_uniqueness(self):
+		"""
+		On Frappe v16+, ERPNext builds the per-item tax map keyed by account head with
+		last-write-wins semantics (erpnext.stock.get_item_details.get_item_tax_map). When a
+		"Sales Taxes and Charges Template" with a calculated ("On Net Total") VAT row is used,
+		an additional "Actual" tax line (e.g. shipping or fee tax) re-using the same account head
+		overwrites the VAT rate with the Actual line's (empty) rate, zeroing the calculated VAT on
+		the synced Sales Order. Require distinct tax accounts to avoid this.
+
+		Only the template path produces a calculated tax row; the "Actual" tax type is unaffected
+		(no calculated row exists to be poisoned).
+		"""
+		if int(frappe.__version__.split(".")[0]) < 16:
+			return
+
+		if self.use_actual_tax_type or not self.enable_tax_lines_sync:
+			return
+		if not self.sales_taxes_and_charges_template:
+			return
+
+		template = frappe.get_cached_doc(
+			"Sales Taxes and Charges Template", self.sales_taxes_and_charges_template
+		)
+		template_accounts = {row.account_head for row in template.taxes if row.account_head}
+
+		for fieldname in ("f_n_f_tax_account", "tax_account_for_order_fee_lines"):
+			account = self.get(fieldname)
+			if account and account in template_accounts:
+				frappe.throw(
+					_(
+						"On Frappe v16, '{0}' ({1}) may not re-use a tax account from the Sales Taxes "
+						"and Charges Template '{2}'. Sharing a tax account zeroes the calculated tax on "
+						"synced Sales Orders. Please configure a separate tax account."
+					).format(
+						_(self.meta.get_label(fieldname)), account, self.sales_taxes_and_charges_template
+					)
+				)
+
+	def validate_batch_settings(self):
+		"""
+		Validate Batch API flush interval and batch size limits
+		"""
+		if self.enable_batch_api:
+			if not 1 <= (self.batch_flush_interval_minutes or 1) <= 60:
+				frappe.throw(_("Flush Interval must be between 1 and 60 minutes"))
+			if not 1 <= (self.batch_size_limit or 100) <= 100:
+				frappe.throw(_("Batch Size Limit must be between 1 and 100"))
 
 	def validate_so_status_map(self):
 		"""

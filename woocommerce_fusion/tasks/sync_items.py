@@ -27,6 +27,8 @@ def run_item_sync_from_hook(doc, method):
 	"""
 	Intended to be triggered by a Document Controller hook from Item
 	"""
+	if frappe.flags.in_test:
+		return
 	if (
 		doc.doctype == "Item"
 		and not doc.flags.get("created_by_sync", None)
@@ -43,6 +45,10 @@ def run_item_sync_from_hook(doc, method):
 			alert=True,
 		)
 		frappe.enqueue(clear_sync_hash_and_run_item_sync, item_code=doc.name)
+		frappe.enqueue(
+			"woocommerce_fusion.tasks.batch.queue_manager.check_and_flush_all_servers",
+			enqueue_after_commit=True,
+		)
 
 
 @frappe.whitelist()
@@ -62,6 +68,8 @@ def run_item_sync(
 			"At least one of item_code, item, woocommerce_product_name, woocommerce_product parameters required"
 		)
 
+	from woocommerce_fusion.tasks.batch import get_item_sync_class
+
 	# Get ERPNext Item and WooCommerce product if they exist
 	if woocommerce_product or woocommerce_product_name:
 		if not woocommerce_product:
@@ -71,7 +79,8 @@ def run_item_sync(
 			woocommerce_product.load_from_db()
 
 		# Trigger sync
-		sync = SynchroniseItem(woocommerce_product=woocommerce_product)
+		SyncClass = get_item_sync_class(woocommerce_product.woocommerce_server)
+		sync = SyncClass(woocommerce_product=woocommerce_product)
 		if enqueue:
 			frappe.enqueue(sync.run)
 		else:
@@ -84,9 +93,8 @@ def run_item_sync(
 			frappe.throw(_("No WooCommerce Servers defined for Item {0}").format(item_code))
 		for wc_server in item.woocommerce_servers:
 			# Trigger sync for every linked server
-			sync = SynchroniseItem(
-				item=ERPNextItemToSync(item=item, item_woocommerce_server_idx=wc_server.idx)
-			)
+			SyncClass = get_item_sync_class(wc_server.woocommerce_server)
+			sync = SyncClass(item=ERPNextItemToSync(item=item, item_woocommerce_server_idx=wc_server.idx))
 			if enqueue:
 				frappe.enqueue(sync.run)
 			else:
@@ -121,7 +129,22 @@ def sync_woocommerce_products_modified_since(date_time_from=None):
 	wc_products = get_list_of_wc_products(date_time_from=date_time_from)
 	for wc_product in wc_products:
 		try:
-			run_item_sync(woocommerce_product=wc_product, enqueue=True)
+			server = frappe.get_cached_doc("WooCommerce Server", wc_product.woocommerce_server)
+			if server.enable_batch_api:
+				from woocommerce_fusion.woocommerce.doctype.woocommerce_sync_queue.woocommerce_sync_queue import (
+					enqueue_item,
+				)
+
+				enqueue_item(
+					woocommerce_server=wc_product.woocommerce_server,
+					item_code=str(wc_product.woocommerce_id),
+					item_woocommerce_server_idx=0,
+					woocommerce_id=str(wc_product.woocommerce_id),
+					direction="inbound",
+					triggered_by="Scheduled",
+				)
+			else:
+				run_item_sync(woocommerce_product=wc_product, enqueue=True)
 		# Skip items with errors, as these exceptions will be logged
 		except Exception:
 			pass
@@ -145,6 +168,9 @@ class SynchroniseItem(SynchroniseWooCommerce):
 	"""
 	Class for managing synchronisation of WooCommerce Product with ERPNext Item
 	"""
+
+	# When True, sync hash bookkeeping is deferred to the BatchProcessor at flush time
+	defer_sync_hash: bool = False
 
 	def __init__(
 		self,
@@ -289,9 +315,21 @@ class SynchroniseItem(SynchroniseWooCommerce):
 		"""
 		Update the WooCommerce Product with fields from it's corresponding ERPNext Item
 		"""
+		self.woocommerce_product = wc_product
+		if self._mutate_product_for_update(item):
+			self._send_update(item)
+
+		if not self.defer_sync_hash:
+			self.set_sync_hash()
+
+	def _mutate_product_for_update(self, item: ERPNextItemToSync) -> bool:
+		"""
+		Mutate self.woocommerce_product to reflect the ERPNext Item. Returns True if anything
+		changed.
+		"""
+		wc_product = self.woocommerce_product
 		wc_product_dirty = False
 
-		# Update properties
 		if wc_product.woocommerce_name != item.item.item_name:
 			wc_product.woocommerce_name = item.item.item_name
 			wc_product_dirty = True
@@ -300,11 +338,36 @@ class SynchroniseItem(SynchroniseWooCommerce):
 		if product_fields_changed:
 			wc_product_dirty = True
 
-		if wc_product_dirty:
-			wc_product.save()
-
 		self.woocommerce_product = wc_product
-		self.set_sync_hash()
+		return wc_product_dirty
+
+	def _build_update_payload(self, item: ERPNextItemToSync) -> dict:
+		"""
+		Snapshot self.woocommerce_product, mutate it to reflect the ERPNext Item, and return a
+		dict of only the changed fields (ready for a WooCommerce batch update), or an empty dict
+		if nothing changed. Used by the BatchProcessor against freshly fetched WC data.
+		"""
+		before = WooCommerceProduct.deserialize_attributes_of_type_dict_or_list(
+			self.woocommerce_product.to_dict()
+		)
+
+		if not self._mutate_product_for_update(item):
+			return {}
+
+		after = WooCommerceProduct.deserialize_attributes_of_type_dict_or_list(
+			self.woocommerce_product.to_dict()
+		)
+		payload = {key: value for key, value in after.items() if before.get(key) != value}
+
+		# Map the Frappe field name back to the WooCommerce API field name
+		if "woocommerce_name" in payload:
+			payload["name"] = payload.pop("woocommerce_name")
+
+		return payload
+
+	def _send_update(self, item: ERPNextItemToSync) -> None:
+		"""Persist the WooCommerce Product update via the API (PUT)."""
+		self.woocommerce_product.save()
 
 	def create_woocommerce_product(self, item: ERPNextItemToSync) -> None:
 		"""
@@ -315,75 +378,96 @@ class SynchroniseItem(SynchroniseWooCommerce):
 			and item.item_woocommerce_server.enabled
 			and not item.item_woocommerce_server.woocommerce_id
 		):
-			# Create a new WooCommerce Product doc
-			wc_product = frappe.get_doc({"doctype": "WooCommerce Product"})
+			self._build_create_product(item)
+			self._send_create(item)
 
-			wc_product.type = "simple"
+	def _build_create_payload(self, item: ERPNextItemToSync) -> dict:
+		"""
+		Build a new WooCommerce Product doc and return the cleaned payload dict to send to
+		WooCommerce. Used by the BatchProcessor.
+		"""
+		wc_product = self._build_create_product(item)
+		record = WooCommerceProduct.deserialize_attributes_of_type_dict_or_list(wc_product.to_dict())
+		return wc_product.before_db_insert(record)
 
-			# Handle variants
-			if item.item.has_variants:
-				wc_product.type = "variable"
-				wc_product_attributes = []
+	def _build_create_product(self, item: ERPNextItemToSync) -> WooCommerceProduct:
+		"""
+		Build a new WooCommerce Product doc from the ERPNext Item and set it on
+		self.woocommerce_product.
+		"""
+		# Create a new WooCommerce Product doc
+		wc_product = frappe.get_doc({"doctype": "WooCommerce Product"})
 
-				# Handle attributes
-				for row in item.item.attributes:
-					item_attribute = frappe.get_doc("Item Attribute", row.attribute)
-					wc_product_attributes.append(
-						{
-							"name": row.attribute,
-							"slug": row.attribute.lower().replace(" ", "_"),
-							"visible": True,
-							"variation": True,
-							"options": [
-								option.attribute_value for option in item_attribute.item_attribute_values
-							],
-						}
-					)
+		wc_product.type = "simple"
 
-				wc_product.attributes = json.dumps(wc_product_attributes)
+		# Handle variants
+		if item.item.has_variants:
+			wc_product.type = "variable"
+			wc_product_attributes = []
 
-			if item.item.variant_of:
-				# Check if parent exists
-				parent_item = frappe.get_doc("Item", item.item.variant_of)
-				parent_item, parent_wc_product = run_item_sync(item_code=parent_item.item_code)
-				wc_product.parent_id = parent_wc_product.woocommerce_id
-				wc_product.type = "variation"
-
-				# Handle attributes
-				wc_product_attributes = [
+			# Handle attributes
+			for row in item.item.attributes:
+				item_attribute = frappe.get_doc("Item Attribute", row.attribute)
+				wc_product_attributes.append(
 					{
 						"name": row.attribute,
 						"slug": row.attribute.lower().replace(" ", "_"),
-						"option": row.attribute_value,
+						"visible": True,
+						"variation": True,
+						"options": [
+							option.attribute_value for option in item_attribute.item_attribute_values
+						],
 					}
-					for row in item.item.attributes
-				]
+				)
 
-				wc_product.attributes = json.dumps(wc_product_attributes)
+			wc_product.attributes = json.dumps(wc_product_attributes)
 
-			# Set properties
-			wc_product.woocommerce_server = item.item_woocommerce_server.woocommerce_server
-			wc_product.woocommerce_name = item.item.item_name
-			wc_product.regular_price = get_item_price_rate(item) or "0"
+		if item.item.variant_of:
+			# Check if parent exists
+			parent_item = frappe.get_doc("Item", item.item.variant_of)
+			parent_item, parent_wc_product = run_item_sync(item_code=parent_item.item_code)
+			wc_product.parent_id = parent_wc_product.woocommerce_id if parent_wc_product else None
+			wc_product.type = "variation"
 
-			sale_price_data = get_item_sale_price_data(item)
-			if sale_price_data:
-				wc_product.sale_price = sale_price_data.price_list_rate
-				wc_product.date_on_sale_from = _format_sale_date(sale_price_data.valid_from)
-				wc_product.date_on_sale_to = _format_sale_date(sale_price_data.valid_upto)
+			# Handle attributes
+			wc_product_attributes = [
+				{
+					"name": row.attribute,
+					"slug": row.attribute.lower().replace(" ", "_"),
+					"option": row.attribute_value,
+				}
+				for row in item.item.attributes
+			]
 
-			self.set_product_fields(wc_product, item)
+			wc_product.attributes = json.dumps(wc_product_attributes)
 
-			wc_product.insert()
-			self.woocommerce_product = wc_product
+		# Set properties
+		wc_product.woocommerce_server = item.item_woocommerce_server.woocommerce_server
+		wc_product.woocommerce_name = item.item.item_name
+		wc_product.regular_price = get_item_price_rate(item) or "0"
 
-			# Reload ERPNext Item
-			item.item.reload()
-			item.item_woocommerce_server.woocommerce_id = wc_product.woocommerce_id
-			item.item.flags.created_by_sync = True
-			item.item.save()
+		sale_price_data = get_item_sale_price_data(item)
+		if sale_price_data:
+			wc_product.sale_price = sale_price_data.price_list_rate
+			wc_product.date_on_sale_from = _format_sale_date(sale_price_data.valid_from)
+			wc_product.date_on_sale_to = _format_sale_date(sale_price_data.valid_upto)
 
-			self.set_sync_hash()
+		self.set_product_fields(wc_product, item)
+
+		self.woocommerce_product = wc_product
+		return wc_product
+
+	def _send_create(self, item: ERPNextItemToSync) -> None:
+		"""Persist the new WooCommerce Product via the API (POST) and write back the ID."""
+		self.woocommerce_product.insert()
+
+		# Reload ERPNext Item
+		item.item.reload()
+		item.item_woocommerce_server.woocommerce_id = self.woocommerce_product.woocommerce_id
+		item.item.flags.created_by_sync = True
+		item.item.save()
+
+		self.set_sync_hash()
 
 	def create_item(self, wc_product: WooCommerceProduct) -> None:
 		"""
@@ -693,12 +777,13 @@ def get_item_sale_price_data(item: ERPNextItemToSync) -> frappe._dict | None:
 	)
 
 
-def clear_sync_hash_and_run_item_sync(item_code: str):
+def clear_sync_hash(item_code: str) -> int:
 	"""
 	Clear the last sync hash value using db.set_value, as it does not call the ORM triggers
-	and it does not update the modified timestamp (by using the update_modified parameter)
-	"""
+	and it does not update the modified timestamp (by using the update_modified parameter).
 
+	Returns the count of Item WooCommerce Server rows cleared.
+	"""
 	iws = frappe.qb.DocType("Item WooCommerce Server")
 
 	iwss = (frappe.qb.from_(iws).where(iws.enabled == 1).where(iws.parent == item_code).select(iws.name)).run(
@@ -714,5 +799,9 @@ def clear_sync_hash_and_run_item_sync(item_code: str):
 			update_modified=False,
 		)
 
-	if len(iwss) > 0:
+	return len(iwss)
+
+
+def clear_sync_hash_and_run_item_sync(item_code: str):
+	if clear_sync_hash(item_code) > 0:
 		run_item_sync(item_code=item_code, enqueue=True)

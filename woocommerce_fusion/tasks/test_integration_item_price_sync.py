@@ -3,6 +3,7 @@ from urllib.parse import urlparse
 import frappe
 from erpnext import get_default_company
 from erpnext.stock.doctype.item.test_item import create_item
+from parameterized import parameterized
 
 from woocommerce_fusion.tasks.sync_item_prices import run_item_price_sync
 from woocommerce_fusion.tasks.test_integration_helpers import (
@@ -10,16 +11,21 @@ from woocommerce_fusion.tasks.test_integration_helpers import (
 	get_woocommerce_server,
 )
 
+BATCH_MODES = [("single_call", False), ("batch_api", True)]
+
 
 class TestIntegrationWooCommerceItemPriceSync(TestIntegrationWooCommerce):
 	@classmethod
 	def setUpClass(cls):
 		super().setUpClass()  # important to call super() methods when extending TestCase.
 
-	def test_item_price_sync_when_synchronising_with_woocommerce(self):
+	@parameterized.expand(BATCH_MODES)
+	def test_item_price_sync_when_synchronising_with_woocommerce(self, _name, batch_enabled):
 		"""
 		Test that the Item Price Synchronisation method posts the correct price to a WooCommerce website.
 		"""
+		self._set_batch_mode(batch_enabled)
+
 		# Create a new product in WooCommerce, set regular price to 10
 		wc_product_id = self.post_woocommerce_product(product_name="ITEM002", regular_price=10)
 
@@ -44,6 +50,7 @@ class TestIntegrationWooCommerceItemPriceSync(TestIntegrationWooCommerce):
 
 		# Run synchronisation
 		stock_update_result = run_item_price_sync(item_code=item.name)
+		self._flush_if_batch()
 
 		# Expect successful update
 		self.assertEqual(stock_update_result, True)
@@ -52,10 +59,15 @@ class TestIntegrationWooCommerceItemPriceSync(TestIntegrationWooCommerce):
 		wc_price = self.get_woocommerce_product_price(product_id=wc_product_id)
 		self.assertEqual(float(wc_price), 5000)
 
-	def test_item_price_sync_ignored_if_item_disabled_when_synchronising_with_woocommerce(self):
+	@parameterized.expand(BATCH_MODES)
+	def test_item_price_sync_ignored_if_item_disabled_when_synchronising_with_woocommerce(
+		self, _name, batch_enabled
+	):
 		"""
 		Test that the Item Price Synchronisation method does not post a price to a WooCommerce website when the item is disabled.
 		"""
+		self._set_batch_mode(batch_enabled)
+
 		# Create a new product in WooCommerce, set regular price to 10
 		wc_product_id = self.post_woocommerce_product(product_name="ITEM003", regular_price=10)
 
@@ -83,6 +95,7 @@ class TestIntegrationWooCommerceItemPriceSync(TestIntegrationWooCommerce):
 
 		# Run synchronisation
 		stock_update_result = run_item_price_sync(item_code=item.name)
+		self._flush_if_batch()
 
 		# Expect successful update
 		self.assertEqual(stock_update_result, True)

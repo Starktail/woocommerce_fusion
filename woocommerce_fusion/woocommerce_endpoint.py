@@ -58,10 +58,22 @@ def order_created(*args, **kwargs):
 
 	if event == "created":
 		webhook_source_url = frappe.get_request_header("x-wc-webhook-source", "")
-		woocommerce_order_name = (
-			f"{parse_domain_from_url(webhook_source_url)}{WC_RESOURCE_DELIMITER}{order['id']}"
-		)
-		frappe.enqueue(run_sales_order_sync, queue="long", woocommerce_order_name=woocommerce_order_name)
+		server_domain = parse_domain_from_url(webhook_source_url)
+		woocommerce_order_name = f"{server_domain}{WC_RESOURCE_DELIMITER}{order['id']}"
+		server = frappe.get_cached_doc("WooCommerce Server", server_domain)
+		if server.enable_batch_api:
+			from woocommerce_fusion.woocommerce.doctype.woocommerce_sync_queue.woocommerce_sync_queue import (
+				enqueue_order,
+			)
+
+			enqueue_order(
+				woocommerce_server=server_domain,
+				woocommerce_order_id=str(order["id"]),
+				direction="inbound",
+				triggered_by="Hook",
+			)
+		else:
+			frappe.enqueue(run_sales_order_sync, queue="long", woocommerce_order_name=woocommerce_order_name)
 		return Response(status=HTTPStatus.OK)
 	else:
 		return Response(response=_("Event not supported"), status=HTTPStatus.BAD_REQUEST)

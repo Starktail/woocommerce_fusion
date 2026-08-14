@@ -8,7 +8,7 @@ def before_tests():
 	# complete setup if missing
 	from frappe.desk.page.setup_wizard.setup_wizard import setup_complete
 
-	if not frappe.db.a_row_exists("Company"):
+	if not frappe.db.exists("Company", "Some Company (Pty) Ltd"):
 		current_year = now_datetime().year
 		setup_complete(
 			{
@@ -33,6 +33,17 @@ def before_tests():
 
 	set_defaults_for_tests()
 	create_curr_exchange_record()
+
+	# set_defaults_for_tests() points the default customer_group at the ROOT (a group) node, which
+	# v16 rejects as a Customer's group; point it at a real (non-group) customer group instead.
+	non_group_customer_group = frappe.db.get_value("Customer Group", {"is_group": 0}, "name")
+	if non_group_customer_group:
+		frappe.db.set_default("customer_group", non_group_customer_group)
+		frappe.db.set_single_value("Selling Settings", "customer_group", non_group_customer_group)
+
+	# Set default for v16
+	if frappe.db.exists("Warehouse", "Stores - SC"):
+		frappe.db.set_single_value("Stock Settings", "default_warehouse", "Stores - SC")
 
 	# following same practice as in erpnext app to commit manually inside before_tests
 	# nosemgrep

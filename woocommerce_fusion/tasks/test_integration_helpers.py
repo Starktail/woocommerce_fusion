@@ -8,7 +8,7 @@ from frappe.utils import add_to_date, now
 
 from woocommerce_fusion.woocommerce.woocommerce_api import WC_RESOURCE_DELIMITER
 
-default_company = get_default_company()
+default_company = get_default_company() or "Some Company (Pty) Ltd"
 default_bank = "Test Bank"
 default_bank_account = "Checking Account"
 
@@ -82,6 +82,41 @@ class TestIntegrationWooCommerce(FrappeTestCase):
 		settings.wc_last_sync_date = one_year_ago
 		settings.wc_last_sync_date_items = one_year_ago
 		settings.save()
+
+	def tearDown(self):
+		# FrappeTestCase only rolls back once per class, so batch-mode tests would otherwise
+		# share a transaction and leak Sync Queue rows / fixed item codes into each other (e.g. a
+		# Pending row for a since-deleted order, or the two parameterised variants colliding on the
+		# same item code). Roll back after each batch-mode test to keep them isolated. Batch code
+		# guards its frappe.db.commit() calls with `not frappe.flags.in_test`, so this fully reverts
+		# the test's database changes. Gated on _batch_mode (set by _set_batch_mode and by the batch test
+		# classes' setUp) so non-batch tests keep their existing class-level cleanup behaviour.
+		if getattr(self, "_batch_mode", None) is not None:
+			frappe.db.rollback()
+		super().tearDown()
+
+	def _set_batch_mode(self, enabled: bool):
+		"""
+		Enable or disable batch API on the test WooCommerce Server.
+		Called at the top of each parameterised test variant.
+		"""
+		wc_server = frappe.get_doc("WooCommerce Server", self.wc_server.name)
+		wc_server.enable_batch_api = 1 if enabled else 0
+		wc_server.batch_flush_interval_minutes = 1
+		wc_server.batch_size_limit = 100
+		wc_server.save()
+		self.wc_server.reload()
+		self._batch_mode = enabled
+
+	def _flush_if_batch(self):
+		"""
+		In batch mode: flush the pending queue for this server so that enqueued operations
+		actually reach WooCommerce before assertions run. No-op in single-call mode.
+		"""
+		if getattr(self, "_batch_mode", False):
+			from woocommerce_fusion.tasks.batch.queue_manager import flush_pending
+
+			flush_pending(self.wc_server.name, reason="manual")
 
 	def post_woocommerce_order(
 		self,
@@ -416,6 +451,29 @@ class TestIntegrationWooCommerce(FrappeTestCase):
 
 		return order_data
 
+	def update_woocommerce_order_status(self, order_id: int, status: str) -> dict:
+		"""
+		Update an order's status directly on a WooCommerce testing site (i.e. as if changed in
+		WooCommerce).
+		"""
+		import json
+
+		from requests_oauthlib import OAuth1Session
+
+		# Initialize OAuth1 session
+		oauth = OAuth1Session(self.wc_consumer_key, client_secret=self.wc_consumer_secret)
+		if not verify_ssl:
+			oauth.verify = False
+
+		# API Endpoint
+		url = f"{self.wc_url}/wp-json/wc/v3/orders/{order_id}"
+		headers = {"Content-Type": "application/json"}
+
+		# Making the API call
+		response = oauth.put(url, headers=headers, data=json.dumps({"status": status}))
+
+		return response.json()
+
 	def post_product_attribute(self, attribute_name: str, attribute_slug: str):
 		"""
 		Post product attribute to WooCommerce
@@ -530,7 +588,7 @@ def create_gl_account_for_bank(account_name="_Test Bank"):
 		frappe.get_doc(
 			{
 				"doctype": "Account",
-				"company": get_default_company(),
+				"company": default_company,
 				"account_name": account_name,
 				"parent_account": "Bank Accounts - SC",
 				"type": "Bank",
@@ -547,7 +605,7 @@ def create_gl_account_for_tax():
 		frappe.get_doc(
 			{
 				"doctype": "Account",
-				"company": get_default_company(),
+				"company": default_company,
 				"account_name": "VAT",
 				"parent_account": "Duties and Taxes - SC",
 				"type": "Bank",
@@ -555,6 +613,30 @@ def create_gl_account_for_tax():
 		).insert(ignore_if_duplicate=True)
 	except frappe.DuplicateEntryError:
 		pass
+
+
+def create_gl_account_for_shipping_tax():
+	"""Create a tax account for shipping tax that is distinct from the VAT account.
+
+	On Frappe v16, ERPNext keys the per-item tax map by account head (last-write-wins), so
+	re-using the VAT account for shipping tax would zero the calculated VAT row. Use a
+	separate tax account.
+	"""
+	if frappe.db.exists("Account", "Shipping Tax - SC"):
+		return "Shipping Tax - SC"
+	return (
+		frappe.get_doc(
+			{
+				"doctype": "Account",
+				"company": default_company,
+				"account_name": "Shipping Tax",
+				"parent_account": "Duties and Taxes - SC",
+				"account_type": "Tax",
+			}
+		)
+		.insert(ignore_if_duplicate=True)
+		.name
+	)
 
 
 def get_woocommerce_server(woocommerce_server_url: str):

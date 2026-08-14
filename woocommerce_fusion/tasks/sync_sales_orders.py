@@ -32,7 +32,26 @@ def run_sales_order_sync_from_hook(doc, method):
 		and doc.woocommerce_server
 		and frappe.get_cached_doc("WooCommerce Server", doc.woocommerce_server).enable_sync
 	):
-		frappe.enqueue(run_sales_order_sync, queue="long", sales_order_name=doc.name)
+		server = frappe.get_cached_doc("WooCommerce Server", doc.woocommerce_server)
+		if server.enable_batch_api and server.enable_so_status_sync and doc.woocommerce_id:
+			from woocommerce_fusion.woocommerce.doctype.woocommerce_sync_queue.woocommerce_sync_queue import (
+				enqueue_order,
+			)
+
+			new_status = WC_ORDER_STATUS_MAPPING[doc.woocommerce_status] if doc.woocommerce_status else None
+			enqueue_order(
+				woocommerce_server=doc.woocommerce_server,
+				woocommerce_order_id=str(doc.woocommerce_id),
+				new_status=new_status,
+				direction="outbound",
+				triggered_by="Hook",
+			)
+			frappe.enqueue(
+				"woocommerce_fusion.tasks.batch.queue_manager.check_and_flush_all_servers",
+				enqueue_after_commit=True,
+			)
+		else:
+			frappe.enqueue(run_sales_order_sync, queue="long", sales_order_name=doc.name)
 
 
 @frappe.whitelist()
@@ -109,10 +128,26 @@ def sync_woocommerce_orders_modified_since(date_time_from=None):
 	wc_orders += get_list_of_wc_orders(date_time_from=date_time_from, status="trash")
 	for wc_order in wc_orders:
 		try:
-			run_sales_order_sync(woocommerce_order=wc_order, enqueue=True)
-		# Skip orders with errors, as these exceptions will be logged
+			server = frappe.get_cached_doc("WooCommerce Server", wc_order.woocommerce_server)
+			if server.enable_batch_api:
+				from woocommerce_fusion.woocommerce.doctype.woocommerce_sync_queue.woocommerce_sync_queue import (
+					enqueue_order,
+				)
+
+				enqueue_order(
+					woocommerce_server=wc_order.woocommerce_server,
+					woocommerce_order_id=str(wc_order.id),
+					direction="inbound",
+					triggered_by="Scheduled",
+				)
+			else:
+				run_sales_order_sync(woocommerce_order=wc_order, enqueue=True)
 		except Exception:
-			pass
+			frappe.log_error(
+				"WooCommerce Sales Orders Sync Task Error",
+				f"Failed to queue/sync WooCommerce order {getattr(wc_order, 'id', '?')}:\n"
+				f"{frappe.get_traceback()}",
+			)
 
 	frappe.db.set_single_value("WooCommerce Integration Settings", "wc_last_sync_date", now())
 
@@ -202,6 +237,11 @@ class SynchroniseSalesOrder(SynchroniseWooCommerce):
 			# create missing order in WooCommerce
 			pass
 		elif self.woocommerce_order and not self.sales_order:
+			# Don't create a Sales Order for an order that is trashed/cancelled in WooCommerce and
+			# was never synced to ERPNext - there is nothing to represent. Trashed/cancelled orders
+			# that DO have a linked Sales Order still flow through the update path below.
+			if self.woocommerce_order.status in ("trash", "cancelled"):
+				return
 			# create missing order in ERPNext
 			self.create_sales_order(self.woocommerce_order)
 		elif self.sales_order and self.woocommerce_order:
@@ -367,16 +407,19 @@ class SynchroniseSalesOrder(SynchroniseWooCommerce):
 		Update the WooCommerce Order with fields from it's corresponding ERPNext Sales Order
 		"""
 		wc_order_dirty = False
+		wc_server = frappe.get_cached_doc("WooCommerce Server", wc_order.woocommerce_server)
 
-		# Update the woocommerce_status field if necessary
-		sales_order_wc_status = (
-			WC_ORDER_STATUS_MAPPING[sales_order.woocommerce_status]
-			if sales_order.woocommerce_status
-			else None
-		)
-		if sales_order_wc_status != wc_order.status:
-			wc_order.status = sales_order_wc_status
-			wc_order_dirty = True
+		# Update the woocommerce_status field if necessary. Only push the status to WooCommerce when
+		# Sales Order Status Sync is enabled.
+		if wc_server.enable_so_status_sync:
+			sales_order_wc_status = (
+				WC_ORDER_STATUS_MAPPING[sales_order.woocommerce_status]
+				if sales_order.woocommerce_status
+				else None
+			)
+			if sales_order_wc_status != wc_order.status:
+				wc_order.status = sales_order_wc_status
+				wc_order_dirty = True
 
 		# Get the Item WooCommerce ID's
 		for so_item in sales_order.items:
@@ -390,7 +433,6 @@ class SynchroniseSalesOrder(SynchroniseWooCommerce):
 			)
 
 		# Update the line_items field if necessary
-		wc_server = frappe.get_cached_doc("WooCommerce Server", wc_order.woocommerce_server)
 		if wc_server.sync_so_items_to_wc:
 			sales_order_items_changed = False
 			line_items = json.loads(wc_order.line_items)
@@ -489,6 +531,8 @@ class SynchroniseSalesOrder(SynchroniseWooCommerce):
 		self.sales_order = new_sales_order
 		new_sales_order.customer = customer_docname
 		new_sales_order.po_no = new_sales_order.woocommerce_id = wc_order.id
+		# Carry the customer-facing WooCommerce order number for autonaming
+		new_sales_order.flags.woocommerce_number = wc_order.get("number")
 		new_sales_order.custom_woocommerce_customer_note = wc_order.customer_note
 
 		new_sales_order.woocommerce_status = WC_ORDER_STATUS_MAPPING_REVERSE[wc_order.status]

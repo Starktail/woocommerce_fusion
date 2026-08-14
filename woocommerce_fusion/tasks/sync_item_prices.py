@@ -81,7 +81,12 @@ class SynchroniseItemPrice(SynchroniseWooCommerce):
 			self.wc_server = server
 			self.get_erpnext_item_prices()
 			self.get_erpnext_sale_prices()
-			self.sync_items_with_woocommerce_products()
+			if server.enable_batch_api:
+				from woocommerce_fusion.tasks.batch.sync_item_prices_batch import enqueue_price_updates
+
+				enqueue_price_updates(self)
+			else:
+				self.sync_items_with_woocommerce_products()
 
 	def get_erpnext_item_prices(self) -> None:
 		"""

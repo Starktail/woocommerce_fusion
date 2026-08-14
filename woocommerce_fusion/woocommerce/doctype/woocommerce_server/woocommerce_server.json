@@ -14,6 +14,10 @@
   "column_break_ikke",
   "api_consumer_key",
   "api_consumer_secret",
+  "batch_api_section",
+  "enable_batch_api",
+  "batch_flush_interval_minutes",
+  "batch_size_limit",
   "section_details_defaults",
   "creation_user",
   "column_break_14",
@@ -397,7 +401,7 @@
    "documentation_url": "https://woocommerce-fusion-docs.starktail.com/woocommerce_fusion_item-stock-levels",
    "fieldname": "enable_stock_level_synchronisation",
    "fieldtype": "Check",
-   "label": "Enable Stock Level Synchronisation"
+   "label": "Sync stock levels from ERPNext to WooCommerce (1-way)"
   },
   {
    "default": "WooCommerce ID",
@@ -452,6 +456,34 @@
    "fieldname": "item_fields_warning_html",
    "fieldtype": "HTML",
    "options": "<div class=\"alert alert-warning\">\nMapping item fields is recommended for advanced users only. Make sure to monitor Error Logs after adding field mappings.\n</div>"
+  },
+  {
+   "fieldname": "batch_api_section",
+   "fieldtype": "Section Break",
+   "label": "Batch API"
+  },
+  {
+   "default": "0",
+   "description": "Group sync operations into batch API calls instead of one-at-a-time. Reduces WooCommerce server load significantly.",
+   "fieldname": "enable_batch_api",
+   "fieldtype": "Check",
+   "label": "Enable Batch API"
+  },
+  {
+   "default": "1",
+   "depends_on": "eval:doc.enable_batch_api",
+   "description": "Maximum time (in minutes) a sync operation waits in the queue before being flushed. Min: 1, Max: 60. For near-real-time feel, set to 1.",
+   "fieldname": "batch_flush_interval_minutes",
+   "fieldtype": "Int",
+   "label": "Flush Interval (minutes)"
+  },
+  {
+   "default": "100",
+   "depends_on": "eval:doc.enable_batch_api",
+   "description": "Number of operations to accumulate before flushing early. WooCommerce maximum is 100.",
+   "fieldname": "batch_size_limit",
+   "fieldtype": "Int",
+   "label": "Batch Size Limit"
   },
   {
    "fieldname": "column_break_tefw",
@@ -638,7 +670,7 @@
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2025-10-22 09:36:31.805564",
+ "modified": "2026-06-18 15:20:52.859238",
  "modified_by": "Administrator",
  "module": "WooCommerce",
  "name": "WooCommerce Server",

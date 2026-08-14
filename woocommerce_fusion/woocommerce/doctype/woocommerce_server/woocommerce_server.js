@@ -3,6 +3,30 @@
 
 frappe.ui.form.on("WooCommerce Server", {
   refresh: function (frm) {
+    if (frm.doc.enable_batch_api) {
+      frm.add_custom_button(
+        __("Sync Status Dashboard"),
+        () => frappe.set_route("woocommerce-sync-status"),
+        __("Batch API"),
+      );
+      frm.add_custom_button(
+        __("Flush Queue Now"),
+        () => {
+          frappe.call({
+            method: "woocommerce_fusion.tasks.batch.queue_manager.manual_flush",
+            args: { server_name: frm.doc.name },
+            callback: function (r) {
+              frappe.show_alert({
+                message: JSON.stringify(r.message),
+                indicator: "green",
+              });
+            },
+          });
+        },
+        __("Batch API"),
+      );
+    }
+
     // Only list enabled warehouses
     frm.fields_dict.warehouses.get_query = function (doc) {
       return {

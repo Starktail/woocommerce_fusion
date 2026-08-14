@@ -5,6 +5,7 @@ import frappe
 from erpnext import get_default_company
 from erpnext.stock.doctype.item.test_item import create_item
 from frappe.utils import add_to_date, nowdate
+from parameterized import parameterized
 
 from woocommerce_fusion.tasks.sync_item_prices import run_item_price_sync
 from woocommerce_fusion.tasks.test_integration_helpers import (
@@ -13,6 +14,7 @@ from woocommerce_fusion.tasks.test_integration_helpers import (
 )
 
 SALES_PRICE_LIST = "_Test Sale Price List"
+BATCH_MODES = [("single_call", False), ("batch_api", True)]
 
 
 class TestIntegrationSalePriceSync(TestIntegrationWooCommerce):
@@ -76,25 +78,32 @@ class TestIntegrationSalePriceSync(TestIntegrationWooCommerce):
 		doc.insert()
 		return doc
 
-	def test_sale_price_is_pushed_to_woocommerce(self):
+	@parameterized.expand(BATCH_MODES)
+	def test_sale_price_is_pushed_to_woocommerce(self, _name, batch_enabled):
 		"""
 		Sale price from the Sales Price List should be synced to WooCommerce sale_price.
 		"""
+		self._set_batch_mode(batch_enabled)
+
 		wc_product_id = self.post_woocommerce_product(product_name="SALE001", regular_price=100)
 		item = self._create_linked_item("SALE001", wc_product_id)
 		self._create_sale_price("SALE001", rate=75)
 
 		result = run_item_price_sync(item_code=item.name)
+		self._flush_if_batch()
 		self.assertEqual(result, True)
 
 		product_data = self.get_woocommerce_product(wc_product_id)
 		self.assertEqual(float(product_data["sale_price"]), 75)
 
-	def test_sale_price_with_validity_dates_sets_woocommerce_sale_dates(self):
+	@parameterized.expand(BATCH_MODES)
+	def test_sale_price_with_validity_dates_sets_woocommerce_sale_dates(self, _name, batch_enabled):
 		"""
 		When the Item Price has valid_from / valid_upto dates, WooCommerce
 		date_on_sale_from and date_on_sale_to should be populated accordingly.
 		"""
+		self._set_batch_mode(batch_enabled)
+
 		wc_product_id = self.post_woocommerce_product(product_name="SALE002", regular_price=100)
 		item = self._create_linked_item("SALE002", wc_product_id)
 
@@ -103,25 +112,30 @@ class TestIntegrationSalePriceSync(TestIntegrationWooCommerce):
 		self._create_sale_price("SALE002", rate=60, valid_from=valid_from, valid_upto=valid_upto)
 
 		run_item_price_sync(item_code=item.name)
+		self._flush_if_batch()
 
 		product_data = self.get_woocommerce_product(wc_product_id)
 		self.assertEqual(float(product_data["sale_price"]), 60)
-		# WooCommerce returns dates in ISO 8601 — just check the date portion
+		# WooCommerce returns dates in ISO 8601 - just check the date portion
 		self.assertTrue(product_data["date_on_sale_from"].startswith(valid_from))
 		self.assertTrue(product_data["date_on_sale_to"].startswith(valid_upto))
 
-	def test_sale_price_without_validity_dates_has_no_end_date(self):
+	@parameterized.expand(BATCH_MODES)
+	def test_sale_price_without_validity_dates_has_no_end_date(self, _name, batch_enabled):
 		"""
 		When the Item Price has no validity dates, the sale has no end date
 		on WooCommerce. WooCommerce auto-populates date_on_sale_from with the
 		current timestamp when a sale price is set without a start date, but
 		date_on_sale_to must remain null (open-ended sale).
 		"""
+		self._set_batch_mode(batch_enabled)
+
 		wc_product_id = self.post_woocommerce_product(product_name="SALE003", regular_price=100)
 		item = self._create_linked_item("SALE003", wc_product_id)
 		self._create_sale_price("SALE003", rate=80, valid_from=None, valid_upto=None)
 
 		run_item_price_sync(item_code=item.name)
+		self._flush_if_batch()
 
 		product_data = self.get_woocommerce_product(wc_product_id)
 		self.assertEqual(float(product_data["sale_price"]), 80)
@@ -129,32 +143,40 @@ class TestIntegrationSalePriceSync(TestIntegrationWooCommerce):
 		# date_on_sale_to must be null to indicate an open-ended sale.
 		self.assertIsNone(product_data.get("date_on_sale_to"))
 
-	def test_removing_sale_price_clears_woocommerce_sale_price(self):
+	@parameterized.expand(BATCH_MODES)
+	def test_removing_sale_price_clears_woocommerce_sale_price(self, _name, batch_enabled):
 		"""
 		When no Item Price record exists on the Sales Price List for an item,
 		the sale_price on WooCommerce should be cleared (set to "").
 		"""
+		self._set_batch_mode(batch_enabled)
+
 		wc_product_id = self.post_woocommerce_product(product_name="SALE004", regular_price=100)
 		item = self._create_linked_item("SALE004", wc_product_id)
 
 		# First push a sale price so WooCommerce has one
 		sale_price_doc = self._create_sale_price("SALE004", rate=50)
 		run_item_price_sync(item_code=item.name)
+		self._flush_if_batch()
 		self.assertEqual(float(self.get_woocommerce_product(wc_product_id)["sale_price"]), 50)
 
 		# Delete the sale price record and sync again
 		sale_price_doc.delete()
 		run_item_price_sync(item_code=item.name)
+		self._flush_if_batch()
 
 		product_data = self.get_woocommerce_product(wc_product_id)
 		# WooCommerce returns "" or omits the field when no sale price is active
 		self.assertFalse(float(product_data.get("sale_price") or 0) > 0)
 
-	def test_sale_price_sync_skipped_when_feature_disabled(self):
+	@parameterized.expand(BATCH_MODES)
+	def test_sale_price_sync_skipped_when_feature_disabled(self, _name, batch_enabled):
 		"""
 		When enable_sales_price_list_sync is off, WooCommerce sale_price should
 		not be modified even if a sale price record exists in ERPNext.
 		"""
+		self._set_batch_mode(batch_enabled)
+
 		wc_product_id = self.post_woocommerce_product(product_name="SALE005", regular_price=100)
 		item = self._create_linked_item("SALE005", wc_product_id)
 		self._create_sale_price("SALE005", rate=45)
@@ -164,6 +186,7 @@ class TestIntegrationSalePriceSync(TestIntegrationWooCommerce):
 		self.wc_server.save()
 
 		run_item_price_sync(item_code=item.name)
+		self._flush_if_batch()
 
 		product_data = self.get_woocommerce_product(wc_product_id)
 		# Sale price should remain unset (WooCommerce default is "")

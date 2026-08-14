@@ -96,34 +96,92 @@ class TestCustomSalesOrder(FrappeTestCase):
 			)
 		]
 		mock_frappe.get_cached_doc.return_value = frappe._dict({"sales_order_series": ""})
+		mock_frappe.db.exists.return_value = None
 
 		sales_order = create_so(woocommerce_id="123", woocommerce_server_url="https://somesite.co")
 
 		# Expect WEB[x]-[yyyyyy] where x = 1 because it's the first item servers list, and yyy = 000123 because the woocommerce id = 123
 		self.assertEqual(sales_order.name, "WEB1-000123")
 
+	@patch("woocommerce_fusion.overrides.selling.sales_order.frappe")
+	def test_sales_order_named_with_woocommerce_number_when_available(
+		self, mock_frappe, mock_get_woocommerce_order
+	):
+		"""
+		Test that the Sales Order is named using the customer-facing WooCommerce order number
+		(carried via flags) when it is available, rather than the WooCommerce id.
+		"""
+		mock_frappe.get_all.return_value = [
+			frappe._dict(
+				{
+					"creation": "2024-01-01",
+					"woocommerce_server_url": "https://somesite.co",
+					"name": "somesite.co",
+				}
+			)
+		]
+		mock_frappe.get_cached_doc.return_value = frappe._dict({"sales_order_series": ""})
+		mock_frappe.db.exists.return_value = None
 
-def create_so(woocommerce_id: str | None = None, woocommerce_server_url: str | None = None):
+		sales_order = create_so(
+			woocommerce_id="123",
+			woocommerce_server_url="https://somesite.co",
+			woocommerce_number="002740",
+		)
+
+		self.assertEqual(sales_order.name, "WEB1-002740")
+
+	@patch("woocommerce_fusion.overrides.selling.sales_order.frappe")
+	def test_sales_order_name_falls_back_to_id_on_collision(self, mock_frappe, mock_get_woocommerce_order):
+		"""
+		Test that when the order-number-based name already exists, the (unique) WooCommerce id is
+		appended to keep the Sales Order name unique.
+		"""
+		mock_frappe.get_all.return_value = [
+			frappe._dict(
+				{
+					"creation": "2024-01-01",
+					"woocommerce_server_url": "https://somesite.co",
+					"name": "somesite.co",
+				}
+			)
+		]
+		mock_frappe.get_cached_doc.return_value = frappe._dict({"sales_order_series": ""})
+		mock_frappe.db.exists.return_value = True
+
+		sales_order = create_so(
+			woocommerce_id="123",
+			woocommerce_server_url="https://somesite.co",
+			woocommerce_number="002740",
+		)
+
+		self.assertEqual(sales_order.name, "WEB1-002740-123")
+
+
+def create_so(
+	woocommerce_id: str | None = None,
+	woocommerce_server_url: str | None = None,
+	woocommerce_number: str | None = None,
+):
 	so = frappe.new_doc("Sales Order")
 
 	if woocommerce_server_url:
-		wc_server = frappe.get_doc(
-			{
-				"doctype": "WooCommerce Server",
-				"woocommerce_server_url": woocommerce_server_url,
-			}
-		)
-		if not wc_server:
+		existing = frappe.db.exists("WooCommerce Server", {"woocommerce_server_url": woocommerce_server_url})
+		if existing:
+			so.woocommerce_server = existing
+		else:
 			wc_server = frappe.new_doc("WooCommerce Server")
 			wc_server.woocommerce_server_url = woocommerce_server_url
-		wc_server.flags.ignore_mandatory = True
-		wc_server.save()
-		so.woocommerce_server = wc_server.name
+			wc_server.flags.ignore_mandatory = True
+			wc_server.save()
+			so.woocommerce_server = wc_server.name
 
 	so.customer = "_Test Customer"
 	so.company = "_Test Company"
 	so.transaction_date = date.today()
 	so.woocommerce_id = woocommerce_id
+	if woocommerce_number is not None:
+		so.flags.woocommerce_number = woocommerce_number
 
 	so.set_warehouse = "Finished Goods - _TC"
 	so.append(
