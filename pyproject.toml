@@ -4,7 +4,7 @@ authors = [
     { name = "Starktail (Pty) Ltd", email = "support@starktail.com"}
 ]
 description = "WooCommerce Fusion"
-requires-python = ">=3.10"
+requires-python = ">=3.14"
 readme = "README.md"
 dynamic = ["version"]
 dependencies = [
@@ -20,6 +20,10 @@ build-backend = "flit_core.buildapi"
 [tool.bench.dev-dependencies]
 hypothesis = "~=6.31.0"
 parameterized = "~=0.9.0"
+
+[tool.bench.frappe-dependencies]
+frappe = ">=16.0.0,<17.0.0"
+erpnext = ">=16.0.0,<17.0.0"
 
 [tool.ruff]
 line-length = 110
