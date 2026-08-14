@@ -4,7 +4,7 @@ name: CI
 on:
   push:
     branches:
-      - version-15
+      - version-16
   pull_request:
 
 concurrency:
@@ -12,9 +12,9 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  TEST_AGAINST_FRAPPE_VERSION: v15.96.0
+  TEST_AGAINST_FRAPPE_VERSION: v16.31.0
 
-  TEST_AGAINST_ERPNEXT_VERSION: v15.94.3
+  TEST_AGAINST_ERPNEXT_VERSION: v16.32.1
 
 
 jobs:
