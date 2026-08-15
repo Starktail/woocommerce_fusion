@@ -10,7 +10,7 @@ from frappe.utils import get_datetime, now
 from jsonpath_ng.ext import parse
 
 from woocommerce_fusion.exceptions import SyncDisabledError
-from woocommerce_fusion.tasks.sync import SynchroniseWooCommerce
+from woocommerce_fusion.tasks.sync import SynchroniseWooCommerce, get_variation_parent_woocommerce_id
 from woocommerce_fusion.tasks.sync_item_prices import _format_sale_date
 from woocommerce_fusion.woocommerce.doctype.woocommerce_product.woocommerce_product import (
 	WooCommerceProduct,
@@ -216,15 +216,45 @@ class SynchroniseItem(SynchroniseWooCommerce):
 			if not wc_server.enable_sync:
 				raise SyncDisabledError(wc_server)
 
-			wc_products = get_list_of_wc_products(item=self.item)
-			if len(wc_products) == 0:
-				raise ValueError(
-					f"No WooCommerce Product found with ID {self.item.item_woocommerce_server.woocommerce_id} on {self.item.item_woocommerce_server.woocommerce_server}"
-				)
-			self.woocommerce_product = wc_products[0]
+			self.woocommerce_product = self.get_woocommerce_product_for_item()
 
 		if self.woocommerce_product and not self.item:
 			self.get_erpnext_item()
+
+	def get_woocommerce_product_for_item(self) -> WooCommerceProduct:
+		"""
+		Get the WooCommerce Product corresponding to self.item
+		"""
+		iws = self.item.item_woocommerce_server
+
+		# A variation is not listed by the products endpoint, so it can only be read through its
+		# parent product. Fetch it directly instead of searching the product list.
+		if self.item.item.variant_of:
+			parent_woocommerce_id = get_variation_parent_woocommerce_id(
+				iws.woocommerce_server, self.item.item.name
+			)
+			if not parent_woocommerce_id:
+				raise ValueError(
+					f"Cannot sync variant {self.item.item.name}: its template is not linked to {iws.woocommerce_server}"
+				)
+			wc_product = frappe.get_doc(
+				{
+					"doctype": "WooCommerce Product",
+					"name": generate_woocommerce_record_name_from_domain_and_id(
+						iws.woocommerce_server, iws.woocommerce_id
+					),
+				}
+			)
+			wc_product.parent_id = parent_woocommerce_id
+			wc_product.load_from_db()
+			return wc_product
+
+		wc_products = get_list_of_wc_products(item=self.item)
+		if len(wc_products) == 0:
+			raise ValueError(
+				f"No WooCommerce Product found with ID {iws.woocommerce_id} on {iws.woocommerce_server}"
+			)
+		return wc_products[0]
 
 	def get_erpnext_item(self):
 		"""
@@ -299,7 +329,7 @@ class SynchroniseItem(SynchroniseWooCommerce):
 
 		wc_server = frappe.get_cached_doc("WooCommerce Server", woocommerce_product.woocommerce_server)
 		if wc_server.enable_image_sync:
-			wc_product_images = json.loads(woocommerce_product.images)
+			wc_product_images = json.loads(woocommerce_product.images or "[]")
 			if len(wc_product_images) > 0:
 				if item.item.image != wc_product_images[0]["src"]:
 					item.item.image = wc_product_images[0]["src"]
@@ -489,7 +519,7 @@ class SynchroniseItem(SynchroniseWooCommerce):
 					row.attribute_value = wc_attribute["option"]
 
 		# Handle variants
-		if wc_product.type == "variable":
+		if wc_product.type == "variable" and item.attributes:
 			item.has_variants = 1
 
 		if wc_product.type == "variation":
@@ -515,7 +545,7 @@ class SynchroniseItem(SynchroniseWooCommerce):
 		item.flags.created_by_sync = True
 
 		if wc_server.enable_image_sync:
-			wc_product_images = json.loads(wc_product.images)
+			wc_product_images = json.loads(wc_product.images or "[]")
 			if len(wc_product_images) > 0:
 				item.image = wc_product_images[0]["src"]
 

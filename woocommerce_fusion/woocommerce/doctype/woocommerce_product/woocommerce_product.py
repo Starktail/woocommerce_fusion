@@ -48,6 +48,21 @@ class WooCommerceProduct(WooCommerceResource):
 
 		return products
 
+	@classmethod
+	def pre_init_document(cls, record: dict, woocommerce_server_url: str):
+		return super().pre_init_document(cls.normalise_variation_image(record), woocommerce_server_url)
+
+	@staticmethod
+	def normalise_variation_image(product: dict) -> dict:
+		"""
+		WooCommerce gives a variation a single `image` object, where a product gets an `images`
+		array.
+		"""
+		if "images" not in product:
+			image = product.get("image")
+			product["images"] = [image] if image else []
+		return product
+
 	def after_load_from_db(self, product: dict):
 		product.pop("name")
 		product = self.set_title(product)
