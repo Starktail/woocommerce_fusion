@@ -4,6 +4,7 @@ import frappe
 from erpnext.stock.doctype.item_price.item_price import ItemPrice
 from frappe import qb
 from frappe.query_builder import Criterion
+from frappe.query_builder.functions import IfNull
 from frappe.utils import get_datetime
 
 from woocommerce_fusion.tasks.sync import SynchroniseWooCommerce
@@ -29,6 +30,17 @@ def _format_sale_date(date_value) -> str | None:
 	if not date_value:
 		return None
 	return get_datetime(date_value).strftime("%Y-%m-%dT%H:%M:%S")
+
+
+def item_wide_price_conditions(ip) -> list:
+	"""
+	Conditions restricting an Item Price query to rows that apply to the whole item.
+	"""
+	return [
+		IfNull(ip.batch_no, "") == "",
+		IfNull(ip.customer, "") == "",
+		IfNull(ip.supplier, "") == "",
+	]
 
 
 def update_item_price_for_woocommerce_item_from_hook(doc, method):
@@ -103,6 +115,7 @@ class SynchroniseItemPrice(SynchroniseWooCommerce):
 			and_conditions.append(item.disabled == 0)
 			and_conditions.append(iwc.woocommerce_id.isnotnull())
 			and_conditions.append(iwc.enabled == 1)
+			and_conditions.extend(item_wide_price_conditions(ip))
 			if self.item_code:
 				and_conditions.append(ip.item_code == self.item_code)
 
@@ -141,6 +154,7 @@ class SynchroniseItemPrice(SynchroniseWooCommerce):
 			item.disabled == 0,
 			iwc.woocommerce_id.isnotnull(),
 			iwc.enabled == 1,
+			*item_wide_price_conditions(ip),
 		]
 		if self.item_code:
 			and_conditions.append(ip.item_code == self.item_code)
