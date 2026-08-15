@@ -26,6 +26,20 @@ class SynchroniseWooCommerce:
 		return [frappe.get_doc("WooCommerce Server", server.name) for server in wc_servers]
 
 
+def get_variation_parent_woocommerce_id(server_name: str, variant_item_code: str) -> str | None:
+	"""
+	Resolve the WooCommerce ID of a variant item's parent (template) for the given server.
+	"""
+	variant_of = frappe.db.get_value("Item", variant_item_code, "variant_of")
+	if not variant_of:
+		return None
+	return frappe.db.get_value(
+		"Item WooCommerce Server",
+		{"parent": variant_of, "woocommerce_server": server_name},
+		"woocommerce_id",
+	)
+
+
 def log_and_raise_error(err):
 	"""
 	Create an "Error Log" and raise error
