@@ -12,6 +12,10 @@ default_company = get_default_company() or "Some Company (Pty) Ltd"
 default_bank = "Test Bank"
 default_bank_account = "Checking Account"
 default_warehouse = "Stores - SC"
+# Must match the timezone the WooCommerce test instance is set to in wp_woo_blueprint.json:
+# WooCommerce reports date_modified in its own local time, and sync conflict resolution
+# compares that against the ERPNext document's `modified`, so the two have to agree.
+default_time_zone = "Africa/Johannesburg"
 
 verify_ssl = not frappe._dev_server
 
@@ -34,6 +38,13 @@ class TestIntegrationWooCommerce(FrappeTestCase):
 		self.wc_consumer_secret = os.getenv("WOO_API_CONSUMER_SECRET")
 		if not all([self.wc_url, self.wc_consumer_key, self.wc_consumer_secret]):
 			raise ValueError("Missing environment variables")
+
+		# erpnext.tests.utils instantiates BootStrapTestData() at import time, which rewrites
+		# System Settings.time_zone to Asia/Kolkata on every run - after before_tests has already
+		# completed the setup wizard. Restore it here, where it runs after all test modules have
+		# been imported.
+		if frappe.db.get_single_value("System Settings", "time_zone") != default_time_zone:
+			frappe.db.set_single_value("System Settings", "time_zone", default_time_zone)
 
 		# Set WooCommerce Settings
 		wc_servers = frappe.get_all("WooCommerce Server", filters={"woocommerce_server_url": self.wc_url})

@@ -76,13 +76,13 @@ export WOO_INTEGRATION_TESTS_WEBSERVER="https://woo-test.localhost"
 export WOO_API_CONSUMER_KEY="ck_test_123456789"
 export WOO_API_CONSUMER_SECRET="cs_test_abcdefg"
 export DEV_SERVER=1
-bench --site test_site run-tests --app woocommerce_fusion --coverage
+bench --site test_site_woocommerce run-tests --app woocommerce_fusion --coverage
 ```
 
 To run unit tests:
 
 ```shell
-bench --site test_site run-tests --app woocommerce_fusion --coverage
+bench --site test_site_woocommerce run-tests --app woocommerce_fusion --coverage
 ```
 
 To run UI/integration tests:
@@ -97,7 +97,7 @@ sudo apt-get install chromium
 ```
 
 ```shell
-bench --site test_site run-ui-tests woocommerce_fusion --headless --browser chromium
+bench --site test_site_woocommerce run-ui-tests woocommerce_fusion --headless --browser chromium
 ```
 
 #### Contributing
