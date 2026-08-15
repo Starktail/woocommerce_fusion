@@ -162,7 +162,7 @@
    "fieldtype": "Select",
    "label": "Catalog Visibility",
    "options": "visible\ncatalog\nsearch\nhidden",
-   "reqd": 1
+   "description": "Not returned by the WooCommerce API for variations"
   },
   {
    "fieldname": "description",

@@ -4,6 +4,7 @@ import frappe
 from frappe.utils import get_datetime, now_datetime
 
 from woocommerce_fusion.tasks.batch.batch_processor import BatchProcessor
+from woocommerce_fusion.tasks.sync import get_variation_parent_woocommerce_id
 
 
 def should_flush(server_name: str) -> tuple[bool, str]:
@@ -120,7 +121,7 @@ def flush_pending(server_name: str, reason: str = "manual") -> dict:
 		for row in variation_rows:
 			parent_wc_id = row.parent_woocommerce_id
 			if not parent_wc_id and row.reference_name:
-				parent_wc_id = _resolve_variation_parent_id(server_name, row.reference_name)
+				parent_wc_id = get_variation_parent_woocommerce_id(server_name, row.reference_name)
 			row.parent_woocommerce_id = parent_wc_id
 			variation_groups.setdefault(parent_wc_id or "", []).append(row)
 		for parent_wc_id, rows in variation_groups.items():
@@ -131,21 +132,6 @@ def flush_pending(server_name: str, reason: str = "manual") -> dict:
 		"success": totals["success"],
 		"failed": totals["failed"],
 	}
-
-
-def _resolve_variation_parent_id(server_name: str, variant_item_code: str) -> str | None:
-	"""
-	Resolve the WooCommerce ID of a variant item's parent (template) for the given server.
-	Used at flush time because the parent may have been created earlier in the same flush.
-	"""
-	variant_of = frappe.db.get_value("Item", variant_item_code, "variant_of")
-	if not variant_of:
-		return None
-	return frappe.db.get_value(
-		"Item WooCommerce Server",
-		{"parent": variant_of, "woocommerce_server": server_name},
-		"woocommerce_id",
-	)
 
 
 @frappe.whitelist()

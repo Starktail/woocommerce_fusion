@@ -7,7 +7,7 @@ from frappe.query_builder import Criterion
 from frappe.query_builder.functions import IfNull
 from frappe.utils import get_datetime
 
-from woocommerce_fusion.tasks.sync import SynchroniseWooCommerce
+from woocommerce_fusion.tasks.sync import SynchroniseWooCommerce, get_variation_parent_woocommerce_id
 from woocommerce_fusion.woocommerce.doctype.woocommerce_product.woocommerce_product import (
 	WooCommerceProduct,
 )
@@ -125,7 +125,14 @@ class SynchroniseItemPrice(SynchroniseWooCommerce):
 				.on(iwc.parent == ip.item_code)
 				.inner_join(item)
 				.on(item.name == ip.item_code)
-				.select(ip.name, ip.item_code, ip.price_list_rate, iwc.woocommerce_server, iwc.woocommerce_id)
+				.select(
+					ip.name,
+					ip.item_code,
+					ip.price_list_rate,
+					iwc.woocommerce_server,
+					iwc.woocommerce_id,
+					item.variant_of,
+				)
 				.where(Criterion.all(and_conditions))
 				.run(as_dict=True)
 			)
@@ -189,6 +196,11 @@ class SynchroniseItemPrice(SynchroniseWooCommerce):
 				domain=item_price.woocommerce_server, resource_id=item_price.woocommerce_id
 			)
 			wc_product = frappe.get_doc({"doctype": "WooCommerce Product", "name": wc_product_name})
+			# Handle variants
+			if item_price.variant_of:
+				wc_product.parent_id = get_variation_parent_woocommerce_id(
+					item_price.woocommerce_server, item_price.item_code
+				)
 
 			try:
 				wc_product.load_from_db()
