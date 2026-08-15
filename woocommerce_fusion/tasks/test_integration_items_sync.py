@@ -569,6 +569,48 @@ class TestIntegrationWooCommerceItemsSync(TestIntegrationWooCommerce):
 		self.assertEqual(str(wc_product.woocommerce_id), str(wc_variation_id))
 		self.assertEqual(wc_product.type, "variation")
 
+	@parameterized.expand(BATCH_MODES)
+	def test_sync_item_group_containing_an_ampersand(self, mock_log_error, _name, batch_enabled):
+		"""
+		Test that a mapped field whose WooCommerce value contains an HTML entity resolves.
+
+		WooCommerce reports a category named "Sleeves & Toploader" as "Sleeves &amp; Toploader",
+		which does not match the ERPNext Item Group of that name.
+		"""
+		self._set_batch_mode(batch_enabled)
+
+		item_group = "Sleeves & Toploader"
+		if not frappe.db.exists("Item Group", item_group):
+			frappe.get_doc(
+				{
+					"doctype": "Item Group",
+					"item_group_name": item_group,
+					"parent_item_group": "All Item Groups",
+				}
+			).insert()
+
+		# Map the ERPNext Item Group to the WooCommerce product's category
+		wc_server = frappe.get_doc("WooCommerce Server", self.wc_server.name)
+		wc_server.item_field_map = []
+		row = wc_server.append("item_field_map")
+		row.erpnext_field_name = "item_group | Item Group"
+		row.woocommerce_field_name = "$.categories[0].name"
+		wc_server.save()
+
+		category_id = self.post_product_category(item_group)
+		wc_product_id = self.post_woocommerce_product(product_name="ITEM107", category_ids=[category_id])
+		woocommerce_product_name = generate_woocommerce_record_name_from_domain_and_id(
+			self.wc_server.name, wc_product_id
+		)
+		run_item_sync(woocommerce_product_name=woocommerce_product_name)
+		self._flush_if_batch()
+
+		mock_log_error.assert_not_called()
+
+		items = get_items_for_wc_product(wc_product_id, self.wc_server.name)
+		self.assertEqual(len(items), 1)
+		self.assertEqual(items[0].item_group, item_group)
+
 
 def get_items_for_wc_product(woocommerce_id: str, woocommerce_server: str):
 	"""
