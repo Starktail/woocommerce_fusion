@@ -45,7 +45,7 @@ def run_item_sync_from_hook(doc, method):
 			indicator="blue",
 			alert=True,
 		)
-		frappe.enqueue(clear_sync_hash_and_run_item_sync, item_code=doc.name)
+		frappe.enqueue(clear_sync_hash_and_run_item_sync, item_code=doc.name, enqueue_after_commit=True)
 		frappe.enqueue(
 			"woocommerce_fusion.tasks.batch.queue_manager.check_and_flush_all_servers",
 			enqueue_after_commit=True,
