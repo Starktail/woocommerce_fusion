@@ -12,10 +12,10 @@ from woocommerce_fusion.tasks.sync_sales_orders import (
 	run_sales_order_sync,
 )
 from woocommerce_fusion.tasks.test_integration_helpers import (
-	default_warehouse,
 	TestIntegrationWooCommerce,
 	create_gl_account_for_shipping_tax,
 	create_shipping_rule,
+	default_warehouse,
 	get_woocommerce_server,
 )
 
