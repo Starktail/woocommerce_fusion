@@ -51,7 +51,9 @@ def run_sales_order_sync_from_hook(doc, method):
 				enqueue_after_commit=True,
 			)
 		else:
-			frappe.enqueue(run_sales_order_sync, queue="long", sales_order_name=doc.name)
+			frappe.enqueue(
+				run_sales_order_sync, queue="long", sales_order_name=doc.name, enqueue_after_commit=True
+			)
 
 
 @frappe.whitelist()
