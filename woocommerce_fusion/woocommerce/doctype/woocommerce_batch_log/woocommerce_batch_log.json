@@ -7,6 +7,7 @@
  "editable_grid": 1,
  "engine": "InnoDB",
  "field_order": [
+  "title",
   "woocommerce_server",
   "resource_type",
   "flush_reason",
@@ -16,11 +17,19 @@
   "successful_items",
   "failed_items",
   "flushed_at",
+  "duration",
   "payload_section",
   "request_payload",
   "response_payload"
  ],
  "fields": [
+  {
+   "fieldname": "title",
+   "fieldtype": "Data",
+   "hidden": 1,
+   "label": "Title",
+   "read_only": 1
+  },
   {
    "fieldname": "woocommerce_server",
    "fieldtype": "Link",
@@ -40,7 +49,8 @@
    "fieldname": "flush_reason",
    "fieldtype": "Select",
    "label": "Flush Reason",
-   "options": "buffer_full\ntimer_elapsed\nmanual"
+   "options": "buffer_full\ntimer_elapsed\nmanual",
+   "in_standard_filter": 1
   },
   {
    "fieldname": "status",
@@ -63,17 +73,28 @@
   {
    "fieldname": "successful_items",
    "fieldtype": "Int",
-   "label": "Successful"
+   "label": "Successful",
+   "in_list_view": 1
   },
   {
    "fieldname": "failed_items",
    "fieldtype": "Int",
-   "label": "Failed"
+   "label": "Failed",
+   "in_list_view": 1
   },
   {
    "fieldname": "flushed_at",
    "fieldtype": "Datetime",
-   "label": "Flushed At"
+   "label": "Flushed At",
+   "in_list_view": 1
+  },
+  {
+   "description": "Seconds between the flush starting and its result being recorded",
+   "fieldname": "duration",
+   "fieldtype": "Float",
+   "label": "Duration (s)",
+   "precision": "2",
+   "read_only": 1
   },
   {
    "fieldname": "payload_section",
@@ -125,5 +146,7 @@
  "sort_field": "modified",
  "sort_order": "DESC",
  "states": [],
- "track_changes": 0
+ "track_changes": 0,
+ "title_field": "title",
+ "show_title_field_in_link": 1
 }

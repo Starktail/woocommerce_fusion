@@ -406,6 +406,8 @@ class BatchProcessor:
 		batch_log.successful_items = success_count
 		batch_log.failed_items = fail_count
 		batch_log.status = "Completed" if fail_count == 0 else "Failed" if success_count == 0 else "Partial"
+		if batch_log.flushed_at:
+			batch_log.duration = (now_datetime() - get_datetime(batch_log.flushed_at)).total_seconds()
 		batch_log.save(ignore_permissions=True)
 		if not frappe.flags.in_test:
 			# Commit the WooCommerce Batch Log now so the audit record of what was sent to
