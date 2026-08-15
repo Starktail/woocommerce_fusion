@@ -1,6 +1,7 @@
 import json
 from dataclasses import dataclass
 from datetime import datetime
+from html import unescape
 
 import frappe
 from erpnext.stock.doctype.item.item import Item
@@ -150,6 +151,15 @@ def sync_woocommerce_products_modified_since(date_time_from=None):
 			pass
 
 	frappe.db.set_single_value("WooCommerce Integration Settings", "wc_last_sync_date_items", now())
+
+
+def unescape_woocommerce_value(value):
+	"""
+	WooCommerce returns text HTML-escaped, e.g. an Item Group of "Sleeves &amp; Toploader".
+	ERPNext stores - and resolves links on - the plain text, so unescape before writing a value
+	to an Item or comparing it against one. Non-string values are passed through.
+	"""
+	return unescape(value) if isinstance(value, str) else value
 
 
 @dataclass
@@ -321,8 +331,9 @@ class SynchroniseItem(SynchroniseWooCommerce):
 		Update the ERPNext Item with fields from it's corresponding WooCommerce Product
 		"""
 		item_dirty = False
-		if item.item.item_name != woocommerce_product.woocommerce_name:
-			item.item.item_name = woocommerce_product.woocommerce_name
+		woocommerce_name = unescape_woocommerce_value(woocommerce_product.woocommerce_name)
+		if item.item.item_name != woocommerce_name:
+			item.item.item_name = woocommerce_name
 			item_dirty = True
 
 		fields_updated, item.item = self.set_item_fields(item=item.item)
@@ -360,7 +371,7 @@ class SynchroniseItem(SynchroniseWooCommerce):
 		wc_product = self.woocommerce_product
 		wc_product_dirty = False
 
-		if wc_product.woocommerce_name != item.item.item_name:
+		if unescape_woocommerce_value(wc_product.woocommerce_name) != item.item.item_name:
 			wc_product.woocommerce_name = item.item.item_name
 			wc_product_dirty = True
 
@@ -537,7 +548,7 @@ class SynchroniseItem(SynchroniseWooCommerce):
 		)
 		item.stock_uom = wc_server.uom or _("Nos")
 		item.item_group = wc_server.item_group
-		item.item_name = wc_product.woocommerce_name
+		item.item_name = unescape_woocommerce_value(wc_product.woocommerce_name)
 		row = item.append("woocommerce_servers")
 		row.woocommerce_id = wc_product.woocommerce_id
 		row.woocommerce_server = wc_server.name
@@ -629,7 +640,11 @@ class SynchroniseItem(SynchroniseWooCommerce):
 					jsonpath_expr = parse(map.woocommerce_field_name)
 					woocommerce_product_field_matches = jsonpath_expr.find(woocommerce_product_dict)
 
-					setattr(item, erpnext_item_field_name[0], woocommerce_product_field_matches[0].value)
+					setattr(
+						item,
+						erpnext_item_field_name[0],
+						unescape_woocommerce_value(woocommerce_product_field_matches[0].value),
+					)
 					item_dirty = True
 		return item_dirty, item
 
@@ -675,7 +690,9 @@ class SynchroniseItem(SynchroniseWooCommerce):
 							continue
 
 					# JSONPath parsing typically returns a list, we'll only take the first value
-					woocommerce_product_field_value = woocommerce_product_field_matches[0].value
+					woocommerce_product_field_value = unescape_woocommerce_value(
+						woocommerce_product_field_matches[0].value
+					)
 
 					if erpnext_item_field_value != woocommerce_product_field_value:
 						jsonpath_expr.update(wc_product_with_deserialised_fields, erpnext_item_field_value)

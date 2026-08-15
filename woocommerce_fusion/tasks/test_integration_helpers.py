@@ -262,6 +262,7 @@ class TestIntegrationWooCommerce(IntegrationTestCase):
 		attributes: list[str] | None = None,
 		image_url: str | None = None,
 		meta_data: list[dict] | None = None,
+		category_ids: list[int] | None = None,
 	) -> int:
 		"""
 		Create a dummy product on a WooCommerce testing site
@@ -324,6 +325,9 @@ class TestIntegrationWooCommerce(IntegrationTestCase):
 
 		if meta_data:
 			payload["meta_data"] = meta_data
+
+		if category_ids:
+			payload["categories"] = [{"id": category_id} for category_id in category_ids]
 
 		payload = json.dumps(payload)
 		headers = {"Content-Type": "application/json"}
@@ -486,6 +490,30 @@ class TestIntegrationWooCommerce(IntegrationTestCase):
 		response = oauth.put(url, headers=headers, data=json.dumps({"status": status}))
 
 		return response.json()
+
+	def post_product_category(self, category_name: str) -> int:
+		"""
+		Create a product category on a WooCommerce testing site, or return the existing one
+		"""
+		import json
+
+		from requests_oauthlib import OAuth1Session
+
+		oauth = OAuth1Session(self.wc_consumer_key, client_secret=self.wc_consumer_secret)
+		if not verify_ssl:
+			oauth.verify = False
+
+		url = f"{self.wc_url}/wp-json/wc/v3/products/categories"
+		response = oauth.post(
+			url, headers={"Content-Type": "application/json"}, data=json.dumps({"name": category_name})
+		)
+		category = response.json()
+
+		# WooCommerce rejects a duplicate name, and hands back the existing id
+		if category.get("code") == "term_exists":
+			return category["data"]["resource_id"]
+
+		return category["id"]
 
 	def post_product_attribute(self, attribute_name: str, attribute_slug: str):
 		"""
