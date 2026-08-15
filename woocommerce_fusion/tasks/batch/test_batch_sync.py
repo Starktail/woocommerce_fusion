@@ -3,7 +3,7 @@ from unittest.mock import MagicMock, patch
 
 import frappe
 from frappe import _dict
-from frappe.tests.utils import FrappeTestCase
+from frappe.tests import IntegrationTestCase
 
 from woocommerce_fusion.tasks.batch.batch_processor import BatchProcessor
 from woocommerce_fusion.tasks.batch.queue_manager import flush_pending, should_flush
@@ -29,7 +29,7 @@ def _ensure_test_server():
 	return TEST_SERVER
 
 
-class TestQueueEnqueue(FrappeTestCase):
+class TestQueueEnqueue(IntegrationTestCase):
 	def setUp(self):
 		self.server = _ensure_test_server()
 
@@ -97,7 +97,7 @@ class TestQueueEnqueue(FrappeTestCase):
 		self.assertEqual(frappe.db.get_value("WooCommerce Sync Queue", inb, "status"), "Pending")
 
 
-class TestShouldFlush(FrappeTestCase):
+class TestShouldFlush(IntegrationTestCase):
 	def test_should_flush_buffer_full(self):
 		with patch("frappe.db.count", return_value=100), patch("frappe.get_cached_doc") as mock_server:
 			mock_server.return_value = MagicMock(batch_size_limit=100, batch_flush_interval_minutes=1)
@@ -113,7 +113,7 @@ class TestShouldFlush(FrappeTestCase):
 		self.assertEqual(reason, "")
 
 
-class TestBatchProcessor(FrappeTestCase):
+class TestBatchProcessor(IntegrationTestCase):
 	def setUp(self):
 		self.server = _ensure_test_server()
 
@@ -148,6 +148,13 @@ class TestBatchProcessor(FrappeTestCase):
 		processor._mark_failed(row2.name, "boom", None)
 		self.assertEqual(frappe.db.get_value("WooCommerce Sync Queue", row2.name, "status"), "Failed")
 		self.assertEqual(frappe.db.get_value("WooCommerce Sync Queue", row2.name, "error_message"), "boom")
+
+		error_log = frappe.db.get_value("WooCommerce Sync Queue", row2.name, "error_log")
+		self.assertTrue(error_log)
+		self.assertEqual(
+			frappe.db.get_value("Error Log", error_log, "reference_name"),
+			row2.name,
+		)
 
 	def test_process_chunk_routes_by_type_and_direction(self):
 		processor = BatchProcessor(self.server)

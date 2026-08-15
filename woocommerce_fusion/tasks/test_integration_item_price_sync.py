@@ -5,10 +5,16 @@ from erpnext import get_default_company
 from erpnext.stock.doctype.item.test_item import create_item
 from parameterized import parameterized
 
+from woocommerce_fusion.tasks.sync import get_variation_parent_woocommerce_id
 from woocommerce_fusion.tasks.sync_item_prices import run_item_price_sync
+from woocommerce_fusion.tasks.sync_items import run_item_sync
 from woocommerce_fusion.tasks.test_integration_helpers import (
 	TestIntegrationWooCommerce,
+	default_warehouse,
 	get_woocommerce_server,
+)
+from woocommerce_fusion.woocommerce.woocommerce_api import (
+	generate_woocommerce_record_name_from_domain_and_id,
 )
 
 BATCH_MODES = [("single_call", False), ("batch_api", True)]
@@ -30,7 +36,9 @@ class TestIntegrationWooCommerceItemPriceSync(TestIntegrationWooCommerce):
 		wc_product_id = self.post_woocommerce_product(product_name="ITEM002", regular_price=10)
 
 		# Create the same product in ERPNext (with opening stock of 5, not 1) and link it
-		item = create_item("ITEM002", valuation_rate=10, warehouse=None, company=get_default_company())
+		item = create_item(
+			"ITEM002", valuation_rate=10, warehouse=default_warehouse, company=get_default_company()
+		)
 		item.woocommerce_servers = []
 		row = item.append("woocommerce_servers")
 		row.woocommerce_id = wc_product_id
@@ -72,7 +80,9 @@ class TestIntegrationWooCommerceItemPriceSync(TestIntegrationWooCommerce):
 		wc_product_id = self.post_woocommerce_product(product_name="ITEM003", regular_price=10)
 
 		# Create the same product in ERPNext (with opening stock of 5, not 1) and link it
-		item = create_item("ITEM003", valuation_rate=10, warehouse=None, company=get_default_company())
+		item = create_item(
+			"ITEM003", valuation_rate=10, warehouse=default_warehouse, company=get_default_company()
+		)
 		item.woocommerce_servers = []
 		row = item.append("woocommerce_servers")
 		row.woocommerce_id = wc_product_id
@@ -103,3 +113,58 @@ class TestIntegrationWooCommerceItemPriceSync(TestIntegrationWooCommerce):
 		# Expect correct unchanged price of 10 in WooCommerce
 		wc_price = self.get_woocommerce_product_price(product_id=wc_product_id)
 		self.assertEqual(float(wc_price), 10)
+
+	@parameterized.expand(BATCH_MODES)
+	def test_variation_price_sync_when_synchronising_with_woocommerce(self, _name, batch_enabled):
+		"""
+		Test that the Item Price Synchronisation method posts the price of a variant Item to the
+		WooCommerce variation, and not to its parent product.
+		"""
+		self._set_batch_mode(batch_enabled)
+
+		# Create a variable product with one variation in WooCommerce, both priced at 10
+		wc_variation_id = self.post_woocommerce_product(
+			product_name="ITEM004", type="variation", attributes=["Material Type"], regular_price=10
+		)
+
+		# Sync inbound, so that ERPNext has the template Item and the variant Item, each linked
+		# to their WooCommerce counterpart
+		woocommerce_product_name = generate_woocommerce_record_name_from_domain_and_id(
+			self.wc_server.name, wc_variation_id
+		)
+		run_item_sync(woocommerce_product_name=woocommerce_product_name)
+		self._flush_if_batch()
+
+		variant_item_code = frappe.db.get_value(
+			"Item WooCommerce Server",
+			{"woocommerce_server": self.wc_server.name, "woocommerce_id": wc_variation_id},
+			"parent",
+		)
+		self.assertIsNotNone(variant_item_code)
+		wc_parent_id = get_variation_parent_woocommerce_id(self.wc_server.name, variant_item_code)
+		self.assertIsNotNone(wc_parent_id)
+
+		# Add an Item Price for the variant Item
+		frappe.get_doc(
+			{
+				"doctype": "Item Price",
+				"item_code": variant_item_code,
+				"price_list": self.wc_server.price_list,
+				"price_list_rate": 5000,
+			}
+		).insert()
+
+		# Run synchronisation
+		self.assertEqual(run_item_price_sync(item_code=variant_item_code), True)
+		self._flush_if_batch()
+
+		# Expect the price on the variation
+		variation = self.get_woocommerce_product(product_id=wc_variation_id, parent_id=wc_parent_id)
+		self.assertEqual(float(variation["regular_price"]), 5000)
+
+		# Expect the parent product's own price left alone. A variable product derives its
+		# displayed `price` from its variations, so only `regular_price` shows whether anything
+		# was written to the parent itself - and writing there would be a silent no-op.
+		parent = self.get_woocommerce_product(product_id=wc_parent_id)
+		self.assertEqual(parent["type"], "variable")
+		self.assertEqual(parent["regular_price"], "")

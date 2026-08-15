@@ -7,7 +7,7 @@ from unittest.mock import Mock, patch
 from urllib.parse import urlparse
 
 import frappe
-from frappe.tests.utils import FrappeTestCase
+from frappe.tests import IntegrationTestCase, UnitTestCase
 
 from woocommerce_fusion.tasks.utils import API, APIWithRequestLogging
 from woocommerce_fusion.woocommerce.doctype.woocommerce_order.woocommerce_order import (
@@ -24,7 +24,7 @@ from woocommerce_fusion.woocommerce.woocommerce_api import (
 
 
 @patch.object(WooCommerceOrder, "_init_api")
-class TestWooCommerceOrder(FrappeTestCase):
+class TestWooCommerceOrder(IntegrationTestCase):
 	@classmethod
 	def setUpClass(cls):
 		super().setUpClass()  # important to call super() methods when extending TestCase.
@@ -540,7 +540,7 @@ class TestWooCommerceOrder(FrappeTestCase):
 PRODUCT_FIELD_SETTER_MAP = {"woocommerce_name": "name", "woocommerce_id": "id"}
 
 
-class TestGetWcParametersFromFilters(FrappeTestCase):
+class TestGetWcParametersFromFilters(UnitTestCase):
 	"""
 	Unit tests for get_wc_parameters_from_filters
 	"""
@@ -599,7 +599,7 @@ class TestGetWcParametersFromFilters(FrappeTestCase):
 		self.assertIn("sku", str(context.exception))
 
 
-class TestGetWoocommerceServersFromFilters(FrappeTestCase):
+class TestGetWoocommerceServersFromFilters(UnitTestCase):
 	"""Unit tests for get_woocommerce_servers_from_filters (GitHub issue #220)."""
 
 	def test_name_equals_scopes_to_servers_domain(self):
@@ -731,7 +731,7 @@ dummy_wc_order = {
 }
 
 
-class TestAPIWithRequestLogging(FrappeTestCase):
+class TestAPIWithRequestLogging(UnitTestCase):
 	@classmethod
 	def setUpClass(cls):
 		super().setUpClass()  # important to call super() methods when extending TestCase.

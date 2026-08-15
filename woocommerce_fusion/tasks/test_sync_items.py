@@ -1,7 +1,7 @@
 from unittest.mock import MagicMock, Mock, call, patch
 
 import frappe
-from frappe.tests.utils import FrappeTestCase
+from frappe.tests import UnitTestCase
 
 from woocommerce_fusion.tasks.sync_items import ERPNextItemToSync, SynchroniseItem
 from woocommerce_fusion.woocommerce.woocommerce_api import (
@@ -11,7 +11,7 @@ from woocommerce_fusion.woocommerce.woocommerce_api import (
 
 @patch("woocommerce_fusion.tasks.sync_items.run_item_sync")
 @patch.object(SynchroniseItem, "set_sync_hash")
-class TestWooCommerceSync(FrappeTestCase):
+class TestWooCommerceSync(UnitTestCase):
 	@classmethod
 	def setUpClass(cls):
 		super().setUpClass()  # important to call super() methods when extending TestCase.

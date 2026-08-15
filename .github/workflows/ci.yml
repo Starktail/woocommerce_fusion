@@ -4,7 +4,7 @@ name: CI
 on:
   push:
     branches:
-      - version-15
+      - version-16
   pull_request:
 
 concurrency:
@@ -12,9 +12,9 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  TEST_AGAINST_FRAPPE_VERSION: v15.96.0
+  TEST_AGAINST_FRAPPE_VERSION: v16.31.0
 
-  TEST_AGAINST_ERPNEXT_VERSION: v15.94.3
+  TEST_AGAINST_ERPNEXT_VERSION: v16.32.1
 
 
 jobs:
@@ -45,12 +45,12 @@ jobs:
       - name: Setup Python
         uses: actions/setup-python@v4
         with:
-          python-version: '3.10'
+          python-version: '3.14'
 
       - name: Setup Node
         uses: actions/setup-node@v3
         with:
-          node-version: 22
+          node-version: 24
           check-latest: true
 
       - name: Add to Hosts

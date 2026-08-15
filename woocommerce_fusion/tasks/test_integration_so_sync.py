@@ -15,6 +15,7 @@ from woocommerce_fusion.tasks.test_integration_helpers import (
 	TestIntegrationWooCommerce,
 	create_gl_account_for_shipping_tax,
 	create_shipping_rule,
+	default_warehouse,
 	get_woocommerce_server,
 )
 
@@ -403,7 +404,7 @@ class TestIntegrationWooCommerceSync(TestIntegrationWooCommerce):
 		wc_product_id = self.post_woocommerce_product(product_name="ADDITIONAL_ITEM", regular_price=20)
 		# Create the same product in ERPNext and link it
 		item = create_item(
-			"ADDITIONAL_ITEM", valuation_rate=10, warehouse=None, company=get_default_company()
+			"ADDITIONAL_ITEM", valuation_rate=10, warehouse=default_warehouse, company=get_default_company()
 		)
 		row = item.append("woocommerce_servers")
 		row.woocommerce_id = wc_product_id
@@ -487,7 +488,7 @@ class TestIntegrationWooCommerceSync(TestIntegrationWooCommerce):
 		wc_product_id = self.post_woocommerce_product(product_name="ADDITIONAL_ITEM", regular_price=20)
 		# Create the same product in ERPNext and link it
 		item = create_item(
-			"ADDITIONAL_ITEM", valuation_rate=10, warehouse=None, company=get_default_company()
+			"ADDITIONAL_ITEM", valuation_rate=10, warehouse=default_warehouse, company=get_default_company()
 		)
 		row = item.append("woocommerce_servers")
 		row.woocommerce_id = wc_product_id

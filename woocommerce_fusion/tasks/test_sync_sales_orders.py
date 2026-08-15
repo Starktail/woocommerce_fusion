@@ -3,7 +3,7 @@ from unittest.mock import Mock, call, patch
 
 import frappe
 from erpnext import get_default_company
-from frappe.tests.utils import FrappeTestCase
+from frappe.tests import IntegrationTestCase
 
 from woocommerce_fusion.tasks.sync_sales_orders import SynchroniseSalesOrder, find_existing_contact
 from woocommerce_fusion.woocommerce.woocommerce_api import (
@@ -16,7 +16,7 @@ default_bank_account = "Checking Account"
 
 
 @patch("woocommerce_fusion.tasks.sync_sales_orders.frappe.get_cached_doc")
-class TestWooCommerceSync(FrappeTestCase):
+class TestWooCommerceSync(IntegrationTestCase):
 	@classmethod
 	def setUpClass(cls):
 		super().setUpClass()  # important to call super() methods when extending TestCase.
@@ -542,4 +542,4 @@ def create_gl_account_for_bank(account_name="_Test Bank"):
 	except frappe.DuplicateEntryError:
 		pass
 
-	return frappe.get_doc("Account", {"account_name": account_name})
+	return frappe.get_doc("Account", {"account_name": account_name, "company": get_default_company()})

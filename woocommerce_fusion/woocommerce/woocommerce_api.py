@@ -116,9 +116,17 @@ class WooCommerceResource(Document):
 			(api for api in self.wc_api_list if wc_server_domain in api.woocommerce_server_url), None
 		)
 
+		# Child resources (e.g. product variations) live under their parent's endpoint. Set
+		# parent_id on the document before calling load_from_db() to read one.
+		endpoint = (
+			f"{self.resource}/{self.parent_id}/{self.child_resource}/{record_id}"
+			if self.get("parent_id") and self.child_resource
+			else f"{self.resource}/{record_id}"
+		)
+
 		# Get WooCommerce Record
 		try:
-			record = self.current_wc_api.api.get(f"{self.resource}/{record_id}").json()
+			record = self.current_wc_api.api.get(endpoint).json()
 		except Exception:
 			error_text = (
 				f"load_from_db failed (WooCommerce {self.resource} #{record_id})\n\n{frappe.get_traceback()}"

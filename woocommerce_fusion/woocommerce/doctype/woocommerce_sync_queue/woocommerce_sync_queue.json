@@ -24,6 +24,7 @@
   "trigger_reference_name",
   "result_section",
   "batch_log",
+  "error_log",
   "retry_count",
   "error_message",
   "extra_data"
@@ -139,6 +140,13 @@
    "fieldtype": "Link",
    "label": "Batch Log",
    "options": "WooCommerce Batch Log",
+   "read_only": 1
+  },
+  {
+   "fieldname": "error_log",
+   "fieldtype": "Link",
+   "label": "Error Log",
+   "options": "Error Log",
    "read_only": 1
   },
   {

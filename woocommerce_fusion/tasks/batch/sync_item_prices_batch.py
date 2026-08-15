@@ -1,5 +1,6 @@
 import frappe
 
+from woocommerce_fusion.tasks.sync import get_variation_parent_woocommerce_id
 from woocommerce_fusion.tasks.sync_item_prices import SynchroniseItemPrice
 from woocommerce_fusion.woocommerce.doctype.woocommerce_sync_queue.woocommerce_sync_queue import (
 	enqueue_item,
@@ -18,12 +19,14 @@ def enqueue_price_updates(sync: SynchroniseItemPrice) -> None:
 		try:
 			payload = _build_price_payload(sync, item_price)
 			if payload:
+				# Variations are flushed against products/{parent}/variations/batch
+				is_variation = bool(item_price.variant_of)
 				enqueue_item(
 					woocommerce_server=sync.wc_server.name,
 					item_code=item_price.item_code,
 					item_woocommerce_server_idx=0,
 					sync_type="item_price",
-					resource_type="product",
+					resource_type="product_variation" if is_variation else "product",
 					woocommerce_id=str(item_price.woocommerce_id),
 					direction="outbound",
 					triggered_by="Scheduled",
@@ -44,6 +47,11 @@ def _build_price_payload(sync: SynchroniseItemPrice, item_price) -> dict | None:
 		domain=item_price.woocommerce_server, resource_id=item_price.woocommerce_id
 	)
 	wc_product = frappe.get_doc({"doctype": "WooCommerce Product", "name": wc_product_name})
+	# Variations are only readable under their parent product's endpoint
+	if item_price.variant_of:
+		wc_product.parent_id = get_variation_parent_woocommerce_id(
+			item_price.woocommerce_server, item_price.item_code
+		)
 	wc_product.load_from_db()
 
 	payload = {}
