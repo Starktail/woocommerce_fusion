@@ -2,10 +2,16 @@ from unittest.mock import patch
 
 import frappe
 from erpnext.stock.doctype.item.test_item import create_item
+from frappe.utils import add_to_date, now
 from frappe.utils.data import cstr
 from parameterized import parameterized
 
-from woocommerce_fusion.tasks.sync_items import clear_sync_hash, run_item_sync
+from woocommerce_fusion.tasks.sync import get_variation_parent_woocommerce_id
+from woocommerce_fusion.tasks.sync_items import (
+	clear_sync_hash,
+	get_list_of_wc_products,
+	run_item_sync,
+)
 from woocommerce_fusion.tasks.test_integration_helpers import TestIntegrationWooCommerce
 from woocommerce_fusion.woocommerce.woocommerce_api import (
 	generate_woocommerce_record_name_from_domain_and_id,
@@ -459,6 +465,109 @@ class TestIntegrationWooCommerceItemsSync(TestIntegrationWooCommerce):
 		mock_log_error.assert_not_called()
 		wc_product = self.get_woocommerce_product(product_id=wc_product_id)
 		self.assertEqual(wc_product["name"], "ITEM103 renamed")
+
+	@parameterized.expand(BATCH_MODES)
+	def test_sync_variable_wc_product_without_attributes(self, mock_log_error, _name, batch_enabled):
+		"""
+		Test that a variable WooCommerce Product with no attributes still creates an Item.
+
+		ERPNext requires an attribute on a template Item, and such a product has no variations,
+		so it is created as a plain Item.
+		"""
+		self._set_batch_mode(batch_enabled)
+
+		wc_product_id = self.post_woocommerce_product(product_name="ITEM104", type="variable", attributes=[])
+		woocommerce_product_name = generate_woocommerce_record_name_from_domain_and_id(
+			self.wc_server.name, wc_product_id
+		)
+		run_item_sync(woocommerce_product_name=woocommerce_product_name)
+		self._flush_if_batch()
+
+		mock_log_error.assert_not_called()
+
+		items = get_items_for_wc_product(wc_product_id, self.wc_server.name)
+		self.assertEqual(len(items), 1)
+		self.assertEqual(items[0].has_variants, 0)
+		self.assertEqual(len(items[0].attributes), 0)
+
+	@parameterized.expand(BATCH_MODES)
+	def test_sync_variation_inbound_with_image_sync_enabled(self, mock_log_error, _name, batch_enabled):
+		"""
+		Test that pulling a changed variation into ERPNext works while image sync is enabled.
+
+		The scheduled inbound sync lists variations through their parent's variations endpoint,
+		which reports a single `image` rather than the `images` array a product carries.
+		"""
+		self._set_batch_mode(batch_enabled)
+		wc_server = frappe.get_doc("WooCommerce Server", self.wc_server.name)
+		wc_server.enable_image_sync = 1
+		wc_server.save()
+
+		wc_variation_id = self.post_woocommerce_product(
+			product_name="ITEM105", type="variation", attributes=["Material Type"]
+		)
+		woocommerce_product_name = generate_woocommerce_record_name_from_domain_and_id(
+			self.wc_server.name, wc_variation_id
+		)
+		run_item_sync(woocommerce_product_name=woocommerce_product_name)
+		self._flush_if_batch()
+
+		items = get_items_for_wc_product(wc_variation_id, self.wc_server.name)
+		self.assertEqual(len(items), 1)
+		item = items[0]
+		wc_parent_id = get_variation_parent_woocommerce_id(self.wc_server.name, item.name)
+
+		# Change the variation in WooCommerce, so that it is the newer of the two
+		self.update_woocommerce_variation(
+			wc_parent_id, wc_variation_id, {"description": "Changed in WooCommerce"}
+		)
+		clear_sync_hash(item.name)
+
+		# Sync it the way the scheduled task does: list recently modified products, which walks
+		# each variable product's variations, and sync the variation record that comes back
+		wc_products = get_list_of_wc_products(date_time_from=add_to_date(now(), hours=-1))
+		variation = next(
+			product for product in wc_products if str(product.woocommerce_id) == str(wc_variation_id)
+		)
+		run_item_sync(woocommerce_product=variation)
+		self._flush_if_batch()
+
+		mock_log_error.assert_not_called()
+
+	@parameterized.expand(BATCH_MODES)
+	def test_sync_variant_item_from_the_item_side(self, mock_log_error, _name, batch_enabled):
+		"""
+		Test that syncing a variant Item finds its WooCommerce variation.
+
+		A variation is not listed by the products endpoint, so it can only be reached through
+		its parent product.
+		"""
+		self._set_batch_mode(batch_enabled)
+
+		wc_variation_id = self.post_woocommerce_product(
+			product_name="ITEM106", type="variation", attributes=["Material Type"]
+		)
+		woocommerce_product_name = generate_woocommerce_record_name_from_domain_and_id(
+			self.wc_server.name, wc_variation_id
+		)
+		run_item_sync(woocommerce_product_name=woocommerce_product_name)
+		self._flush_if_batch()
+
+		items = get_items_for_wc_product(wc_variation_id, self.wc_server.name)
+		self.assertEqual(len(items), 1)
+		item = items[0]
+
+		# Sync from the Item side, the way the Item hook does
+		clear_sync_hash(item.name)
+		_item, wc_product = run_item_sync(item_code=item.name)
+		self._flush_if_batch()
+
+		mock_log_error.assert_not_called()
+
+		# Expect the variation to have been found, and not its parent
+		self.assertIsNotNone(wc_product)
+		self.assertEqual(str(wc_product.woocommerce_id), str(wc_variation_id))
+		self.assertEqual(wc_product.type, "variation")
 
 
 def get_items_for_wc_product(woocommerce_id: str, woocommerce_server: str):

@@ -270,7 +270,8 @@ class TestIntegrationWooCommerce(FrappeTestCase):
 
 		from requests_oauthlib import OAuth1Session
 
-		if not attributes:
+		# An explicit empty list means "no attributes", which is a valid WooCommerce product
+		if attributes is None:
 			attributes = ["Material Type", "Volume"]
 
 		if type in ["variable", "variation"]:
@@ -542,6 +543,23 @@ class TestIntegrationWooCommerce(FrappeTestCase):
 		response = oauth.post(url, headers=headers, data=payload)
 
 		return response.json()["id"]
+
+	def update_woocommerce_variation(self, parent_id: int, variation_id: int, payload: dict) -> dict:
+		"""
+		Update a variation on a WooCommerce testing site
+		"""
+		import json
+
+		from requests_oauthlib import OAuth1Session
+
+		oauth = OAuth1Session(self.wc_consumer_key, client_secret=self.wc_consumer_secret)
+		if not verify_ssl:
+			oauth.verify = False
+
+		url = f"{self.wc_url}/wp-json/wc/v3/products/{parent_id}/variations/{variation_id}"
+		response = oauth.put(url, headers={"Content-Type": "application/json"}, data=json.dumps(payload))
+
+		return response.json()
 
 
 def create_bank_account(bank_name=default_bank, account_name="_Test Bank", company=default_company):
