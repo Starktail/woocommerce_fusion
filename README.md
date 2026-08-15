@@ -35,6 +35,19 @@ This app allows you to synchronise your ERPNext site with **multiple** WooCommer
 - Sync Item Prices
 - Integration with WooCommerce Plugins
 
+### Batch API mode
+
+> [!IMPORTANT]
+> **Batch API mode will become the default in a future release, and the current one-at-a-time mode will be deprecated.**
+
+Batch API mode groups sync operations into batched WooCommerce API calls instead of sending them
+one at a time, which significantly reduces load on your WooCommerce server.
+
+Enable it per server on **WooCommerce Server**.
+
+Queued, flushed and failed operations are visible on the **WooCommerce Sync Status** page
+(`/app/woocommerce-sync-status`), and each flush is recorded as a **WooCommerce Batch Log**.
+
 ### User documentation
 
 📄 User documentation is hosted at [woocommerce-fusion-docs.starktail.com/woocommerce_fusion_introduction](https://woocommerce-fusion-docs.starktail.com/woocommerce_fusion_introduction)
