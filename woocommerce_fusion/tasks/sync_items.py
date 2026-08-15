@@ -714,7 +714,7 @@ def get_list_of_wc_products(
 		new_results = woocommerce_product.get_list(
 			args={
 				"filters": filters,
-				"page_lenth": page_length,
+				"page_length": page_length,
 				"start": start,
 				"servers": servers,
 				"as_doc": True,
@@ -738,7 +738,7 @@ def get_item_price_rate(item: ERPNextItemToSync):
 		item_prices = frappe.get_all(
 			"Item Price",
 			filters={
-				"item_code": item.item.item_name,
+				"item_code": item.item.item_code,
 				"price_list": wc_server.price_list,
 				"batch_no": ("is", "not set"),
 				"customer": ("is", "not set"),
@@ -775,7 +775,7 @@ def get_item_sale_price_data(item: ERPNextItemToSync) -> frappe._dict | None:
 	item_prices = frappe.get_all(
 		"Item Price",
 		filters={
-			"item_code": item.item.item_name,
+			"item_code": item.item.item_code,
 			"price_list": wc_server.sales_price_list,
 			"batch_no": ("is", "not set"),
 			"customer": ("is", "not set"),

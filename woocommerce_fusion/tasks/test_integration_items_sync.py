@@ -5,7 +5,7 @@ from erpnext.stock.doctype.item.test_item import create_item
 from frappe.utils.data import cstr
 from parameterized import parameterized
 
-from woocommerce_fusion.tasks.sync_items import run_item_sync
+from woocommerce_fusion.tasks.sync_items import clear_sync_hash, run_item_sync
 from woocommerce_fusion.tasks.test_integration_helpers import TestIntegrationWooCommerce
 from woocommerce_fusion.woocommerce.woocommerce_api import (
 	generate_woocommerce_record_name_from_domain_and_id,
@@ -421,6 +421,44 @@ class TestIntegrationWooCommerceItemsSync(TestIntegrationWooCommerce):
 
 		# Expect correct custom mapped field values
 		self.assertEqual(item.description, "Final description from WooCommerce")
+
+	@parameterized.expand(BATCH_MODES)
+	def test_sync_updates_variable_wc_product_that_has_no_price_of_its_own(
+		self, mock_log_error, _name, batch_enabled
+	):
+		"""
+		Test that pushing an Item update to a variable WooCommerce Product succeeds. A variable
+		product carries no regular_price of its own - its price is derived from its variations.
+		"""
+		self._set_batch_mode(batch_enabled)
+
+		# Create a variable product in WooCommerce and sync it inbound
+		wc_product_id = self.post_woocommerce_product(
+			product_name="ITEM103", type="variable", attributes=["Material Type"]
+		)
+		woocommerce_product_name = generate_woocommerce_record_name_from_domain_and_id(
+			self.wc_server.name, wc_product_id
+		)
+		run_item_sync(woocommerce_product_name=woocommerce_product_name)
+		self._flush_if_batch()
+
+		items = get_items_for_wc_product(wc_product_id, self.wc_server.name)
+		self.assertEqual(len(items), 1)
+		item = items[0]
+
+		# Make the ERPNext Item the newer of the two and clear the sync hash, which is what the
+		# Item hook does before syncing, so that the change is pushed outbound
+		item.item_name = "ITEM103 renamed"
+		item.save()
+
+		clear_sync_hash(item.name)
+		run_item_sync(item_code=item.name)
+		self._flush_if_batch()
+
+		# Expect no errors logged, and the change to have reached WooCommerce
+		mock_log_error.assert_not_called()
+		wc_product = self.get_woocommerce_product(product_id=wc_product_id)
+		self.assertEqual(wc_product["name"], "ITEM103 renamed")
 
 
 def get_items_for_wc_product(woocommerce_id: str, woocommerce_server: str):
