@@ -487,7 +487,7 @@
    "fieldname": "regular_price",
    "fieldtype": "Float",
    "label": "Regular Price",
-   "reqd": 1
+   "description": "A variable product has no price of its own; its price comes from its variations"
   }
  ],
  "grid_page_length": 50,

@@ -1065,7 +1065,7 @@ def get_list_of_wc_orders(
 		new_results = woocommerce_order.get_list(
 			args={
 				"filters": filters,
-				"page_lenth": page_length,
+				"page_length": page_length,
 				"start": start,
 				"as_doc": True,
 			}

@@ -411,3 +411,16 @@ class TestItemWidePriceScopingOnCreatePath(FrappeTestCase):
 		sale_price = get_item_sale_price_data(self.item_for_sync)
 		self.assertIsNotNone(sale_price)
 		self.assertEqual(sale_price.price_list_rate, 90)
+
+	def test_prices_are_matched_on_item_code_and_not_item_name(self):
+		"""
+		Item Price.item_code links to the Item's code, which is not necessarily its name.
+		"""
+		frappe.db.set_value("Item", PRICE_SCOPE_ITEM, "item_name", "A Different Display Name")
+		item_for_sync = ERPNextItemToSync(
+			item=frappe.get_doc("Item", PRICE_SCOPE_ITEM),
+			item_woocommerce_server_idx=1,
+		)
+
+		self.assertEqual(get_item_price_rate(item_for_sync), 100)
+		self.assertEqual(get_item_sale_price_data(item_for_sync).price_list_rate, 90)

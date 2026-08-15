@@ -82,6 +82,17 @@ class TestWooCommerceProduct(FrappeTestCase):
 		result = WooCommerceProduct.clean_up_product_before_write(_base_product())
 		self.assertNotIn("related_ids", result)
 
+	def test_clean_up_product_drops_prices_for_a_variable_product(self):
+		"""
+		A variable product's price comes from its variations, so we should not write one back.
+		"""
+		result = WooCommerceProduct.clean_up_product_before_write(
+			_base_product(type="variable", regular_price=0, sale_price=0)
+		)
+
+		self.assertNotIn("regular_price", result)
+		self.assertNotIn("sale_price", result)
+
 
 class TestLoadFromDbEndpoint(UnitTestCase):
 	"""
