@@ -510,7 +510,7 @@ class BatchProcessor:
 		if not frappe.flags.in_test:
 			# Commit the WooCommerce Batch Log now so the audit record of what was sent to
 			# WooCommerce survives a later failure in the same flush. Skipped under test to keep
-			# FrappeTestCase rollback isolation.
+			# IntegrationTestCase rollback isolation.
 			frappe.db.commit()  # nosemgrep
 
 		return success_count, fail_count

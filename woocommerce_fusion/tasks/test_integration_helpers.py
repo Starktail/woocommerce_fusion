@@ -3,7 +3,7 @@ import os
 
 import frappe
 from erpnext import get_default_company
-from frappe.tests.utils import FrappeTestCase
+from frappe.tests import IntegrationTestCase
 from frappe.utils import add_to_date, now
 
 from woocommerce_fusion.woocommerce.woocommerce_api import WC_RESOURCE_DELIMITER
@@ -20,7 +20,7 @@ default_time_zone = "Africa/Johannesburg"
 verify_ssl = not frappe._dev_server
 
 
-class TestIntegrationWooCommerce(FrappeTestCase):
+class TestIntegrationWooCommerce(IntegrationTestCase):
 	"""
 	Intended to be used as a Base class for integration tests with a WooCommerce website
 	"""
@@ -96,7 +96,7 @@ class TestIntegrationWooCommerce(FrappeTestCase):
 		settings.save()
 
 	def tearDown(self):
-		# FrappeTestCase only rolls back once per class, so batch-mode tests would otherwise
+		# IntegrationTestCase only rolls back once per class, so batch-mode tests would otherwise
 		# share a transaction and leak Sync Queue rows / fixed item codes into each other (e.g. a
 		# Pending row for a since-deleted order, or the two parameterised variants colliding on the
 		# same item code). Roll back after each batch-mode test to keep them isolated. Batch code

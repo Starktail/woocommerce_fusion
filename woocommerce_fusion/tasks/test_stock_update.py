@@ -2,7 +2,7 @@ from unittest.mock import MagicMock, Mock, call, patch
 
 import frappe
 from frappe import _dict
-from frappe.tests.utils import FrappeTestCase
+from frappe.tests import UnitTestCase
 
 from woocommerce_fusion.tasks.stock_update import (
 	update_stock_levels_for_all_enabled_items_in_background,
@@ -10,7 +10,7 @@ from woocommerce_fusion.tasks.stock_update import (
 )
 
 
-class TestWooCommerceStockSync(FrappeTestCase):
+class TestWooCommerceStockSync(UnitTestCase):
 	@classmethod
 	def setUpClass(cls):
 		super().setUpClass()  # important to call super() methods when extending TestCase.

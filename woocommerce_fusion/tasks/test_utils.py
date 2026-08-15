@@ -1,14 +1,14 @@
 import unittest
 from unittest.mock import Mock, patch
 
-from frappe.tests.utils import FrappeTestCase
+from frappe.tests import UnitTestCase
 
 from woocommerce_fusion.tasks.utils import (  # Adjust the import according to your project structure
 	log_woocommerce_request,
 )
 
 
-class TestLogWooCommerceRequest(FrappeTestCase):
+class TestLogWooCommerceRequest(UnitTestCase):
 	@classmethod
 	def setUpClass(cls):
 		super().setUpClass()  # important to call super() methods when extending TestCase.

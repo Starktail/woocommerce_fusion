@@ -4,7 +4,7 @@
 from unittest.mock import MagicMock, Mock, patch
 
 import frappe
-from frappe.tests.utils import FrappeTestCase
+from frappe.tests import IntegrationTestCase, UnitTestCase
 
 from woocommerce_fusion.tasks.sync_item_prices import (
 	SynchroniseItemPrice,
@@ -45,7 +45,7 @@ def _make_wc_product(sale_price=0, date_on_sale_from=None, date_on_sale_to=None)
 	return wc_product
 
 
-class TestFormatSaleDate(FrappeTestCase):
+class TestFormatSaleDate(UnitTestCase):
 	def test_date_string_converted_to_iso_datetime(self):
 		self.assertEqual(_format_sale_date("2024-06-15"), "2024-06-15T00:00:00")
 
@@ -59,7 +59,7 @@ class TestFormatSaleDate(FrappeTestCase):
 		self.assertEqual(_format_sale_date("2024-06-15 12:30:00"), "2024-06-15T12:30:00")
 
 
-class TestApplySalePrice(FrappeTestCase):
+class TestApplySalePrice(UnitTestCase):
 	def test_sets_price_and_dates_when_record_exists(self):
 		"""
 		_apply_sale_price should update sale_price, date_on_sale_from and
@@ -196,7 +196,7 @@ class TestApplySalePrice(FrappeTestCase):
 		self.assertIsNone(wc_product.date_on_sale_to)
 
 
-class TestGetErpnextSalePrices(FrappeTestCase):
+class TestGetErpnextSalePrices(UnitTestCase):
 	def test_returns_empty_map_when_feature_disabled(self):
 		sync = _make_sync(enable_sales_price_list_sync=0)
 		sync.get_erpnext_sale_prices()
@@ -339,7 +339,7 @@ def _make_item_price(price_list: str, rate: float, batch_no=None, customer=None)
 	return doc.name
 
 
-class TestItemWidePriceScoping(FrappeTestCase):
+class TestItemWidePriceScoping(IntegrationTestCase):
 	"""
 	A WooCommerce product carries one product-wide price, so batch- and party-scoped
 	Item Price rows must never compete with the item-wide row.
@@ -380,7 +380,7 @@ class TestItemWidePriceScoping(FrappeTestCase):
 		self.assertEqual(sync.sale_price_map[PRICE_SCOPE_WC_ID].price_list_rate, 90)
 
 
-class TestItemWidePriceScopingOnCreatePath(FrappeTestCase):
+class TestItemWidePriceScopingOnCreatePath(IntegrationTestCase):
 	"""
 	get_item_price_rate / get_item_sale_price_data feed _build_create_payload, which the
 	BatchProcessor uses to create WooCommerce products - so they need the same scoping.

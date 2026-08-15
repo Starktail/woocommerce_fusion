@@ -4,7 +4,7 @@ from unittest.mock import Mock, patch
 
 import frappe
 from frappe.model.naming import get_default_naming_series
-from frappe.tests.utils import FrappeTestCase
+from frappe.tests import IntegrationTestCase
 
 from woocommerce_fusion.overrides.selling.sales_order import (
 	get_woocommerce_order_shipment_trackings,
@@ -15,7 +15,7 @@ test_dependencies = ["Company", "Customer", "Warehouse"]
 
 
 @patch("woocommerce_fusion.overrides.selling.sales_order.get_woocommerce_order")
-class TestCustomSalesOrder(FrappeTestCase):
+class TestCustomSalesOrder(IntegrationTestCase):
 	@classmethod
 	def setUpClass(cls):
 		super().setUpClass()  # important to call super() methods when extending TestCase.

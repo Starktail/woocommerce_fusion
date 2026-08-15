@@ -3,7 +3,7 @@
 
 from datetime import datetime
 
-from frappe.tests.utils import FrappeTestCase
+from frappe.tests import UnitTestCase
 
 from woocommerce_fusion.woocommerce.doctype.woocommerce_product.woocommerce_product import (
 	WooCommerceProduct,
@@ -26,7 +26,7 @@ def _base_product(**overrides) -> dict:
 	return product
 
 
-class TestWooCommerceProduct(FrappeTestCase):
+class TestWooCommerceProduct(UnitTestCase):
 	def test_clean_up_product_clears_sale_price_with_empty_string(self):
 		"""
 		When sale_price is 0, clean_up_product_before_write should send ""
