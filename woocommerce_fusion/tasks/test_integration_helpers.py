@@ -72,6 +72,10 @@ class TestIntegrationWooCommerce(IntegrationTestCase):
 		wc_server.api_consumer_secret = self.wc_consumer_secret
 		wc_server.enable_price_list_sync = 1
 		wc_server.price_list = "_Test Price list"
+		# Reset the Item matching settings, so that a test that changes them cannot leak into
+		# the tests that follow it in the same class
+		wc_server.name_by = "WooCommerce ID"
+		wc_server.match_items_by_sku = 0
 		bank_account = create_bank_account()
 		gl_account = create_gl_account_for_bank()
 		create_gl_account_for_tax()
@@ -263,6 +267,7 @@ class TestIntegrationWooCommerce(IntegrationTestCase):
 		image_url: str | None = None,
 		meta_data: list[dict] | None = None,
 		category_ids: list[int] | None = None,
+		sku: str | None = None,
 	) -> int:
 		"""
 		Create a dummy product on a WooCommerce testing site
@@ -328,6 +333,9 @@ class TestIntegrationWooCommerce(IntegrationTestCase):
 
 		if category_ids:
 			payload["categories"] = [{"id": category_id} for category_id in category_ids]
+
+		if sku:
+			payload["sku"] = sku
 
 		payload = json.dumps(payload)
 		headers = {"Content-Type": "application/json"}

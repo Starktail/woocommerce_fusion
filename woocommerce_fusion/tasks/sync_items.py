@@ -300,6 +300,51 @@ class SynchroniseItem(SynchroniseWooCommerce):
 					if server.name == item_codes[0].name
 				),
 			)
+			return
+
+		self.get_erpnext_item_by_sku()
+
+	def get_erpnext_item_by_sku(self):
+		"""
+		Link a not-yet-linked WooCommerce Product to an existing Item with the same Item Code.
+		"""
+		wc_server = frappe.get_cached_doc("WooCommerce Server", self.woocommerce_product.woocommerce_server)
+		sku = (self.woocommerce_product.sku or "").strip()
+		if not wc_server.match_items_by_sku or not sku:
+			return
+
+		# Two Items with the same code cannot happen, but a stale index or a rename can leave the
+		# match ambiguous - rather create nothing than link the wrong Item.
+		item_codes = frappe.get_all("Item", filters={"item_code": sku}, pluck="name", limit=2)
+		if len(item_codes) != 1:
+			if item_codes:
+				frappe.log_error(
+					"WooCommerce Error",
+					f"SKU {sku} on {wc_server.name} matches more than one Item: {item_codes}",
+				)
+			return
+
+		item = frappe.get_doc("Item", item_codes[0])
+		row = next(
+			(
+				server_row
+				for server_row in item.woocommerce_servers
+				if server_row.woocommerce_server == wc_server.name
+			),
+			None,
+		)
+		if row and row.woocommerce_id:
+			# Already linked to a different product on this server; leave it alone
+			return
+
+		if not row:
+			row = item.append("woocommerce_servers", {"woocommerce_server": wc_server.name})
+		row.woocommerce_id = str(self.woocommerce_product.woocommerce_id)
+		row.enabled = 1
+		item.flags.created_by_sync = True
+		item.save(ignore_permissions=True)
+
+		self.item = ERPNextItemToSync(item=item, item_woocommerce_server_idx=row.idx)
 
 	def sync_wc_product_with_erpnext_item(self):
 		"""
@@ -483,8 +528,14 @@ class SynchroniseItem(SynchroniseWooCommerce):
 			wc_product.attributes = json.dumps(wc_product_attributes)
 
 		# Set properties
+		wc_server = frappe.get_cached_doc(
+			"WooCommerce Server", item.item_woocommerce_server.woocommerce_server
+		)
 		wc_product.woocommerce_server = item.item_woocommerce_server.woocommerce_server
 		wc_product.woocommerce_name = item.item.item_name
+		if wc_server.name_by == "Product SKU":
+			# Without this the product has no SKU, and could never be matched back to this Item
+			wc_product.sku = item.item.item_code
 		wc_product.regular_price = get_item_price_rate(item) or "0"
 
 		sale_price_data = get_item_sale_price_data(item)
@@ -546,6 +597,12 @@ class SynchroniseItem(SynchroniseWooCommerce):
 			if wc_server.name_by == "Product SKU" and wc_product.sku
 			else str(wc_product.woocommerce_id)
 		)
+		if frappe.db.exists("Item", item.item_code):
+			# The Item already exists (e.g. it was created by an earlier sync, or by hand with the
+			# same code). Link it to this product rather than failing on a duplicate insert.
+			self.link_existing_item(item.item_code, wc_product, wc_server)
+			return
+
 		item.stock_uom = wc_server.uom or _("Nos")
 		item.item_group = wc_server.item_group
 		item.item_name = unescape_woocommerce_value(wc_product.woocommerce_name)
@@ -574,6 +631,29 @@ class SynchroniseItem(SynchroniseWooCommerce):
 			),
 		)
 
+		self.set_sync_hash()
+
+	def link_existing_item(self, item_code: str, wc_product: WooCommerceProduct, wc_server) -> None:
+		"""
+		Attach an existing Item to this WooCommerce Product and continue the sync with it
+		"""
+		item = frappe.get_doc("Item", item_code)
+		row = next(
+			(
+				server_row
+				for server_row in item.woocommerce_servers
+				if server_row.woocommerce_server == wc_server.name
+			),
+			None,
+		)
+		if not row:
+			row = item.append("woocommerce_servers", {"woocommerce_server": wc_server.name})
+		row.woocommerce_id = str(wc_product.woocommerce_id)
+		row.enabled = 1
+		item.flags.created_by_sync = True
+		item.save(ignore_permissions=True)
+
+		self.item = ERPNextItemToSync(item=item, item_woocommerce_server_idx=row.idx)
 		self.set_sync_hash()
 
 	def create_or_update_item_attributes(self, wc_product: WooCommerceProduct):
