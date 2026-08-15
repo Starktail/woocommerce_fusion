@@ -1,6 +1,7 @@
 from unittest.mock import patch
 
 import frappe
+from erpnext import get_default_company
 from erpnext.stock.doctype.item.test_item import create_item
 from frappe.utils import add_to_date, now
 from frappe.utils.data import cstr
@@ -12,7 +13,10 @@ from woocommerce_fusion.tasks.sync_items import (
 	get_list_of_wc_products,
 	run_item_sync,
 )
-from woocommerce_fusion.tasks.test_integration_helpers import TestIntegrationWooCommerce
+from woocommerce_fusion.tasks.test_integration_helpers import (
+	TestIntegrationWooCommerce,
+	default_warehouse,
+)
 from woocommerce_fusion.woocommerce.woocommerce_api import (
 	generate_woocommerce_record_name_from_domain_and_id,
 )
@@ -610,6 +614,91 @@ class TestIntegrationWooCommerceItemsSync(TestIntegrationWooCommerce):
 		items = get_items_for_wc_product(wc_product_id, self.wc_server.name)
 		self.assertEqual(len(items), 1)
 		self.assertEqual(items[0].item_group, item_group)
+
+	@parameterized.expand(BATCH_MODES)
+	def test_sync_links_existing_item_by_sku(self, mock_log_error, _name, batch_enabled):
+		"""
+		Test that a product whose SKU matches an existing Item links to it instead of creating
+		a second Item, when the server has "Match Items by SKU" enabled.
+		"""
+		self._set_batch_mode(batch_enabled)
+		wc_server = frappe.get_doc("WooCommerce Server", self.wc_server.name)
+		wc_server.match_items_by_sku = 1
+		wc_server.save()
+
+		item_code = f"SKU-MATCH-{frappe.generate_hash(length=6)}"
+		create_item(item_code, valuation_rate=10, warehouse=default_warehouse, company=get_default_company())
+
+		wc_product_id = self.post_woocommerce_product(product_name="ITEM108", sku=item_code)
+		woocommerce_product_name = generate_woocommerce_record_name_from_domain_and_id(
+			self.wc_server.name, wc_product_id
+		)
+		run_item_sync(woocommerce_product_name=woocommerce_product_name)
+		self._flush_if_batch()
+
+		mock_log_error.assert_not_called()
+
+		# Expect the existing Item to be linked, and no second Item created for this product
+		items = get_items_for_wc_product(wc_product_id, self.wc_server.name)
+		self.assertEqual(len(items), 1)
+		self.assertEqual(items[0].name, item_code)
+
+	@parameterized.expand(BATCH_MODES)
+	def test_sync_does_not_create_a_duplicate_item(self, mock_log_error, _name, batch_enabled):
+		"""
+		Test that syncing a product whose Item Code is already taken reuses that Item.
+
+		With "Product SKU" naming the Item Code comes from the product's SKU, so a second sync of
+		a product whose Item was created earlier would otherwise fail on a duplicate insert.
+		"""
+		self._set_batch_mode(batch_enabled)
+		wc_server = frappe.get_doc("WooCommerce Server", self.wc_server.name)
+		wc_server.name_by = "Product SKU"
+		wc_server.save()
+
+		item_code = f"SKU-DUP-{frappe.generate_hash(length=6)}"
+		create_item(item_code, valuation_rate=10, warehouse=default_warehouse, company=get_default_company())
+
+		wc_product_id = self.post_woocommerce_product(product_name="ITEM109", sku=item_code)
+		woocommerce_product_name = generate_woocommerce_record_name_from_domain_and_id(
+			self.wc_server.name, wc_product_id
+		)
+		run_item_sync(woocommerce_product_name=woocommerce_product_name)
+		self._flush_if_batch()
+
+		mock_log_error.assert_not_called()
+		items = get_items_for_wc_product(wc_product_id, self.wc_server.name)
+		self.assertEqual(len(items), 1)
+		self.assertEqual(items[0].name, item_code)
+
+	@parameterized.expand(BATCH_MODES)
+	def test_sync_sets_sku_on_a_new_wc_product(self, mock_log_error, _name, batch_enabled):
+		"""
+		Test that a WooCommerce Product created from an Item carries the Item Code as its SKU
+		when the server names Items by SKU, so that it can be matched back later.
+		"""
+		self._set_batch_mode(batch_enabled)
+		wc_server = frappe.get_doc("WooCommerce Server", self.wc_server.name)
+		wc_server.name_by = "Product SKU"
+		wc_server.save()
+
+		item_code = f"SKU-OUT-{frappe.generate_hash(length=6)}"
+		item = create_item(
+			item_code, valuation_rate=10, warehouse=default_warehouse, company=get_default_company()
+		)
+		item.woocommerce_servers = []
+		row = item.append("woocommerce_servers")
+		row.woocommerce_server = self.wc_server.name
+		item.save()
+
+		run_item_sync(item_code=item.name)
+		self._flush_if_batch()
+
+		mock_log_error.assert_not_called()
+
+		item.reload()
+		wc_product = self.get_woocommerce_product(product_id=item.woocommerce_servers[0].woocommerce_id)
+		self.assertEqual(wc_product["sku"], item_code)
 
 
 def get_items_for_wc_product(woocommerce_id: str, woocommerce_server: str):

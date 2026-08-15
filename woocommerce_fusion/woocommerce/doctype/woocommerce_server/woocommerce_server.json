@@ -73,6 +73,7 @@
   "tab_items",
   "item_section",
   "name_by",
+  "match_items_by_sku",
   "enable_image_sync",
   "item_stock_section",
   "enable_stock_level_synchronisation",
@@ -411,6 +412,14 @@
    "label": "Default Item Code Naming Basis",
    "mandatory_depends_on": "eval: doc.enable_stock_level_synchronisation",
    "options": "WooCommerce ID\nProduct SKU"
+  },
+  {
+   "default": "0",
+   "depends_on": "eval: doc.enable_sync",
+   "description": "Link a WooCommerce Product to an existing Item with the same Item Code when it has not been linked yet, instead of creating a new Item. Only used when the product carries an SKU and exactly one Item matches. Products already linked by WooCommerce ID are unaffected.",
+   "fieldname": "match_items_by_sku",
+   "fieldtype": "Check",
+   "label": "Match Items by SKU"
   },
   {
    "fieldname": "column_break_utsi",
