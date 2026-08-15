@@ -584,8 +584,9 @@ class BatchProcessor:
 		updates = {"status": "Failed", "error_message": error[:2000]}
 		if batch_log_name:
 			updates["batch_log"] = batch_log_name
-		if error_log:
-			updates["error_log"] = error_log.name
+		error_log_name = getattr(error_log, "name", None)
+		if isinstance(error_log_name, str):
+			updates["error_log"] = error_log_name
 		frappe.db.set_value("WooCommerce Sync Queue", queue_row_name, updates, update_modified=False)
 
 	def _mark_all_failed(self, rows: list, error: str, batch_log_name: str | None):

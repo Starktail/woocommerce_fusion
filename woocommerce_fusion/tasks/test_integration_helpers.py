@@ -11,6 +11,7 @@ from woocommerce_fusion.woocommerce.woocommerce_api import WC_RESOURCE_DELIMITER
 default_company = get_default_company() or "Some Company (Pty) Ltd"
 default_bank = "Test Bank"
 default_bank_account = "Checking Account"
+default_warehouse = "Stores - SC"
 
 verify_ssl = not frappe._dev_server
 
@@ -597,7 +598,7 @@ def create_gl_account_for_bank(account_name="_Test Bank"):
 	except frappe.DuplicateEntryError:
 		pass
 
-	return frappe.get_doc("Account", {"account_name": account_name})
+	return frappe.get_doc("Account", {"account_name": account_name, "company": default_company})
 
 
 def create_gl_account_for_tax():

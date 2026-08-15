@@ -9,6 +9,7 @@ from parameterized import parameterized
 
 from woocommerce_fusion.tasks.sync_item_prices import run_item_price_sync
 from woocommerce_fusion.tasks.test_integration_helpers import (
+	default_warehouse,
 	TestIntegrationWooCommerce,
 	get_woocommerce_server,
 )
@@ -41,7 +42,7 @@ class TestIntegrationSalePriceSync(TestIntegrationWooCommerce):
 		self.wc_server.save()
 
 	def _create_linked_item(self, item_code: str, wc_product_id: int, regular_price: float = 100) -> object:
-		item = create_item(item_code, valuation_rate=10, warehouse=None, company=get_default_company())
+		item = create_item(item_code, valuation_rate=10, warehouse=default_warehouse, company=get_default_company())
 		item.woocommerce_servers = []
 		row = item.append("woocommerce_servers")
 		row.woocommerce_id = wc_product_id
