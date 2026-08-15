@@ -149,6 +149,13 @@ class TestBatchProcessor(FrappeTestCase):
 		self.assertEqual(frappe.db.get_value("WooCommerce Sync Queue", row2.name, "status"), "Failed")
 		self.assertEqual(frappe.db.get_value("WooCommerce Sync Queue", row2.name, "error_message"), "boom")
 
+		error_log = frappe.db.get_value("WooCommerce Sync Queue", row2.name, "error_log")
+		self.assertTrue(error_log)
+		self.assertEqual(
+			frappe.db.get_value("Error Log", error_log, "reference_name"),
+			row2.name,
+		)
+
 	def test_process_chunk_routes_by_type_and_direction(self):
 		processor = BatchProcessor(self.server)
 		with patch.object(processor, "_process_order_chunk", return_value=(1, 0)) as m_order:

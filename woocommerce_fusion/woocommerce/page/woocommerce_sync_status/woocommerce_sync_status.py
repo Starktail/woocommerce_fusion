@@ -80,6 +80,7 @@ def get_dashboard_data(
 			"triggered_by",
 			"error_message",
 			"batch_log",
+			"error_log",
 			"creation",
 		],
 		order_by="modified desc",
@@ -142,6 +143,7 @@ def retry_failed(queue_entry_name: str):
 			"status": "Pending",
 			"error_message": "",
 			"batch_log": None,
+			"error_log": None,
 			"retry_count": retry_count + 1,
 		},
 	)
@@ -156,5 +158,5 @@ def retry_all_failed(server_name: str | None = None):
 	frappe.db.set_value(
 		"WooCommerce Sync Queue",
 		filters,
-		{"status": "Pending", "error_message": "", "batch_log": None},
+		{"status": "Pending", "error_message": "", "batch_log": None, "error_log": None},
 	)

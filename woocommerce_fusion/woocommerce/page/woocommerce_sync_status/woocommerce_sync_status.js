@@ -92,6 +92,17 @@ frappe.pages["woocommerce-sync-status"].on_page_load = function (wrapper) {
     return "";
   }
 
+  // Errors are only linked for rows failed after the error_log field was added.
+  function errorCell(r) {
+    const text = frappe.utils.escape_html(
+      (r.error_message || "").slice(0, 200),
+    );
+    if (!r.error_log) return text;
+    return `<a href="/app/error-log/${encodeURIComponent(
+      r.error_log,
+    )}" title="${__("Open Error Log")}">${text}</a>`;
+  }
+
   function renderServerCards(data) {
     if (!data.servers.length) return "";
     const cards = data.servers
@@ -226,12 +237,19 @@ frappe.pages["woocommerce-sync-status"].on_page_load = function (wrapper) {
 				<td>${frappe.utils.escape_html(r.sync_type)}</td>
 				<td>${frappe.utils.escape_html(r.direction)}</td>
 				<td>${referenceCell(r)}</td>
-				<td class="small text-danger">${frappe.utils.escape_html(
-          (r.error_message || "").slice(0, 200),
-        )}</td>
-				<td><button class="btn btn-xs btn-default wc-retry" data-name="${frappe.utils.escape_html(
-          r.name,
-        )}">${__("Retry")}</button></td>
+				<td class="small text-danger">${errorCell(r)}</td>
+				<td>
+					<button class="btn btn-xs btn-default wc-retry" data-name="${frappe.utils.escape_html(
+            r.name,
+          )}">${__("Retry")}</button>
+					${
+            r.error_log
+              ? `<a class="btn btn-xs btn-default" href="/app/error-log/${encodeURIComponent(
+                  r.error_log,
+                )}">${__("Error Log")}</a>`
+              : ""
+          }
+				</td>
 			</tr>`,
       {
         kind: "failed",
