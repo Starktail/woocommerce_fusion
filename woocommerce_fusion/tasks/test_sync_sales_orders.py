@@ -542,4 +542,4 @@ def create_gl_account_for_bank(account_name="_Test Bank"):
 	except frappe.DuplicateEntryError:
 		pass
 
-	return frappe.get_doc("Account", {"account_name": account_name})
+	return frappe.get_doc("Account", {"account_name": account_name, "company": get_default_company()})

@@ -7,6 +7,7 @@ from parameterized import parameterized
 
 from woocommerce_fusion.tasks.sync_item_prices import run_item_price_sync
 from woocommerce_fusion.tasks.test_integration_helpers import (
+	default_warehouse,
 	TestIntegrationWooCommerce,
 	get_woocommerce_server,
 )
@@ -30,7 +31,7 @@ class TestIntegrationWooCommerceItemPriceSync(TestIntegrationWooCommerce):
 		wc_product_id = self.post_woocommerce_product(product_name="ITEM002", regular_price=10)
 
 		# Create the same product in ERPNext (with opening stock of 5, not 1) and link it
-		item = create_item("ITEM002", valuation_rate=10, warehouse=None, company=get_default_company())
+		item = create_item("ITEM002", valuation_rate=10, warehouse=default_warehouse, company=get_default_company())
 		item.woocommerce_servers = []
 		row = item.append("woocommerce_servers")
 		row.woocommerce_id = wc_product_id
@@ -72,7 +73,7 @@ class TestIntegrationWooCommerceItemPriceSync(TestIntegrationWooCommerce):
 		wc_product_id = self.post_woocommerce_product(product_name="ITEM003", regular_price=10)
 
 		# Create the same product in ERPNext (with opening stock of 5, not 1) and link it
-		item = create_item("ITEM003", valuation_rate=10, warehouse=None, company=get_default_company())
+		item = create_item("ITEM003", valuation_rate=10, warehouse=default_warehouse, company=get_default_company())
 		item.woocommerce_servers = []
 		row = item.append("woocommerce_servers")
 		row.woocommerce_id = wc_product_id
