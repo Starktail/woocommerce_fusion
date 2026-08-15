@@ -551,11 +551,6 @@ class BatchProcessor:
 		)
 
 	def _mark_failed(self, queue_row_name: str, error: str, batch_log_name: str | None):
-		updates = {"status": "Failed", "error_message": error[:2000]}
-		if batch_log_name:
-			updates["batch_log"] = batch_log_name
-		frappe.db.set_value("WooCommerce Sync Queue", queue_row_name, updates, update_modified=False)
-
 		ctx = (
 			frappe.db.get_value(
 				"WooCommerce Sync Queue",
@@ -573,7 +568,7 @@ class BatchProcessor:
 			)
 			or {}
 		)
-		frappe.log_error(
+		error_log = frappe.log_error(
 			"WooCommerce Batch Error",
 			f"Queue row: {queue_row_name}\n"
 			f"Server: {ctx.get('woocommerce_server')}\n"
@@ -582,7 +577,16 @@ class BatchProcessor:
 			f"Reference: {ctx.get('reference_doctype') or ''} {ctx.get('reference_name') or ''}\n"
 			f"Batch Log: {batch_log_name or '-'}\n\n"
 			f"{error}",
+			reference_doctype="WooCommerce Sync Queue",
+			reference_name=queue_row_name,
 		)
+
+		updates = {"status": "Failed", "error_message": error[:2000]}
+		if batch_log_name:
+			updates["batch_log"] = batch_log_name
+		if error_log:
+			updates["error_log"] = error_log.name
+		frappe.db.set_value("WooCommerce Sync Queue", queue_row_name, updates, update_modified=False)
 
 	def _mark_all_failed(self, rows: list, error: str, batch_log_name: str | None):
 		for row in rows:
