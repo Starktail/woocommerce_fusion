@@ -51,7 +51,9 @@ def run_sales_order_sync_from_hook(doc, method):
 				enqueue_after_commit=True,
 			)
 		else:
-			frappe.enqueue(run_sales_order_sync, queue="long", sales_order_name=doc.name)
+			frappe.enqueue(
+				run_sales_order_sync, queue="long", sales_order_name=doc.name, enqueue_after_commit=True
+			)
 
 
 @frappe.whitelist()
@@ -1065,7 +1067,7 @@ def get_list_of_wc_orders(
 		new_results = woocommerce_order.get_list(
 			args={
 				"filters": filters,
-				"page_lenth": page_length,
+				"page_length": page_length,
 				"start": start,
 				"as_doc": True,
 			}

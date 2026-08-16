@@ -27,12 +27,24 @@ Every hour, a background task runs that performs the following steps:
 ## Synchronisation Logic
 When comparing a **WooCommerce Item** with it's counterpart ERPNext **Item**, the `date_modified` field on **WooCommerce Item** is compared with the `modified` field of ERPNext **Item**. The last modified document will be used as master when syncronising
 
+## Matching Items
+
+A **WooCommerce Product** is paired with an ERPNext **Item** by the WooCommerce ID stored in the *WooCommerce Servers* table on the **Item**. A product that has never been synced has no such ID yet, so a new **Item** is created for it.
+
+If your **Items** already exist in ERPNext with Item Codes that match your WooCommerce SKUs, check *Match Items by SKU* on **WooCommerce Server** to link them instead of creating duplicates:
+
+- It is only used when a product has no WooCommerce ID stored against an **Item** yet. Products that are already linked are matched on their ID as before, so the setting can safely be turned on (or off) at any time, including on a site that is already syncing
+- The product must carry an SKU, and exactly one **Item** must have that Item Code. If more than one matches, nothing is linked and an **Error Log** is created
+- Once matched, the WooCommerce ID is written to the **Item**, and every later sync uses that ID
+
+When *Default Item Code Naming Basis* is set to *Product SKU*, a **WooCommerce Product** created from an ERPNext **Item** also gets the Item Code as its `sku`, so that it can be matched back.
+
 ## Fields Mapping
 
 | WooCommerce  | ERPNext      | Note                                                                                                                       |
 | ------------ | ------------ | -------------------------------------------------------------------------------------------------------------------------- |
 | `id`         | *Item Code*  | Only if *Default Item Code Naming Basis* is set to *WooCommerce ID* on **WooCommerce Server**                              |
-| `sku`        | *Item Code*  | Only if *Default Item Code Naming Basis* is set to *Product SKU* on **WooCommerce Server**                                 |
+| `sku`        | *Item Code*  | Only if *Default Item Code Naming Basis* is set to *Product SKU* on **WooCommerce Server**. Also used to match existing **Items** if *Match Items by SKU* is checked |
 | `name`       | *Item Name*  |                                                                                                                            |
 | `type`       |              | `simple` ≡ Normal **Item**                                                                                                 |
 |              |              | `variable` ≡ Template **Item** (*Has Variants* is checked).                                                                |

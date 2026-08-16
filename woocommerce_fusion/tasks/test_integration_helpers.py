@@ -72,6 +72,10 @@ class TestIntegrationWooCommerce(IntegrationTestCase):
 		wc_server.api_consumer_secret = self.wc_consumer_secret
 		wc_server.enable_price_list_sync = 1
 		wc_server.price_list = "_Test Price list"
+		# Reset the Item matching settings, so that a test that changes them cannot leak into
+		# the tests that follow it in the same class
+		wc_server.name_by = "WooCommerce ID"
+		wc_server.match_items_by_sku = 0
 		bank_account = create_bank_account()
 		gl_account = create_gl_account_for_bank()
 		create_gl_account_for_tax()
@@ -262,6 +266,8 @@ class TestIntegrationWooCommerce(IntegrationTestCase):
 		attributes: list[str] | None = None,
 		image_url: str | None = None,
 		meta_data: list[dict] | None = None,
+		category_ids: list[int] | None = None,
+		sku: str | None = None,
 	) -> int:
 		"""
 		Create a dummy product on a WooCommerce testing site
@@ -270,7 +276,8 @@ class TestIntegrationWooCommerce(IntegrationTestCase):
 
 		from requests_oauthlib import OAuth1Session
 
-		if not attributes:
+		# An explicit empty list means "no attributes", which is a valid WooCommerce product
+		if attributes is None:
 			attributes = ["Material Type", "Volume"]
 
 		if type in ["variable", "variation"]:
@@ -323,6 +330,12 @@ class TestIntegrationWooCommerce(IntegrationTestCase):
 
 		if meta_data:
 			payload["meta_data"] = meta_data
+
+		if category_ids:
+			payload["categories"] = [{"id": category_id} for category_id in category_ids]
+
+		if sku:
+			payload["sku"] = sku
 
 		payload = json.dumps(payload)
 		headers = {"Content-Type": "application/json"}
@@ -486,6 +499,30 @@ class TestIntegrationWooCommerce(IntegrationTestCase):
 
 		return response.json()
 
+	def post_product_category(self, category_name: str) -> int:
+		"""
+		Create a product category on a WooCommerce testing site, or return the existing one
+		"""
+		import json
+
+		from requests_oauthlib import OAuth1Session
+
+		oauth = OAuth1Session(self.wc_consumer_key, client_secret=self.wc_consumer_secret)
+		if not verify_ssl:
+			oauth.verify = False
+
+		url = f"{self.wc_url}/wp-json/wc/v3/products/categories"
+		response = oauth.post(
+			url, headers={"Content-Type": "application/json"}, data=json.dumps({"name": category_name})
+		)
+		category = response.json()
+
+		# WooCommerce rejects a duplicate name, and hands back the existing id
+		if category.get("code") == "term_exists":
+			return category["data"]["resource_id"]
+
+		return category["id"]
+
 	def post_product_attribute(self, attribute_name: str, attribute_slug: str):
 		"""
 		Post product attribute to WooCommerce
@@ -542,6 +579,23 @@ class TestIntegrationWooCommerce(IntegrationTestCase):
 		response = oauth.post(url, headers=headers, data=payload)
 
 		return response.json()["id"]
+
+	def update_woocommerce_variation(self, parent_id: int, variation_id: int, payload: dict) -> dict:
+		"""
+		Update a variation on a WooCommerce testing site
+		"""
+		import json
+
+		from requests_oauthlib import OAuth1Session
+
+		oauth = OAuth1Session(self.wc_consumer_key, client_secret=self.wc_consumer_secret)
+		if not verify_ssl:
+			oauth.verify = False
+
+		url = f"{self.wc_url}/wp-json/wc/v3/products/{parent_id}/variations/{variation_id}"
+		response = oauth.put(url, headers={"Content-Type": "application/json"}, data=json.dumps(payload))
+
+		return response.json()
 
 
 def create_bank_account(bank_name=default_bank, account_name="_Test Bank", company=default_company):
