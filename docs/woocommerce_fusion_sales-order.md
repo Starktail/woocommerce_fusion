@@ -46,6 +46,7 @@ Note that if sync for an **Item** is disabled (i.e. the "Enabled" checkbox on th
 |               | **Sales Order** > *Woocommerce ID*            |                                                                                                                                                                                       |
 | currency      | **Sales Order** > *Currency*                  |                                                                                                                                                                                       |
 | customer_note | **Sales Order** > *WooCommerce Customer Note* |                                                                                                                                                                                       |
+|               | **Sales Order** > *Price List*                | The **Customer's** *Default Price List*, or its **Customer Group's**, when that list is priced in the order's currency. Otherwise the **Selling Settings** default is kept.            |
 
 
 ## Custom Fields Mapping for Sales Order Items

@@ -115,6 +115,51 @@ class TestIntegrationWooCommerceItemPriceSync(TestIntegrationWooCommerce):
 		self.assertEqual(float(wc_price), 10)
 
 	@parameterized.expand(BATCH_MODES)
+	def test_item_price_sync_for_disabled_item_when_the_server_asks_for_it(self, _name, batch_enabled):
+		"""
+		Test that the Item Price Synchronisation method posts a price for a disabled Item when
+		'Sync Prices for Disabled Items' is enabled. Without it the product keeps the price of its
+		last synchronisation.
+		"""
+		self._set_batch_mode(batch_enabled)
+
+		wc_server = frappe.get_doc("WooCommerce Server", self.wc_server.name)
+		wc_server.sync_prices_for_disabled_items = 1
+		wc_server.flags.ignore_mandatory = True
+		wc_server.save()
+
+		# Create a new product in WooCommerce, set regular price to 10
+		wc_product_id = self.post_woocommerce_product(product_name="ITEM004", regular_price=10)
+
+		# Create the same disabled product in ERPNext and link it
+		item = create_item(
+			"ITEM004", valuation_rate=10, warehouse=default_warehouse, company=get_default_company()
+		)
+		item.woocommerce_servers = []
+		row = item.append("woocommerce_servers")
+		row.woocommerce_id = wc_product_id
+		row.woocommerce_server = get_woocommerce_server(self.wc_url).name
+		item.disabled = 1
+		item.save()
+
+		frappe.get_doc(
+			{
+				"doctype": "Item Price",
+				"item_code": "ITEM004",
+				"price_list": "_Test Price List",
+				"price_list_rate": 6000,
+			}
+		).insert()
+
+		# Run synchronisation
+		self.assertEqual(run_item_price_sync(item_code=item.name), True)
+		self._flush_if_batch()
+
+		# Expect the disabled Item's price to have reached WooCommerce
+		wc_price = self.get_woocommerce_product_price(product_id=wc_product_id)
+		self.assertEqual(float(wc_price), 6000)
+
+	@parameterized.expand(BATCH_MODES)
 	def test_variation_price_sync_when_synchronising_with_woocommerce(self, _name, batch_enabled):
 		"""
 		Test that the Item Price Synchronisation method posts the price of a variant Item to the

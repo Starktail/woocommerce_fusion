@@ -79,6 +79,7 @@
   "enable_stock_level_synchronisation",
   "warehouses",
   "subtract_reserved_stock",
+  "push_zero_stock_for_disabled_items",
   "item_fields_section",
   "item_fields_warning_html",
   "item_field_map",
@@ -89,6 +90,7 @@
   "price_list_delay_per_item",
   "enable_sales_price_list_sync",
   "sales_price_list",
+  "sync_prices_for_disabled_items",
   "tab_plugins",
   "advanced_shipment_tracking_section",
   "wc_plugin_advanced_shipment_tracking",
@@ -342,6 +344,15 @@
    "options": "Price List"
   },
   {
+   "default": "0",
+   "depends_on": "eval: doc.enable_price_list_sync",
+   "description": "Keeps synchronising prices for disabled Items. Without this, a disabled Item's WooCommerce Product keeps the price of its last synchronisation, and an expired sale is never cleared",
+   "documentation_url": "https://woocommerce-fusion-docs.starktail.com/woocommerce_fusion_item-prices",
+   "fieldname": "sync_prices_for_disabled_items",
+   "fieldtype": "Check",
+   "label": "Sync Prices for Disabled Items"
+  },
+  {
    "fieldname": "tab_details",
    "fieldtype": "Tab Break",
    "label": "Details"
@@ -586,6 +597,15 @@
    "fieldname": "subtract_reserved_stock",
    "fieldtype": "Check",
    "label": "Reserved Stock Adjustment"
+  },
+  {
+   "default": "0",
+   "depends_on": "eval: doc.enable_stock_level_synchronisation",
+   "description": "Sends a stock level of 0 for disabled Items. Without this, a disabled Item's WooCommerce Product keeps the stock level of its last synchronisation and stays on sale",
+   "documentation_url": "https://woocommerce-fusion-docs.starktail.com/woocommerce_fusion_item-stock-levels",
+   "fieldname": "push_zero_stock_for_disabled_items",
+   "fieldtype": "Check",
+   "label": "Push Zero Stock for Disabled Items"
   },
   {
    "fieldname": "tab_logs",

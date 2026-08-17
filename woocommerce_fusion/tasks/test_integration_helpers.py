@@ -76,6 +76,9 @@ class TestIntegrationWooCommerce(FrappeTestCase):
 		# the tests that follow it in the same class
 		wc_server.name_by = "WooCommerce ID"
 		wc_server.match_items_by_sku = 0
+		# Same for the disabled-Item settings
+		wc_server.sync_prices_for_disabled_items = 0
+		wc_server.push_zero_stock_for_disabled_items = 0
 		bank_account = create_bank_account()
 		gl_account = create_gl_account_for_bank()
 		create_gl_account_for_tax()

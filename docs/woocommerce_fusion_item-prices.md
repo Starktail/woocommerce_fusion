@@ -44,6 +44,12 @@ If *Price List Sync* is enabled, every day, a background task runs that performs
 2. If *Sales Price List Sync* is enabled, also fetch sale prices from the *Sales Price List*
 3. Synchronise both regular and sale prices with WooCommerce Products in a single API call per product
 
+## Disabled Items
+
+A disabled **Item** is skipped by price synchronisation, so its **WooCommerce Product** keeps the price of its last synchronisation, and a sale that has since ended is never cleared.
+
+Enable **WooCommerce Server** > *Price List* > *Sync Prices for Disabled Items* to keep synchronising their prices. Both the regular and the sale price list are included, so an **Item** disabled while on sale has that sale cleared as expected.
+
 ## Hooks
 
 If *Price List Sync* is enabled, a product update API request will be made when the following documents are updated:

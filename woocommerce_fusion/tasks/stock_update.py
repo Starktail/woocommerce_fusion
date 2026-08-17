@@ -39,12 +39,24 @@ def update_stock_levels_for_all_enabled_items_in_background():
 	erpnext_items = []
 	current_page_length = 500
 	start = 0
+	filters = (
+		{}
+		if frappe.db.exists(
+			"WooCommerce Server",
+			{
+				"enable_sync": 1,
+				"enable_stock_level_synchronisation": 1,
+				"push_zero_stock_for_disabled_items": 1,
+			},
+		)
+		else {"disabled": 0}
+	)
 
 	# Get all items, 500 records at a time
 	while current_page_length == 500:
 		items = frappe.db.get_all(
 			doctype="Item",
-			filters={"disabled": 0},
+			filters=filters,
 			fields=["name"],
 			start=start,
 			page_length=500,
@@ -71,7 +83,7 @@ def update_stock_levels_on_woocommerce_site(item_code: str):
 	"""
 	item = frappe.get_doc("Item", item_code)
 
-	if len(item.woocommerce_servers) == 0 or not item.is_stock_item or item.disabled:
+	if len(item.woocommerce_servers) == 0 or not item.is_stock_item:
 		return False
 	else:
 		bins = frappe.get_list(
@@ -92,6 +104,9 @@ def update_stock_levels_on_woocommerce_site(item_code: str):
 				):
 					continue
 
+				if item.disabled and not wc_server.push_zero_stock_for_disabled_items:
+					continue
+
 				wc_api = APIWithRequestLogging(
 					url=wc_server.woocommerce_server_url,
 					consumer_key=wc_server.api_consumer_key,
@@ -103,7 +118,9 @@ def update_stock_levels_on_woocommerce_site(item_code: str):
 
 				# Sum all quantities from select warehouses and round the total down (WooCommerce API doesn't accept float values)
 				data_to_post = {
-					"stock_quantity": math.floor(
+					"stock_quantity": 0
+					if item.disabled
+					else math.floor(
 						sum(
 							bin.actual_qty
 							if not wc_server.subtract_reserved_stock

@@ -2,6 +2,7 @@ import json
 from datetime import datetime
 
 import frappe
+from erpnext.accounts.party import get_default_price_list
 from erpnext.selling.doctype.sales_order.sales_order import SalesOrder
 from erpnext.selling.doctype.sales_order_item.sales_order_item import SalesOrderItem
 from frappe import _
@@ -534,6 +535,10 @@ class SynchroniseSalesOrder(SynchroniseWooCommerce):
 		new_sales_order = frappe.new_doc("Sales Order")
 		self.sales_order = new_sales_order
 		new_sales_order.customer = customer_docname
+		if customer_docname and (
+			price_list := get_customer_selling_price_list(customer_docname, wc_order.currency)
+		):
+			new_sales_order.selling_price_list = price_list
 		new_sales_order.po_no = new_sales_order.woocommerce_id = wc_order.id
 		# Carry the customer-facing WooCommerce order number for autonaming
 		new_sales_order.flags.woocommerce_number = wc_order.get("number")
@@ -1155,6 +1160,22 @@ def get_tax_inc_price_for_woocommerce_line_item(line_item: dict):
 	return (float(line_item.get("subtotal")) + float(line_item.get("subtotal_tax"))) / float(
 		line_item.get("quantity")
 	)
+
+
+def get_customer_selling_price_list(customer_name: str, currency: str) -> str | None:
+	"""
+	The Customer's default Price List - or its Customer Group's - when it is priced in `currency`.
+	"""
+	price_list = get_default_price_list(frappe.get_cached_doc("Customer", customer_name))
+	if not price_list:
+		return None
+
+	# A Price List holds a single currency. Converting needs an exchange rate, and a missing one would
+	# fail the whole order sync, so leave the default in place rather than risk that.
+	if frappe.get_cached_value("Price List", price_list, "currency") != currency:
+		return None
+
+	return price_list
 
 
 def encode_line_item_meta_display_values(meta_data: list | None) -> list:

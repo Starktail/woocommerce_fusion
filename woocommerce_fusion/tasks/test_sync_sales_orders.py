@@ -9,6 +9,7 @@ from woocommerce_fusion.tasks.sync_sales_orders import (
 	SynchroniseSalesOrder,
 	encode_line_item_meta_display_values,
 	find_existing_contact,
+	get_customer_selling_price_list,
 )
 from woocommerce_fusion.woocommerce.woocommerce_api import (
 	generate_woocommerce_record_name_from_domain_and_id,
@@ -466,6 +467,54 @@ class TestWooCommerceSync(FrappeTestCase):
 		self.assertEqual(result, None)
 
 
+class TestCustomerSellingPriceList(IntegrationTestCase):
+	"""
+	A Sales Order created from a WooCommerce order used to keep the Selling Settings default price
+	list, so its rates showed next to the ones WooCommerce charged as if the customer got a discount.
+	"""
+
+	def setUp(self):
+		self.price_list = create_price_list("_Test Woo Trade Selling", currency="ZAR")
+		self.customer = frappe.get_doc(
+			{
+				"doctype": "Customer",
+				"customer_name": "Test Customer for Price List",
+				"customer_type": "Individual",
+				"default_price_list": self.price_list,
+			}
+		).insert(ignore_permissions=True)
+
+	def test_the_customers_own_price_list_is_used(self):
+		self.assertEqual(
+			get_customer_selling_price_list(self.customer.name, "ZAR"),
+			self.price_list,
+		)
+
+	def test_the_customer_groups_price_list_is_used_as_a_fallback(self):
+		self.customer.default_price_list = None
+		self.customer.save()
+		frappe.db.set_value(
+			"Customer Group", self.customer.customer_group, "default_price_list", self.price_list
+		)
+		frappe.clear_cache(doctype="Customer Group")
+
+		self.assertEqual(get_customer_selling_price_list(self.customer.name, "ZAR"), self.price_list)
+
+		frappe.db.set_value("Customer Group", self.customer.customer_group, "default_price_list", None)
+
+	def test_a_price_list_in_another_currency_is_declined(self):
+		"""
+		Converting would need an exchange rate, and a missing one would fail the whole order sync
+		"""
+		self.assertIsNone(get_customer_selling_price_list(self.customer.name, "USD"))
+
+	def test_a_customer_without_a_price_list_keeps_the_default(self):
+		self.customer.default_price_list = None
+		self.customer.save()
+
+		self.assertIsNone(get_customer_selling_price_list(self.customer.name, "ZAR"))
+
+
 class TestLineItemMetaDisplayValues(IntegrationTestCase):
 	"""
 	WooCommerce declares a line item's meta `display_value` as a string and 400s the whole PUT when an
@@ -564,6 +613,25 @@ class TestLineItemMetaDisplayValues(IntegrationTestCase):
 		self.assertEqual(
 			new_line_item["meta_data"], [{"key": "_slw_data", "display_value": json.dumps({"box": 1})}]
 		)
+
+
+def create_price_list(name: str, currency: str) -> str:
+	if frappe.db.exists("Price List", name):
+		return name
+
+	return (
+		frappe.get_doc(
+			{
+				"doctype": "Price List",
+				"price_list_name": name,
+				"currency": currency,
+				"selling": 1,
+				"enabled": 1,
+			}
+		)
+		.insert(ignore_permissions=True)
+		.name
+	)
 
 
 def create_customer():
