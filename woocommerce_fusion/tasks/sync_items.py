@@ -6,11 +6,20 @@ from html import unescape
 import frappe
 from erpnext.stock.doctype.item.item import Item
 from frappe import ValidationError, _, _dict
+from frappe.model import no_value_fields, table_fields
 from frappe.query_builder import Criterion
 from frappe.utils import get_datetime, now
+from jsonpath_ng import Child, Fields
 from jsonpath_ng.ext import parse
+from jsonpath_ng.ext.filter import Filter
 
 from woocommerce_fusion.exceptions import SyncDisabledError
+from woocommerce_fusion.tasks.field_transforms import (
+	SKIP,
+	TO_ERPNEXT,
+	TO_WOOCOMMERCE,
+	apply_transform,
+)
 from woocommerce_fusion.tasks.sync import SynchroniseWooCommerce, get_variation_parent_woocommerce_id
 from woocommerce_fusion.tasks.sync_item_prices import _format_sale_date
 from woocommerce_fusion.woocommerce.doctype.woocommerce_product.woocommerce_product import (
@@ -160,6 +169,81 @@ def unescape_woocommerce_value(value):
 	to an Item or comparing it against one. Non-string values are passed through.
 	"""
 	return unescape(value) if isinstance(value, str) else value
+
+
+def create_filtered_jsonpath_target(jsonpath_expr, doc) -> bool:
+	"""
+	Create the list entry that a filtered JSONPath expression is looking for, so that a value can be
+	written to a target which does not exist on the WooCommerce Product yet.
+	"""
+	filter_node = _find_jsonpath_filter_node(jsonpath_expr)
+	if not filter_node:
+		return False
+
+	entry = {}
+	for expression in filter_node.right.expressions:
+		# `Expression(Fields('key') = 'x')`. `op` is None for a bare existence filter, e.g. `[?key]`
+		if expression.op != "=" or not isinstance(expression.target, Fields):
+			return False
+		if len(expression.target.fields) != 1:
+			return False
+		entry[expression.target.fields[0]] = expression.value
+
+	# The list the filter selects from, e.g. the `$.meta_data` of `$.meta_data[?key='x'].value`
+	container_matches = filter_node.left.find(doc)
+	if len(container_matches) != 1 or not isinstance(container_matches[0].value, list):
+		return False
+
+	container_matches[0].value.append(entry)
+	return True
+
+
+def _find_jsonpath_filter_node(jsonpath_expr):
+	"""
+	The outermost `Child` node whose right hand side is a filter, e.g. the `$.meta_data[?key='x']`
+	part of `$.meta_data[?key='x'].value`
+	"""
+	while isinstance(jsonpath_expr, Child):
+		if isinstance(jsonpath_expr.right, Filter):
+			return jsonpath_expr
+		jsonpath_expr = jsonpath_expr.left
+
+	return None
+
+
+def normalise_child_rows(rows, child_doctype: str) -> list[dict]:
+	"""
+	Reduce child rows - `Document` objects or plain dicts - to a comparable shape
+	"""
+	fieldnames = [
+		df.fieldname for df in frappe.get_meta(child_doctype).fields if df.fieldtype not in no_value_fields
+	]
+
+	return [{fieldname: (row.get(fieldname) or None) for fieldname in fieldnames} for row in rows or []]
+
+
+def set_mapped_field_value(item: Item, fieldname: str, value) -> bool:
+	"""
+	Write a mapped value to an ERPNext Item field. Returns True only if the value actually changed.
+	run and flips the sync direction.
+	"""
+	field = item.meta.get_field(fieldname)
+
+	if field and field.fieldtype in table_fields:
+		if normalise_child_rows(item.get(fieldname), field.options) == normalise_child_rows(
+			value, field.options
+		):
+			return False
+
+		# `Document.set` clears the table and re-appends from the given dicts
+		item.set(fieldname, value or [])
+		return True
+
+	if item.get(fieldname) == value:
+		return False
+
+	item.set(fieldname, value)
+	return True
 
 
 @dataclass
@@ -714,18 +798,31 @@ class SynchroniseItem(SynchroniseWooCommerce):
 					)
 				)
 				for map in wc_server.item_field_map:
-					erpnext_item_field_name = map.erpnext_field_name.split(" | ")
+					erpnext_item_field_name = map.erpnext_field_name.split(" | ")[0]
 
 					# We expect woocommerce_field_name to be valid JSONPath
 					jsonpath_expr = parse(map.woocommerce_field_name)
 					woocommerce_product_field_matches = jsonpath_expr.find(woocommerce_product_dict)
+					if not woocommerce_product_field_matches:
+						# The mapped location is absent on this product, so there is nothing to copy in.
+						# Leave the Item's current value alone rather than clearing it.
+						continue
 
-					setattr(
-						item,
-						erpnext_item_field_name[0],
-						unescape_woocommerce_value(woocommerce_product_field_matches[0].value),
+					# JSONPath parsing typically returns a list, we'll only take the first value
+					new_value = unescape_woocommerce_value(woocommerce_product_field_matches[0].value)
+
+					new_value = apply_transform(
+						map,
+						new_value,
+						direction=TO_ERPNEXT,
+						item=item,
+						woocommerce_product=woocommerce_product_dict,
 					)
-					item_dirty = True
+					if new_value is SKIP:
+						continue
+
+					if set_mapped_field_value(item, erpnext_item_field_name, new_value):
+						item_dirty = True
 		return item_dirty, item
 
 	def set_product_fields(
@@ -748,8 +845,20 @@ class SynchroniseItem(SynchroniseWooCommerce):
 				)
 
 				for map in wc_server.item_field_map:
-					erpnext_item_field_name = map.erpnext_field_name.split(" | ")
-					erpnext_item_field_value = getattr(item.item, erpnext_item_field_name[0])
+					erpnext_item_field_name = map.erpnext_field_name.split(" | ")[0]
+					erpnext_item_field_value = item.item.get(erpnext_item_field_name)
+
+					# Reshape the ERPNext value into its WooCommerce representation *before* the
+					# comparison below, so that we compare like with like.
+					erpnext_item_field_value = apply_transform(
+						map,
+						erpnext_item_field_value,
+						direction=TO_WOOCOMMERCE,
+						item=item.item,
+						woocommerce_product=wc_product_with_deserialised_fields,
+					)
+					if erpnext_item_field_value is SKIP:
+						continue
 
 					# We expect woocommerce_field_name to be valid JSONPath
 					jsonpath_expr = parse(map.woocommerce_field_name)
@@ -758,6 +867,18 @@ class SynchroniseItem(SynchroniseWooCommerce):
 					)
 
 					if len(woocommerce_product_field_matches) == 0:
+						if create_filtered_jsonpath_target(
+							jsonpath_expr, wc_product_with_deserialised_fields
+						):
+							# A filtered target such as `$.meta_data[?key='_my_key'].value` matches
+							# nothing until WordPress has written that meta row, so create the row
+							# here rather than failing the sync.
+							jsonpath_expr.update_or_create(
+								wc_product_with_deserialised_fields, erpnext_item_field_value
+							)
+							wc_product_dirty = True
+							continue
+
 						if woocommerce_product.name:
 							# We're strict about existing WooCommerce Products, the field should exist
 							raise ValueError(

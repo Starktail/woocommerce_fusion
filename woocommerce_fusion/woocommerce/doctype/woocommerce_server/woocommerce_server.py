@@ -5,11 +5,14 @@ from urllib.parse import urlparse
 
 import frappe
 from frappe import _
+from frappe.model import table_fields
 from frappe.model.document import Document
+from frappe.utils import cint
 from frappe.utils.caching import redis_cache
 from jsonpath_ng.ext import parse
 from woocommerce import API
 
+from woocommerce_fusion.tasks.field_transforms import get_registered_transforms
 from woocommerce_fusion.woocommerce.doctype.woocommerce_order.woocommerce_order import (
 	WC_ORDER_STATUS_MAPPING,
 )
@@ -105,7 +108,8 @@ class WooCommerceServer(Document):
 
 	def validate_item_map(self):
 		"""
-		Validate Item Map to have valid JSONPath expressions
+		Validate Item Map to have valid JSONPath expressions, resolvable Item fields and, where the
+		target is a child table, a Value Transform to reshape the value
 		"""
 		disallowed_fields = ["attributes"]
 
@@ -113,21 +117,53 @@ class WooCommerceServer(Document):
 		if self.enable_image_sync:
 			disallowed_fields.append("images")
 
-		if self.item_field_map:
-			for map in self.item_field_map:
-				jsonpath_expr = map.woocommerce_field_name
-				try:
-					parse(jsonpath_expr)
-				except Exception as e:
-					frappe.throw(
-						_("Invalid JSONPath syntax in Item Field Map Row {0}:<br><br><pre>{1}</pre>").format(
-							map.idx, str(e)
-						)
-					)
+		if not self.item_field_map:
+			return
 
-				for field in disallowed_fields:
-					if field in jsonpath_expr:
-						frappe.throw(_("Field '{0}' is not allowed in JSONPath expression").format(field))
+		item_meta = frappe.get_meta("Item")
+		registered_transforms = get_registered_transforms()
+
+		for map in self.item_field_map:
+			jsonpath_expr = map.woocommerce_field_name
+			try:
+				parse(jsonpath_expr)
+			except Exception as e:
+				frappe.throw(
+					_("Invalid JSONPath syntax in Item Field Map Row {0}:<br><br><pre>{1}</pre>").format(
+						map.idx, str(e)
+					)
+				)
+
+			for field in disallowed_fields:
+				if field in jsonpath_expr:
+					frappe.throw(_("Field '{0}' is not allowed in JSONPath expression").format(field))
+
+			# The Select stores "fieldname | Label"; only the fieldname is used at sync time
+			erpnext_fieldname = (map.erpnext_field_name or "").split(" | ")[0]
+			item_field = item_meta.get_field(erpnext_fieldname)
+			if not item_field:
+				frappe.throw(
+					_("Item Field Map Row {0}: <code>{1}</code> is not a field on Item").format(
+						map.idx, erpnext_fieldname
+					)
+				)
+
+			if map.value_transform_method and map.value_transform_method not in registered_transforms:
+				frappe.throw(
+					_(
+						"Item Field Map Row {0}: Value Transform <code>{1}</code> is not registered by any "
+						"installed app. Register it in an app's <code>hooks.py</code> under "
+						"<code>woocommerce_item_field_transforms</code>."
+					).format(map.idx, map.value_transform_method)
+				)
+
+			if item_field.fieldtype in table_fields and not map.value_transform_method:
+				frappe.throw(
+					_(
+						"Item Field Map Row {0}: <code>{1}</code> is a child table, so it needs a Value "
+						"Transform to convert its rows to and from the WooCommerce representation."
+					).format(map.idx, erpnext_fieldname)
+				)
 
 	def validate_reserved_stock_setting(self):
 		"""
@@ -165,9 +201,12 @@ class WooCommerceServer(Document):
 
 	@frappe.whitelist()
 	@redis_cache(ttl=600)
-	def get_item_docfields(self, doctype: str) -> list[dict]:
+	def get_item_docfields(self, doctype: str, include_table_fields: bool = False) -> list[dict]:
 		"""
 		Get a list of DocFields for the Item Doctype
+
+		`include_table_fields` exposes child table fields as mapping targets. Only the Items field
+		map can handle them (via a Value Transform), so it is off by default.
 		"""
 		invalid_field_types = [
 			"Column Break",
@@ -176,20 +215,29 @@ class WooCommerceServer(Document):
 			"Read Only",
 			"Section Break",
 			"Tab Break",
-			"Table",
 			"Table MultiSelect",
 		]
+		if not cint(include_table_fields):
+			invalid_field_types.append("Table")
+
 		docfields = frappe.get_all(
 			"DocField",
-			fields=["label", "name", "fieldname"],
+			fields=["label", "name", "fieldname", "fieldtype"],
 			filters=[["fieldtype", "not in", invalid_field_types], ["parent", "=", doctype]],
 		)
 		custom_fields = frappe.get_all(
 			"Custom Field",
-			fields=["label", "name", "fieldname"],
+			fields=["label", "name", "fieldname", "fieldtype"],
 			filters=[["fieldtype", "not in", invalid_field_types], ["dt", "=", doctype]],
 		)
 		return docfields + custom_fields
+
+	@frappe.whitelist()
+	def get_item_field_transforms(self) -> list[str]:
+		"""
+		Get the names of the Value Transforms registered by installed apps, for the Item Field Map
+		"""
+		return sorted(get_registered_transforms().keys())
 
 	@frappe.whitelist()
 	@redis_cache(ttl=86400)

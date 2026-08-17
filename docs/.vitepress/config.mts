@@ -18,6 +18,7 @@ export default defineConfig({
       { text: 'Introduction', link: '/woocommerce_fusion_introduction.md' },
       { text: 'Configuration', link: '/woocommerce_fusion_configure' },
       { text: 'Item Sync', link: '/woocommerce_fusion_items' },
+      { text: 'Value Transforms', link: '/woocommerce_fusion_value-transforms' },
       { text: 'Item Price Sync', link: '/woocommerce_fusion_item-prices' },
       { text: 'Item Stock Level Sync', link: '/woocommerce_fusion_item-stock-levels' },
       { text: 'Sales Order Sync', link: '/woocommerce_fusion_sales-order' },
