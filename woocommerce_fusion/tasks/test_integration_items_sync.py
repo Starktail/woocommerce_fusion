@@ -747,7 +747,9 @@ class TestIntegrationWooCommerceItemsSync(TestIntegrationWooCommerce):
 		"""An Item with a barcode and a WooCommerce Product created for it by the sync"""
 		item = create_item(item_code, valuation_rate=10)
 		item.set("barcodes", [])
-		item.append("barcodes", {"barcode": barcode, "barcode_type": "EAN-13"})
+		# "EAN" rather than "EAN-13": ERPNext v15 lists EAN-12 instead, and blanks a barcode_type it
+		# does not know rather than rejecting it, which would leave the transform nothing to map
+		item.append("barcodes", {"barcode": barcode, "barcode_type": "EAN"})
 		row = item.append("woocommerce_servers")
 		row.woocommerce_server = self.wc_server.name
 		item.save()
@@ -786,7 +788,7 @@ class TestIntegrationWooCommerceItemsSync(TestIntegrationWooCommerce):
 			self._flush_if_batch()
 
 		mock_log_error.assert_not_called()
-		self.assertEqual(self._barcodes_meta_on(product_id), [{"code": "4006381333931", "kind": "EAN-13"}])
+		self.assertEqual(self._barcodes_meta_on(product_id), [{"code": "4006381333931", "kind": "EAN"}])
 
 	@parameterized.expand(BATCH_MODES)
 	def test_sync_updates_an_existing_mapped_meta_row_for_a_child_table(
@@ -804,7 +806,7 @@ class TestIntegrationWooCommerceItemsSync(TestIntegrationWooCommerce):
 
 			# Seed the meta row with a stale value
 			self.update_woocommerce_product_metadata(
-				product_id, [{"key": BARCODES_META_KEY, "value": [{"code": "stale", "kind": "EAN-13"}]}]
+				product_id, [{"key": BARCODES_META_KEY, "value": [{"code": "stale", "kind": "EAN"}]}]
 			)
 
 			item.save()
@@ -813,7 +815,7 @@ class TestIntegrationWooCommerceItemsSync(TestIntegrationWooCommerce):
 			self._flush_if_batch()
 
 		mock_log_error.assert_not_called()
-		self.assertEqual(self._barcodes_meta_on(product_id), [{"code": "5901234123457", "kind": "EAN-13"}])
+		self.assertEqual(self._barcodes_meta_on(product_id), [{"code": "5901234123457", "kind": "EAN"}])
 
 	@parameterized.expand(BATCH_MODES)
 	def test_sync_does_not_push_a_mapped_child_table_that_already_matches(
@@ -849,7 +851,7 @@ class TestIntegrationWooCommerceItemsSync(TestIntegrationWooCommerce):
 			date_modified_after_push,
 		)
 		# The value the first push wrote is what the comparison settled against
-		self.assertEqual(self._barcodes_meta_on(product_id), [{"code": "4006381333948", "kind": "EAN-13"}])
+		self.assertEqual(self._barcodes_meta_on(product_id), [{"code": "4006381333948", "kind": "EAN"}])
 
 
 def get_items_for_wc_product(woocommerce_id: str, woocommerce_server: str):
