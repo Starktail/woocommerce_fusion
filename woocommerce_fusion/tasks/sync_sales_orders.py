@@ -15,7 +15,7 @@ from woocommerce_fusion.exceptions import (
 	WooCommerceOrderNotFoundError,
 )
 from woocommerce_fusion.tasks.sync import SynchroniseWooCommerce
-from woocommerce_fusion.tasks.sync_items import run_item_sync
+from woocommerce_fusion.tasks.sync_items import create_filtered_jsonpath_target, run_item_sync
 from woocommerce_fusion.woocommerce.doctype.woocommerce_order.woocommerce_order import (
 	WC_ORDER_STATUS_MAPPING,
 	WC_ORDER_STATUS_MAPPING_REVERSE,
@@ -502,9 +502,18 @@ class SynchroniseSalesOrder(SynchroniseWooCommerce):
 
 					# We expect woocommerce_field_name to be valid JSONPath
 					jsonpath_expr = parse(map.woocommerce_field_name)
-					woocommerce_order_line_field_matches = jsonpath_expr.find(woocommerce_order_line_item)
+					matches = jsonpath_expr.find(woocommerce_order_line_item)
 
-					if len(woocommerce_order_line_field_matches) == 0:
+					if not matches:
+						if create_filtered_jsonpath_target(jsonpath_expr, woocommerce_order_line_item):
+							# A filtered target such as `$.meta_data[?key='_my_key'].value` matches
+							# nothing until WooCommerce has written that meta row.
+							jsonpath_expr.update_or_create(
+								woocommerce_order_line_item, erpnext_item_field_value
+							)
+							wc_line_item_dirty = True
+							continue
+
 						if self.woocommerce_order.name:
 							# The field should exist, else raise an error
 							raise ValueError(
@@ -515,11 +524,10 @@ class SynchroniseSalesOrder(SynchroniseWooCommerce):
 									self.woocommerce_order.name,
 								)
 							)
+						continue
 
 					# JSONPath parsing typically returns a list, we'll only take the first value
-					woocommerce_order_line_field_value = woocommerce_order_line_field_matches[0].value
-
-					if erpnext_item_field_value != woocommerce_order_line_field_value:
+					if erpnext_item_field_value != matches[0].value:
 						jsonpath_expr.update(woocommerce_order_line_item, erpnext_item_field_value)
 						wc_line_item_dirty = True
 

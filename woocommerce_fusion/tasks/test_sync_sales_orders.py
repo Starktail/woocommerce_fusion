@@ -515,6 +515,76 @@ class TestCustomerSellingPriceList(IntegrationTestCase):
 		self.assertIsNone(get_customer_selling_price_list(self.customer.name, "ZAR"))
 
 
+class TestOrderLineItemFieldMap(IntegrationTestCase):
+	"""
+	The order line mapper matched nothing on a meta key WooCommerce had not written, then raised
+	IndexError on `matches[0]` for a product that had no name to raise the proper error against.
+	"""
+
+	def setUp(self):
+		self.sync = SynchroniseSalesOrder()
+		self.sync.sales_order = frappe._dict(name="SO-0001")
+		self.sync.woocommerce_order = frappe._dict(
+			name="site1.example.com~1", woocommerce_server="site1.example.com"
+		)
+		self.so_item = frappe._dict(item_code="TEST-ITEM", warehouse="Stores - SC")
+		self.server = frappe._dict(order_line_item_field_map=[])
+
+	def map_field(self, jsonpath: str):
+		self.server.order_line_item_field_map = [
+			frappe._dict(erpnext_field_name="warehouse | Warehouse", woocommerce_field_name=jsonpath)
+		]
+
+	def set_fields(self, line_item):
+		with patch(
+			"woocommerce_fusion.tasks.sync_sales_orders.frappe.get_cached_doc", return_value=self.server
+		):
+			return self.sync.set_wc_order_line_items_mapped_fields(line_item, self.so_item)
+
+	def test_a_meta_row_that_woocommerce_has_not_written_is_created(self):
+		self.map_field("$.meta_data[?key='_warehouse'].value")
+		line_item = {"product_id": 1, "meta_data": [{"key": "_other", "value": "x"}]}
+
+		dirty, line_item = self.set_fields(line_item)
+
+		self.assertTrue(dirty)
+		self.assertEqual(line_item["meta_data"][-1], {"key": "_warehouse", "value": "Stores - SC"})
+
+	def test_an_existing_meta_row_is_updated(self):
+		self.map_field("$.meta_data[?key='_warehouse'].value")
+		line_item = {"product_id": 1, "meta_data": [{"key": "_warehouse", "value": "Stale"}]}
+
+		dirty, line_item = self.set_fields(line_item)
+
+		self.assertTrue(dirty)
+		self.assertEqual(line_item["meta_data"][0]["value"], "Stores - SC")
+
+	def test_a_matching_value_is_not_dirty(self):
+		self.map_field("$.meta_data[?key='_warehouse'].value")
+		line_item = {"product_id": 1, "meta_data": [{"key": "_warehouse", "value": "Stores - SC"}]}
+
+		dirty, _line_item = self.set_fields(line_item)
+
+		self.assertFalse(dirty)
+
+	def test_a_target_that_cannot_be_created_raises(self):
+		"""
+		Previously this fell through to `matches[0]` and raised IndexError instead
+		"""
+		self.map_field("$.meta_data[7].value")
+
+		with self.assertRaises(ValueError):
+			self.set_fields({"product_id": 1, "meta_data": []})
+
+	def test_a_target_that_cannot_be_created_is_skipped_for_a_new_order(self):
+		self.map_field("$.meta_data[7].value")
+		self.sync.woocommerce_order.name = None
+
+		dirty, _line_item = self.set_fields({"product_id": 1, "meta_data": []})
+
+		self.assertFalse(dirty)
+
+
 class TestLineItemMetaDisplayValues(IntegrationTestCase):
 	"""
 	WooCommerce declares a line item's meta `display_value` as a string and 400s the whole PUT when an
