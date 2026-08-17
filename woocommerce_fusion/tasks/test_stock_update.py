@@ -132,9 +132,12 @@ class TestWooCommerceStockSync(UnitTestCase):
 		self.assertEqual(actual_put_endpoint, expected_put_endpoint)
 		self.assertEqual(actual_put_data, expected_data)
 
+	@patch("woocommerce_fusion.tasks.stock_update.frappe.db.exists", return_value=False)
 	@patch("woocommerce_fusion.tasks.stock_update.frappe.db.get_all")
 	@patch("woocommerce_fusion.tasks.stock_update.frappe.enqueue")
-	def test_update_stock_levels_for_all_enabled_items_in_background(self, mock_enqueue, mock_get_all):
+	def test_update_stock_levels_for_all_enabled_items_in_background(
+		self, mock_enqueue, mock_get_all, _mock_exists
+	):
 		# Set up mock return values
 		mock_get_all.side_effect = [
 			[_dict({"name": f"Item-1-{x}"}) for x in range(500)],  # First page of results
@@ -161,3 +164,69 @@ class TestWooCommerceStockSync(UnitTestCase):
 			"woocommerce_fusion.tasks.stock_update.update_stock_levels_on_woocommerce_site",
 			item_code="Item-2-499",  # Here we'd check for the last `item_code` being passed.
 		)
+
+	@staticmethod
+	def _disabled_item():
+		return frappe._dict(
+			woocommerce_servers=[
+				frappe._dict(woocommerce_id=1, woocommerce_server="woo1.example.com", enabled=1),
+			],
+			is_stock_item=1,
+			disabled=1,
+		)
+
+	@staticmethod
+	def _server(push_zero_stock_for_disabled_items: int):
+		return frappe._dict(
+			woocommerce_server="woo1.example.com",
+			enable_sync=1,
+			enable_stock_level_synchronisation=1,
+			push_zero_stock_for_disabled_items=push_zero_stock_for_disabled_items,
+			warehouses=[frappe._dict(warehouse="Warehouse A")],
+		)
+
+	@patch("woocommerce_fusion.tasks.stock_update.frappe")
+	@patch("woocommerce_fusion.tasks.stock_update.APIWithRequestLogging", autospec=True)
+	def test_a_disabled_item_pushes_zero_stock_when_the_server_asks_for_it(self, mock_wc_api, mock_frappe):
+		"""
+		Without this the product keeps the stock level of its last sync and stays on sale
+		"""
+		mock_frappe.get_doc.return_value = self._disabled_item()
+		mock_frappe.get_list.return_value = [frappe._dict(warehouse="Warehouse A", actual_qty=5)]
+		mock_frappe.get_cached_doc.return_value = self._server(1)
+
+		mock_api_instance = MagicMock()
+		mock_api_instance.put.return_value = Mock(status_code=200)
+		mock_wc_api.return_value = mock_api_instance
+
+		update_stock_levels_on_woocommerce_site("some_item_code")
+
+		mock_api_instance.put.assert_called_once()
+		self.assertEqual(mock_api_instance.put.call_args.kwargs["data"], {"stock_quantity": 0})
+
+	@patch("woocommerce_fusion.tasks.stock_update.frappe")
+	@patch("woocommerce_fusion.tasks.stock_update.APIWithRequestLogging", autospec=True)
+	def test_a_disabled_item_is_left_alone_by_default(self, mock_wc_api, mock_frappe):
+		mock_frappe.get_doc.return_value = self._disabled_item()
+		mock_frappe.get_list.return_value = [frappe._dict(warehouse="Warehouse A", actual_qty=5)]
+		mock_frappe.get_cached_doc.return_value = self._server(0)
+
+		mock_api_instance = MagicMock()
+		mock_wc_api.return_value = mock_api_instance
+
+		update_stock_levels_on_woocommerce_site("some_item_code")
+
+		mock_api_instance.put.assert_not_called()
+
+	@patch("woocommerce_fusion.tasks.stock_update.frappe.db.exists", return_value=True)
+	@patch("woocommerce_fusion.tasks.stock_update.frappe.db.get_all", return_value=[])
+	@patch("woocommerce_fusion.tasks.stock_update.frappe.enqueue")
+	def test_the_sweep_includes_disabled_items_when_a_server_asks_for_it(
+		self, _mock_enqueue, mock_get_all, _mock_exists
+	):
+		"""
+		The sweep is the only run that will clear a disabled Item's product, so it has to reach them
+		"""
+		update_stock_levels_for_all_enabled_items_in_background()
+
+		self.assertEqual(mock_get_all.call_args.kwargs["filters"], {})

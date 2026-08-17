@@ -1,0 +1,53 @@
+{
+ "add_total_row": 0,
+ "columns": [],
+ "creation": "2026-08-17 16:00:00.000000",
+ "disabled": 0,
+ "docstatus": 0,
+ "doctype": "Report",
+ "filters": [
+  {
+   "default": "Email",
+   "fieldname": "grouped_by",
+   "fieldtype": "Select",
+   "label": "Grouped By",
+   "options": "\nEmail\nEmail Domain\nName"
+  },
+  {
+   "default": "1",
+   "fieldname": "woocommerce_only",
+   "fieldtype": "Check",
+   "label": "Only Customers linked to WooCommerce"
+  },
+  {
+   "default": "gmail.com, googlemail.com, yahoo.com, ymail.com, hotmail.com, outlook.com, live.com, msn.com, icloud.com, me.com, mac.com, aol.com, protonmail.com, proton.me, pm.me, gmx.com, gmx.net, zoho.com, mail.com, yandex.com, qq.com, 163.com",
+   "depends_on": "eval: doc.grouped_by == 'Email Domain'",
+   "fieldname": "ignore_email_domains",
+   "fieldtype": "Small Text",
+   "label": "Ignore Email Domains"
+  }
+ ],
+ "idx": 0,
+ "is_standard": "Yes",
+ "letterhead": null,
+ "modified": "2026-08-17 16:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "WooCommerce",
+ "name": "WooCommerce Duplicate Customers",
+ "owner": "Administrator",
+ "prepared_report": 0,
+ "ref_doctype": "Customer",
+ "report_name": "WooCommerce Duplicate Customers",
+ "report_type": "Script Report",
+ "roles": [
+  {
+   "role": "Sales Manager"
+  },
+  {
+   "role": "Sales User"
+  },
+  {
+   "role": "System Manager"
+  }
+ ]
+}

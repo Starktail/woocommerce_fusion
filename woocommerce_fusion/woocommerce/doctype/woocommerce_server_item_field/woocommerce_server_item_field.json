@@ -1,14 +1,15 @@
 {
  "actions": [],
  "allow_rename": 1,
- "creation": "2024-07-08 14:28:39.369279",
+ "creation": "2026-08-17 11:13:41.765147",
  "doctype": "DocType",
  "editable_grid": 1,
  "engine": "InnoDB",
  "field_order": [
   "erpnext_field_name",
   "column_break_kddy",
-  "woocommerce_field_name"
+  "woocommerce_field_name",
+  "value_transform_method"
  ],
  "fields": [
   {
@@ -30,17 +31,25 @@
    "in_list_view": 1,
    "label": "JSONPath on WooCommerce Product",
    "reqd": 1
+  },
+  {
+   "description": "Optional. Converts the value between its ERPNext and its WooCommerce representation - needed for child table fields, or whenever the two sides do not hold the same shape. Only transforms registered by an installed app under <code>woocommerce_item_field_transforms</code> in <code>hooks.py</code> can be selected.",
+   "documentation_url": "https://woocommerce-fusion-docs.starktail.com/woocommerce_fusion_value-transforms.html",
+   "fieldname": "value_transform_method",
+   "fieldtype": "Select",
+   "label": "Value Transform"
   }
  ],
  "index_web_pages_for_search": 1,
  "istable": 1,
  "links": [],
- "modified": "2025-02-07 11:44:33.375997",
+ "modified": "2026-08-17 14:31:07.994453",
  "modified_by": "Administrator",
  "module": "WooCommerce",
  "name": "WooCommerce Server Item Field",
  "owner": "Administrator",
  "permissions": [],
+ "row_format": "Dynamic",
  "sort_field": "modified",
  "sort_order": "DESC",
  "states": []

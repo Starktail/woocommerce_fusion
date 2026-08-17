@@ -272,12 +272,17 @@ def _ensure_price_scope_fixtures() -> None:
 	if not frappe.db.exists("WooCommerce Server", PRICE_SCOPE_SERVER):
 		server = frappe.new_doc("WooCommerce Server")
 		server.woocommerce_server_url = PRICE_SCOPE_SERVER_URL
-		server.enable_sync = 1
+		# These tests only need this server to exist, so that the Item can carry a link to it. Give it
+		# credentials and leave sync off
+		server.api_consumer_key = "ck_price_scope_unit_test"
+		server.api_consumer_secret = "cs_price_scope_unit_test"
+		server.enable_sync = 0
 		server.enable_price_list_sync = 1
 		server.price_list = REGULAR_PRICE_LIST
 		server.enable_sales_price_list_sync = 1
 		server.sales_price_list = SALES_PRICE_LIST
 		server.creation_user = "Administrator"
+		# Mandatory only for the warehouse and accounting fields, which these tests never reach
 		server.insert(ignore_permissions=True, ignore_mandatory=True)
 
 	if not frappe.db.exists("Customer", PRICE_SCOPE_CUSTOMER):
@@ -424,3 +429,57 @@ class TestItemWidePriceScopingOnCreatePath(IntegrationTestCase):
 
 		self.assertEqual(get_item_price_rate(item_for_sync), 100)
 		self.assertEqual(get_item_sale_price_data(item_for_sync).price_list_rate, 90)
+
+
+class TestDisabledItemPriceScope(IntegrationTestCase):
+	"""
+	A disabled Item is skipped by price sync, so its product keeps the price of its last
+	synchronisation and an expired sale is never cleared.
+	"""
+
+	def setUp(self):
+		_ensure_price_scope_fixtures()
+		frappe.db.delete("Item Price", {"item_code": PRICE_SCOPE_ITEM})
+		self.item_wide = _make_item_price(REGULAR_PRICE_LIST, 100)
+		self.item_wide_sale = _make_item_price(SALES_PRICE_LIST, 90)
+		frappe.db.set_value("Item", PRICE_SCOPE_ITEM, "disabled", 1)
+
+	def tearDown(self):
+		frappe.db.set_value("Item", PRICE_SCOPE_ITEM, "disabled", 0)
+
+	def _sync(self, sync_prices_for_disabled_items: int) -> SynchroniseItemPrice:
+		sync = _make_sync(name=PRICE_SCOPE_SERVER, sales_price_list=SALES_PRICE_LIST)
+		sync.wc_server.price_list = REGULAR_PRICE_LIST
+		sync.wc_server.sync_prices_for_disabled_items = sync_prices_for_disabled_items
+		sync.item_code = PRICE_SCOPE_ITEM
+		sync.item_price_list = []
+		return sync
+
+	def test_a_disabled_item_is_skipped_by_default(self):
+		sync = self._sync(0)
+		sync.get_erpnext_item_prices()
+		sync.get_erpnext_sale_prices()
+
+		self.assertEqual(sync.item_price_list, [])
+		self.assertEqual(sync.sale_price_map, {})
+
+	def test_a_disabled_item_is_included_when_the_server_asks_for_it(self):
+		sync = self._sync(1)
+		sync.get_erpnext_item_prices()
+		sync.get_erpnext_sale_prices()
+
+		self.assertEqual([row.name for row in sync.item_price_list], [self.item_wide])
+		self.assertEqual(sync.sale_price_map[PRICE_SCOPE_WC_ID].name, self.item_wide_sale)
+
+	def test_both_queries_agree_so_a_sale_is_not_cleared_by_accident(self):
+		"""
+		A disabled Item reaching the regular list but not the sale map would have its sale price
+		cleared, as though the sale had been withdrawn
+		"""
+		for setting in (0, 1):
+			with self.subTest(sync_prices_for_disabled_items=setting):
+				sync = self._sync(setting)
+				sync.get_erpnext_item_prices()
+				sync.get_erpnext_sale_prices()
+
+				self.assertEqual(bool(sync.item_price_list), bool(sync.sale_price_map))

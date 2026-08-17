@@ -2,6 +2,7 @@ import json
 from datetime import datetime
 
 import frappe
+from erpnext.accounts.party import get_default_price_list
 from erpnext.selling.doctype.sales_order.sales_order import SalesOrder
 from erpnext.selling.doctype.sales_order_item.sales_order_item import SalesOrderItem
 from frappe import _
@@ -14,7 +15,7 @@ from woocommerce_fusion.exceptions import (
 	WooCommerceOrderNotFoundError,
 )
 from woocommerce_fusion.tasks.sync import SynchroniseWooCommerce
-from woocommerce_fusion.tasks.sync_items import run_item_sync
+from woocommerce_fusion.tasks.sync_items import create_filtered_jsonpath_target, run_item_sync
 from woocommerce_fusion.woocommerce.doctype.woocommerce_order.woocommerce_order import (
 	WC_ORDER_STATUS_MAPPING,
 	WC_ORDER_STATUS_MAPPING_REVERSE,
@@ -461,7 +462,9 @@ class SynchroniseSalesOrder(SynchroniseWooCommerce):
 						"product_id": so_item.woocommerce_id,
 						"quantity": so_item.qty,
 						"price": so_item.rate,
-						"meta_data": line_items[i].get("meta_data", []) if i < len(line_items) else [],
+						"meta_data": encode_line_item_meta_display_values(
+							line_items[i].get("meta_data", []) if i < len(line_items) else []
+						),
 					}
 					for i, so_item in enumerate(sales_order.items)
 				]
@@ -499,9 +502,18 @@ class SynchroniseSalesOrder(SynchroniseWooCommerce):
 
 					# We expect woocommerce_field_name to be valid JSONPath
 					jsonpath_expr = parse(map.woocommerce_field_name)
-					woocommerce_order_line_field_matches = jsonpath_expr.find(woocommerce_order_line_item)
+					matches = jsonpath_expr.find(woocommerce_order_line_item)
 
-					if len(woocommerce_order_line_field_matches) == 0:
+					if not matches:
+						if create_filtered_jsonpath_target(jsonpath_expr, woocommerce_order_line_item):
+							# A filtered target such as `$.meta_data[?key='_my_key'].value` matches
+							# nothing until WooCommerce has written that meta row.
+							jsonpath_expr.update_or_create(
+								woocommerce_order_line_item, erpnext_item_field_value
+							)
+							wc_line_item_dirty = True
+							continue
+
 						if self.woocommerce_order.name:
 							# The field should exist, else raise an error
 							raise ValueError(
@@ -512,11 +524,10 @@ class SynchroniseSalesOrder(SynchroniseWooCommerce):
 									self.woocommerce_order.name,
 								)
 							)
+						continue
 
 					# JSONPath parsing typically returns a list, we'll only take the first value
-					woocommerce_order_line_field_value = woocommerce_order_line_field_matches[0].value
-
-					if erpnext_item_field_value != woocommerce_order_line_field_value:
+					if erpnext_item_field_value != matches[0].value:
 						jsonpath_expr.update(woocommerce_order_line_item, erpnext_item_field_value)
 						wc_line_item_dirty = True
 
@@ -532,6 +543,10 @@ class SynchroniseSalesOrder(SynchroniseWooCommerce):
 		new_sales_order = frappe.new_doc("Sales Order")
 		self.sales_order = new_sales_order
 		new_sales_order.customer = customer_docname
+		if customer_docname and (
+			price_list := get_customer_selling_price_list(customer_docname, wc_order.currency)
+		):
+			new_sales_order.selling_price_list = price_list
 		new_sales_order.po_no = new_sales_order.woocommerce_id = wc_order.id
 		# Carry the customer-facing WooCommerce order number for autonaming
 		new_sales_order.flags.woocommerce_number = wc_order.get("number")
@@ -610,9 +625,9 @@ class SynchroniseSalesOrder(SynchroniseWooCommerce):
 			)
 			return None
 
-		# Use order ID for guest users, otherwise use email
+		# Use the email where there is one, and the order ID only for a guest who gave none
 		wc_server = frappe.get_cached_doc("WooCommerce Server", wc_order.woocommerce_server)
-		if is_guest:
+		if is_guest and not customer_woo_com_email:
 			customer_identifier = f"Guest-{order_id}"
 		elif company_name and wc_server.enable_dual_accounts:
 			customer_identifier = f"{customer_woo_com_email}-{company_name}"
@@ -625,7 +640,24 @@ class SynchroniseSalesOrder(SynchroniseWooCommerce):
 			"Customer", {"woocommerce_identifier": customer_identifier}, "name"
 		)
 
+		# A Customer found on anything looser than its identifier is an account this order is being
+		# attached to, rather than the account this order created. Its name and identifier belong to
+		# whoever set it up and are left alone below - renaming it would rename the account on every
+		# document it already appears on.
+		linked_customer = None
 		if not existing_customer:
+			linked_customer = (
+				# Dual accounts deliberately keep a private and a company order apart, so only a
+				# shared company domain may bring those two together
+				find_customer_by_email_domain(customer_woo_com_email, wc_server)
+				if company_name and wc_server.enable_dual_accounts
+				else find_existing_customer(customer_woo_com_email, wc_server)
+			)
+
+		if linked_customer:
+			# Attach to the existing account, leaving its own details untouched
+			customer = frappe.get_doc("Customer", linked_customer)
+		elif not existing_customer:
 			# Create Customer
 			customer = frappe.new_doc("Customer")
 			customer.woocommerce_identifier = customer_identifier
@@ -643,8 +675,9 @@ class SynchroniseSalesOrder(SynchroniseWooCommerce):
 			# Edit Customer
 			customer = frappe.get_doc("Customer", existing_customer)
 
-		customer.customer_name = company_name if customer.customer_type == "Company" else individual_name
-		customer.woocommerce_identifier = customer_identifier
+		if not linked_customer:
+			customer.customer_name = company_name if customer.customer_type == "Company" else individual_name
+			customer.woocommerce_identifier = customer_identifier
 
 		# Check if vat_id exists in raw_billing_data and is a valid string
 		vat_id = raw_billing_data.get("vat_id")
@@ -1106,6 +1139,60 @@ def find_existing_contact(email, phone):
 	return None
 
 
+def get_matching_email_domains(wc_server) -> set[str]:
+	"""The company email domains this server links onto a single Customer"""
+	return {
+		line.strip().lower().lstrip("@")
+		for line in (wc_server.customer_matching_email_domains or "").splitlines()
+		if line.strip()
+	}
+
+
+def find_customer_by_email_domain(email: str, wc_server) -> str | None:
+	"""
+	The oldest Customer already ordering from the same company email domain.
+
+	Only the domains listed on the WooCommerce Server are considered: most customers order from a
+	free mail provider, so matching on every domain would put all of them on one account.
+	"""
+	domain = email.rsplit("@", 1)[-1] if email else ""
+	if not domain or domain not in get_matching_email_domains(wc_server):
+		return None
+
+	return frappe.db.get_value(
+		"Customer",
+		{"woocommerce_identifier": ("like", f"%@{domain}%")},
+		"name",
+		order_by="creation asc",
+	)
+
+
+def find_existing_customer(email: str, wc_server) -> str | None:
+	"""
+	An existing Customer for this email address: keyed on the address itself, linked through a
+	Contact that holds it, or sharing one of the server's company email domains.
+	"""
+	if not email:
+		return None
+	email = email.strip().lower()
+
+	customer = frappe.db.get_value("Customer", {"woocommerce_identifier": email}, "name")
+	if customer:
+		return customer
+
+	contact = frappe.db.get_value("Contact Email", {"email_id": email}, "parent")
+	if contact:
+		customer = frappe.db.get_value(
+			"Dynamic Link",
+			{"parenttype": "Contact", "parent": contact, "link_doctype": "Customer"},
+			"link_name",
+		)
+		if customer and frappe.db.exists("Customer", customer):
+			return customer
+
+	return find_customer_by_email_domain(email, wc_server)
+
+
 def create_contact(data, customer):
 	email = data.get("email", None)
 	phone = data.get("phone", None)
@@ -1153,6 +1240,36 @@ def get_tax_inc_price_for_woocommerce_line_item(line_item: dict):
 	return (float(line_item.get("subtotal")) + float(line_item.get("subtotal_tax"))) / float(
 		line_item.get("quantity")
 	)
+
+
+def get_customer_selling_price_list(customer_name: str, currency: str) -> str | None:
+	"""
+	The Customer's default Price List - or its Customer Group's - when it is priced in `currency`.
+	"""
+	price_list = get_default_price_list(frappe.get_cached_doc("Customer", customer_name))
+	if not price_list:
+		return None
+
+	# A Price List holds a single currency. Converting needs an exchange rate, and a missing one would
+	# fail the whole order sync, so leave the default in place rather than risk that.
+	if frappe.get_cached_value("Price List", price_list, "currency") != currency:
+		return None
+
+	return price_list
+
+
+def encode_line_item_meta_display_values(meta_data: list | None) -> list:
+	"""
+	Encode any structured `display_value` in a line item's meta data as a JSON string.
+	"""
+	encoded = []
+	for meta in meta_data or []:
+		if isinstance(meta, dict) and isinstance(meta.get("display_value"), dict | list):
+			# A new dict, so that the line items the caller compares against stay untouched
+			meta = {**meta, "display_value": json.dumps(meta["display_value"])}
+		encoded.append(meta)
+
+	return encoded
 
 
 def create_placeholder_item(sales_order: SalesOrder):
