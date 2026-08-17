@@ -74,7 +74,9 @@ To figure out the correct JSONPath expression, you can:
 
 
 
-**Note that this is recommended for advanced users only. This is a very basic functionality - there are no field type conversions possible as of yet.
+**Note that this is recommended for advanced users only.
+
+On its own, a mapping row copies a value straight across - it does no reshaping. Where the two sides do not hold the same shape - a **child table**, a file path that has to become a URL, different keys or units - add a [Value Transform](/woocommerce_fusion_value-transforms), a Python function deployed by your own app.
 
 ## Troubleshooting
 - You can look at the list of **WooCommerce Products** from within ERPNext by opening the **WooCommerce Product** doctype. This is a [Virtual DocType](https://frappeframework.com/docs/v15/user/en/basics/doctypes/virtual-doctype) that interacts directly with your WooCommerce site's API interface

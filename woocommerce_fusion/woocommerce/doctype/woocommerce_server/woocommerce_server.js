@@ -37,12 +37,27 @@ frappe.ui.form.on("WooCommerce Server", {
       };
     };
 
-    // Set the Options for erpnext_field_name field on 'Items' > 'Fields Mapping' child table
+    // Set the Options for value_transform_method field on 'Items' > 'Fields Mapping' child table
+    frappe.call({
+      method: "get_item_field_transforms",
+      doc: frm.doc,
+      callback: function (r) {
+        // Leading blank so that "no transform" stays selectable
+        frm.fields_dict.item_field_map.grid.update_docfield_property(
+          "value_transform_method",
+          "options",
+          [""].concat(r.message || []).join("\n"),
+        );
+      },
+    });
+
+    // Set the Options for erpnext_field_name field on 'Items' > 'Fields Mapping' child table.
     frappe.call({
       method: "get_item_docfields",
       doc: frm.doc,
       args: {
         doctype: "Item",
+        include_table_fields: 1,
       },
       callback: function (r) {
         // Sort the array of objects alphabetically by the label property
