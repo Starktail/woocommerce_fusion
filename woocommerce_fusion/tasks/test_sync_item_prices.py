@@ -272,12 +272,17 @@ def _ensure_price_scope_fixtures() -> None:
 	if not frappe.db.exists("WooCommerce Server", PRICE_SCOPE_SERVER):
 		server = frappe.new_doc("WooCommerce Server")
 		server.woocommerce_server_url = PRICE_SCOPE_SERVER_URL
-		server.enable_sync = 1
+		# These tests only need this server to exist, so that the Item can carry a link to it. Give it
+		# credentials and leave sync off
+		server.api_consumer_key = "ck_price_scope_unit_test"
+		server.api_consumer_secret = "cs_price_scope_unit_test"
+		server.enable_sync = 0
 		server.enable_price_list_sync = 1
 		server.price_list = REGULAR_PRICE_LIST
 		server.enable_sales_price_list_sync = 1
 		server.sales_price_list = SALES_PRICE_LIST
 		server.creation_user = "Administrator"
+		# Mandatory only for the warehouse and accounting fields, which these tests never reach
 		server.insert(ignore_permissions=True, ignore_mandatory=True)
 
 	if not frappe.db.exists("Customer", PRICE_SCOPE_CUSTOMER):
