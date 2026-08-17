@@ -5,7 +5,11 @@ import frappe
 from erpnext import get_default_company
 from frappe.tests.utils import FrappeTestCase
 
-from woocommerce_fusion.tasks.sync_sales_orders import SynchroniseSalesOrder, find_existing_contact
+from woocommerce_fusion.tasks.sync_sales_orders import (
+	SynchroniseSalesOrder,
+	encode_line_item_meta_display_values,
+	find_existing_contact,
+)
 from woocommerce_fusion.woocommerce.woocommerce_api import (
 	generate_woocommerce_record_name_from_domain_and_id,
 )
@@ -460,6 +464,106 @@ class TestWooCommerceSync(FrappeTestCase):
 	def test_contact_email_doesnt_exist(self, mock_get_cached_doc):
 		result = find_existing_contact(email="doesntexist@db.test", phone=None)
 		self.assertEqual(result, None)
+
+
+class TestLineItemMetaDisplayValues(IntegrationTestCase):
+	"""
+	WooCommerce declares a line item's meta `display_value` as a string and 400s the whole PUT when an
+	object is sent for it. Line items are carried over from the order as fetched, so structured meta
+	written by a plugin - Shipping Label Wizard's `_slw_data` - used to go straight back out and the
+	order could never be updated again.
+	"""
+
+	def test_an_object_display_value_is_encoded(self):
+		encoded = encode_line_item_meta_display_values(
+			[{"key": "_slw_data", "value": "x", "display_value": {"box": 1, "labels": ["a"]}}]
+		)
+
+		self.assertEqual(encoded[0]["display_value"], json.dumps({"box": 1, "labels": ["a"]}))
+		# `value` is mixed in WooCommerce's schema, so it has to survive untouched
+		self.assertEqual(encoded[0]["value"], "x")
+
+	def test_a_list_display_value_is_encoded(self):
+		encoded = encode_line_item_meta_display_values([{"key": "_k", "display_value": ["a", "b"]}])
+
+		self.assertEqual(encoded[0]["display_value"], json.dumps(["a", "b"]))
+
+	def test_values_that_woocommerce_accepts_are_left_alone(self):
+		meta_data = [
+			{"key": "_a", "display_value": "Plain text"},
+			{"key": "_b", "display_value": 7},
+			{"key": "_c", "display_value": None},
+			{"key": "_d", "value": {"not": "touched"}},
+			{"key": "_e"},
+		]
+
+		self.assertEqual(encode_line_item_meta_display_values(meta_data), meta_data)
+
+	def test_the_source_line_items_are_not_mutated(self):
+		"""
+		The caller compares against the line items it fetched, so encoding may not reach back into them
+		"""
+		meta_data = [{"key": "_slw_data", "display_value": {"box": 1}}]
+
+		encode_line_item_meta_display_values(meta_data)
+
+		self.assertEqual(meta_data[0]["display_value"], {"box": 1})
+
+	def test_no_meta_data(self):
+		self.assertEqual(encode_line_item_meta_display_values(None), [])
+		self.assertEqual(encode_line_item_meta_display_values([]), [])
+
+	def test_the_order_push_sends_an_encoded_display_value(self):
+		"""
+		End to end over `update_woocommerce_order`: the rewritten line items are what gets PUT
+		"""
+		sync = SynchroniseSalesOrder()
+
+		wc_order = frappe.get_doc({"doctype": "WooCommerce Order"})
+		wc_order.woocommerce_server = "site1.example.com"
+		wc_order.id = 1
+		wc_order.name = generate_woocommerce_record_name_from_domain_and_id("site1.example.com", 1)
+		wc_order.line_items = json.dumps(
+			[
+				{
+					"id": 11,
+					"product_id": 101,
+					"quantity": 1,
+					"meta_data": [{"key": "_slw_data", "display_value": {"box": 1}}],
+				},
+				{"id": 12, "product_id": 102, "quantity": 1, "meta_data": []},
+			]
+		)
+		wc_order.save = Mock()
+		sync.woocommerce_order = wc_order
+
+		# A real document, because `frappe._dict.items` resolves to the dict method
+		sales_order = frappe.get_doc({"doctype": "Sales Order"})
+		sales_order.name = "SO-0001"
+		sales_order.append("items", {"item_code": "TEST-ITEM", "qty": 2, "rate": 100})
+		sync.sales_order = sales_order
+
+		wc_server = frappe._dict(
+			{
+				"name": "site1.example.com",
+				"enable_so_status_sync": 0,
+				"sync_so_items_to_wc": 1,
+				"order_line_item_field_map": [],
+			}
+		)
+
+		with (
+			patch("woocommerce_fusion.tasks.sync_sales_orders.frappe.get_cached_doc", return_value=wc_server),
+			patch("woocommerce_fusion.tasks.sync_sales_orders.frappe.get_value", return_value="101"),
+		):
+			sync.update_woocommerce_order(wc_order, sales_order)
+
+		wc_order.save.assert_called_once()
+		# The cleared originals come first, then the rebuilt lines
+		new_line_item = json.loads(wc_order.line_items)[-1]
+		self.assertEqual(
+			new_line_item["meta_data"], [{"key": "_slw_data", "display_value": json.dumps({"box": 1})}]
+		)
 
 
 def create_customer():

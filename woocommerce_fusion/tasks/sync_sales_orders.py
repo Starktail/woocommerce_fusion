@@ -461,7 +461,9 @@ class SynchroniseSalesOrder(SynchroniseWooCommerce):
 						"product_id": so_item.woocommerce_id,
 						"quantity": so_item.qty,
 						"price": so_item.rate,
-						"meta_data": line_items[i].get("meta_data", []) if i < len(line_items) else [],
+						"meta_data": encode_line_item_meta_display_values(
+							line_items[i].get("meta_data", []) if i < len(line_items) else []
+						),
 					}
 					for i, so_item in enumerate(sales_order.items)
 				]
@@ -1153,6 +1155,20 @@ def get_tax_inc_price_for_woocommerce_line_item(line_item: dict):
 	return (float(line_item.get("subtotal")) + float(line_item.get("subtotal_tax"))) / float(
 		line_item.get("quantity")
 	)
+
+
+def encode_line_item_meta_display_values(meta_data: list | None) -> list:
+	"""
+	Encode any structured `display_value` in a line item's meta data as a JSON string.
+	"""
+	encoded = []
+	for meta in meta_data or []:
+		if isinstance(meta, dict) and isinstance(meta.get("display_value"), dict | list):
+			# A new dict, so that the line items the caller compares against stay untouched
+			meta = {**meta, "display_value": json.dumps(meta["display_value"])}
+		encoded.append(meta)
+
+	return encoded
 
 
 def create_placeholder_item(sales_order: SalesOrder):
