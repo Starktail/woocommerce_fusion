@@ -8,7 +8,9 @@ from frappe.tests.utils import FrappeTestCase
 from woocommerce_fusion.tasks.sync_sales_orders import (
 	SynchroniseSalesOrder,
 	encode_line_item_meta_display_values,
+	find_customer_by_email_domain,
 	find_existing_contact,
+	find_existing_customer,
 	get_customer_selling_price_list,
 )
 from woocommerce_fusion.woocommerce.woocommerce_api import (
@@ -513,6 +515,84 @@ class TestCustomerSellingPriceList(IntegrationTestCase):
 		self.customer.save()
 
 		self.assertIsNone(get_customer_selling_price_list(self.customer.name, "ZAR"))
+
+
+class TestCustomerMatching(IntegrationTestCase):
+	"""
+	Guest orders were keyed on the WooCommerce order ID, so every order from the same person created
+	another Customer. `find_existing_contact` could already find the person by email, but its result
+	was only used to set `customer_primary_contact`, after the duplicate had been created.
+	"""
+
+	@classmethod
+	def setUpClass(cls):
+		super().setUpClass()
+		# One Customer for the whole class: a fixture per test would accumulate autonamed duplicates
+		# on the same domain, and the domain lookup deliberately returns the oldest of them
+		cls.email = "match-me@corporate-test.example"
+		cls.customer_name = frappe.db.get_value("Customer", {"woocommerce_identifier": cls.email}, "name")
+		if not cls.customer_name:
+			cls.customer_name = (
+				frappe.get_doc(
+					{
+						"doctype": "Customer",
+						"customer_name": "Test Customer for Matching",
+						"customer_type": "Company",
+						"woocommerce_identifier": cls.email,
+					}
+				)
+				.insert(ignore_permissions=True)
+				.name
+			)
+
+	def setUp(self):
+		self.server = frappe._dict(customer_matching_email_domains=None, enable_dual_accounts=0)
+
+	def test_a_customer_is_found_on_its_identifier(self):
+		self.assertEqual(find_existing_customer(self.email, self.server), self.customer_name)
+
+	def test_the_lookup_is_case_insensitive(self):
+		self.assertEqual(find_existing_customer(self.email.upper(), self.server), self.customer_name)
+
+	def test_a_customer_is_found_through_a_contact_holding_the_address(self):
+		contact = frappe.get_doc({"doctype": "Contact", "first_name": "Contact For Matching"})
+		contact.add_email("through-contact@corporate-test.example", is_primary=1)
+		contact.append("links", {"link_doctype": "Customer", "link_name": self.customer_name})
+		contact.insert(ignore_permissions=True)
+
+		self.assertEqual(
+			find_existing_customer("through-contact@corporate-test.example", self.server),
+			self.customer_name,
+		)
+
+	def test_an_unknown_address_matches_nothing(self):
+		self.assertIsNone(find_existing_customer("nobody@corporate-test.example", self.server))
+		self.assertIsNone(find_existing_customer("", self.server))
+
+	def test_a_listed_domain_links_a_second_buyer_at_the_same_company(self):
+		self.server.customer_matching_email_domains = "corporate-test.example"
+
+		self.assertEqual(
+			find_existing_customer("someone-else@corporate-test.example", self.server),
+			self.customer_name,
+		)
+
+	def test_an_unlisted_domain_does_not(self):
+		"""
+		Most customers order from a free mail provider, so matching every domain would put all of them
+		on one account
+		"""
+		self.server.customer_matching_email_domains = "acme.co.za\nother.example"
+
+		self.assertIsNone(find_existing_customer("someone-else@corporate-test.example", self.server))
+
+	def test_the_domain_list_tolerates_blanks_and_an_at_prefix(self):
+		self.server.customer_matching_email_domains = "\n  @Corporate-Test.Example  \n\n"
+
+		self.assertEqual(
+			find_customer_by_email_domain("someone-else@corporate-test.example", self.server),
+			self.customer_name,
+		)
 
 
 class TestOrderLineItemFieldMap(IntegrationTestCase):

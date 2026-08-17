@@ -625,9 +625,9 @@ class SynchroniseSalesOrder(SynchroniseWooCommerce):
 			)
 			return None
 
-		# Use order ID for guest users, otherwise use email
+		# Use the email where there is one, and the order ID only for a guest who gave none
 		wc_server = frappe.get_cached_doc("WooCommerce Server", wc_order.woocommerce_server)
-		if is_guest:
+		if is_guest and not customer_woo_com_email:
 			customer_identifier = f"Guest-{order_id}"
 		elif company_name and wc_server.enable_dual_accounts:
 			customer_identifier = f"{customer_woo_com_email}-{company_name}"
@@ -640,7 +640,24 @@ class SynchroniseSalesOrder(SynchroniseWooCommerce):
 			"Customer", {"woocommerce_identifier": customer_identifier}, "name"
 		)
 
+		# A Customer found on anything looser than its identifier is an account this order is being
+		# attached to, rather than the account this order created. Its name and identifier belong to
+		# whoever set it up and are left alone below - renaming it would rename the account on every
+		# document it already appears on.
+		linked_customer = None
 		if not existing_customer:
+			linked_customer = (
+				# Dual accounts deliberately keep a private and a company order apart, so only a
+				# shared company domain may bring those two together
+				find_customer_by_email_domain(customer_woo_com_email, wc_server)
+				if company_name and wc_server.enable_dual_accounts
+				else find_existing_customer(customer_woo_com_email, wc_server)
+			)
+
+		if linked_customer:
+			# Attach to the existing account, leaving its own details untouched
+			customer = frappe.get_doc("Customer", linked_customer)
+		elif not existing_customer:
 			# Create Customer
 			customer = frappe.new_doc("Customer")
 			customer.woocommerce_identifier = customer_identifier
@@ -658,8 +675,9 @@ class SynchroniseSalesOrder(SynchroniseWooCommerce):
 			# Edit Customer
 			customer = frappe.get_doc("Customer", existing_customer)
 
-		customer.customer_name = company_name if customer.customer_type == "Company" else individual_name
-		customer.woocommerce_identifier = customer_identifier
+		if not linked_customer:
+			customer.customer_name = company_name if customer.customer_type == "Company" else individual_name
+			customer.woocommerce_identifier = customer_identifier
 
 		# Check if vat_id exists in raw_billing_data and is a valid string
 		vat_id = raw_billing_data.get("vat_id")
@@ -1119,6 +1137,60 @@ def find_existing_contact(email, phone):
 			return frappe._dict({"name": existing})
 
 	return None
+
+
+def get_matching_email_domains(wc_server) -> set[str]:
+	"""The company email domains this server links onto a single Customer"""
+	return {
+		line.strip().lower().lstrip("@")
+		for line in (wc_server.customer_matching_email_domains or "").splitlines()
+		if line.strip()
+	}
+
+
+def find_customer_by_email_domain(email: str, wc_server) -> str | None:
+	"""
+	The oldest Customer already ordering from the same company email domain.
+
+	Only the domains listed on the WooCommerce Server are considered: most customers order from a
+	free mail provider, so matching on every domain would put all of them on one account.
+	"""
+	domain = email.rsplit("@", 1)[-1] if email else ""
+	if not domain or domain not in get_matching_email_domains(wc_server):
+		return None
+
+	return frappe.db.get_value(
+		"Customer",
+		{"woocommerce_identifier": ("like", f"%@{domain}%")},
+		"name",
+		order_by="creation asc",
+	)
+
+
+def find_existing_customer(email: str, wc_server) -> str | None:
+	"""
+	An existing Customer for this email address: keyed on the address itself, linked through a
+	Contact that holds it, or sharing one of the server's company email domains.
+	"""
+	if not email:
+		return None
+	email = email.strip().lower()
+
+	customer = frappe.db.get_value("Customer", {"woocommerce_identifier": email}, "name")
+	if customer:
+		return customer
+
+	contact = frappe.db.get_value("Contact Email", {"email_id": email}, "parent")
+	if contact:
+		customer = frappe.db.get_value(
+			"Dynamic Link",
+			{"parenttype": "Contact", "parent": contact, "link_doctype": "Customer"},
+			"link_name",
+		)
+		if customer and frappe.db.exists("Customer", customer):
+			return customer
+
+	return find_customer_by_email_domain(email, wc_server)
 
 
 def create_contact(data, customer):
