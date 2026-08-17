@@ -43,7 +43,7 @@ sed -i 's/redis_socketio:/# redis_socketio:/g' Procfile
 # Get dependent apps
 
 bench get-app https://github.com/frappe/erpnext --branch $TEST_AGAINST_ERPNEXT_VERSION --resolve-deps
-bench get-app https://github.com/frappe/payments
+bench get-app https://github.com/frappe/payments --branch version-15
 
 
 bench get-app --overwrite woocommerce_fusion "${GITHUB_WORKSPACE}"
