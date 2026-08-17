@@ -917,6 +917,75 @@ class TestIntegrationWooCommerceSync(TestIntegrationWooCommerce):
 		self.delete_woocommerce_order(wc_order_id=wc_order_id)
 
 	@parameterized.expand(BATCH_MODES)
+	def test_sync_so_items_to_wc_with_structured_line_item_metadata(
+		self, mock_log_error, _name, batch_enabled
+	):
+		"""
+		Test that a line item carrying structured metadata can still be pushed back to WooCommerce.
+
+		WooCommerce stores an object in a meta `value` and then reports the same object as that meta's
+		`display_value`, but its order schema declares `display_value` a string and rejects the whole
+		request with a 400 when one is sent back. Plugins do keep structured data there - Shipping Label
+		Wizard's `_slw_data` - and line items are carried over from the order as fetched, so without
+		encoding the value the order could never be updated again.
+		"""
+		self._set_batch_mode(batch_enabled)
+		# Setup
+		wc_server = frappe.get_doc("WooCommerce Server", self.wc_server.name)
+		wc_server.sync_so_items_to_wc = 1
+		wc_server.submit_sales_orders = 0
+		wc_server.flags.ignore_mandatory = True
+		wc_server.save()
+
+		# Create a new order in WooCommerce with an object as its metadata value
+		slw_data = {"box": 1, "labels": ["a", "b"]}
+		wc_order_id, wc_order_name = self.post_woocommerce_order(
+			payment_method_title="Doge",
+			item_price=10,
+			item_qty=1,
+			line_item_metadata=[{"key": "_slw_data", "value": slw_data}],
+		)
+
+		# Assert the premise of this test: WooCommerce reports the object as the display_value too
+		posted_order = self.get_woocommerce_order(order_id=wc_order_id)
+		posted_meta = posted_order["line_items"][0]["meta_data"][0]
+		self.assertEqual(posted_meta["value"], slw_data)
+		self.assertNotIsInstance(
+			posted_meta["display_value"],
+			str,
+			"WooCommerce no longer reports a structured display_value, so this test proves nothing",
+		)
+
+		# Run synchronisation for the ERPNext Sales Order to be created
+		run_sales_order_sync(woocommerce_order_name=wc_order_name)
+		self._flush_if_batch()
+		mock_log_error.assert_not_called()
+
+		sales_order_name = frappe.get_value("Sales Order", {"woocommerce_id": wc_order_id}, "name")
+		sales_order = frappe.get_doc("Sales Order", sales_order_name)
+
+		# Change quantity of the item in ERPNext Sales Order
+		sales_order.items[0].qty = 2
+		sales_order.save()
+		sales_order.submit()
+
+		# Run synchronisation again, to sync the Sales Order changes
+		run_sales_order_sync(sales_order_name=sales_order.name)
+		self._flush_if_batch()
+		# A rejected PUT is logged rather than raised, so this is what catches the 400
+		mock_log_error.assert_not_called()
+
+		# Expect the quantity to have gone through, with the structured metadata intact
+		wc_order = self.get_woocommerce_order(order_id=wc_order_id)
+		wc_line_items = wc_order.get("line_items")
+		self.assertEqual(wc_line_items[0].get("quantity"), 2)
+		self.assertEqual(wc_line_items[0]["meta_data"][0]["key"], "_slw_data")
+		self.assertEqual(wc_line_items[0]["meta_data"][0]["value"], slw_data)
+
+		# Delete order in WooCommerce
+		self.delete_woocommerce_order(wc_order_id=wc_order_id)
+
+	@parameterized.expand(BATCH_MODES)
 	def test_sync_so_with_coupon(self, mock_log_error, _name, batch_enabled):
 		"""
 		Test that the Sales Order Synchronisation method creates a new Sales order when there is a new
