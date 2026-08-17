@@ -431,7 +431,7 @@ class TestItemWidePriceScopingOnCreatePath(FrappeTestCase):
 		self.assertEqual(get_item_sale_price_data(item_for_sync).price_list_rate, 90)
 
 
-class TestDisabledItemPriceScope(IntegrationTestCase):
+class TestDisabledItemPriceScope(FrappeTestCase):
 	"""
 	A disabled Item is skipped by price sync, so its product keeps the price of its last
 	synchronisation and an expired sale is never cleared.

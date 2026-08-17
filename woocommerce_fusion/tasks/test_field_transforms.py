@@ -2,7 +2,7 @@ import json
 from unittest.mock import patch
 
 import frappe
-from frappe.tests import UnitTestCase
+from frappe.tests.utils import FrappeTestCase
 from jsonpath_ng.ext import parse
 
 from woocommerce_fusion.tasks.field_transforms import (
@@ -49,7 +49,7 @@ def _barcodes_transform(value, *, direction, item, woocommerce_product, row):
 	return [{"code": barcode.barcode, "kind": barcode.barcode_type} for barcode in value or []]
 
 
-class TestTransformRegistry(UnitTestCase):
+class TestTransformRegistry(FrappeTestCase):
 	def test_get_registered_transforms_unwraps_frappes_listified_hook_values(self):
 		"""
 		Frappe listifies the values of dict-shaped hooks, so the registry has to unwrap them
@@ -79,7 +79,7 @@ class TestTransformRegistry(UnitTestCase):
 			self.assertIs(resolve_transform("dummy"), _dummy_transform)
 
 
-class TestApplyTransform(UnitTestCase):
+class TestApplyTransform(FrappeTestCase):
 	def test_apply_transform_returns_the_value_untouched_when_no_transform_is_set(self):
 		row = frappe._dict({"value_transform_method": None, "woocommerce_field_name": "$.sku"})
 
@@ -109,7 +109,7 @@ class TestApplyTransform(UnitTestCase):
 			)
 
 
-class TestSetMappedFieldValue(UnitTestCase):
+class TestSetMappedFieldValue(FrappeTestCase):
 	"""
 	`set_mapped_field_value` decides whether the Item gets saved. A false positive bumps
 	`Item.modified`, which makes the Item look newer than the WooCommerce Product on the next run and
@@ -167,7 +167,7 @@ class TestSetMappedFieldValue(UnitTestCase):
 		)
 
 
-class TestChildTableFieldMapping(UnitTestCase):
+class TestChildTableFieldMapping(FrappeTestCase):
 	"""
 	End-to-end coverage of both legs of a child table field map, using Item > Barcodes and an
 	outbound-only transform
@@ -332,7 +332,7 @@ class TestChildTableFieldMapping(UnitTestCase):
 		self.assertEqual(list(item.get("barcodes")), [])
 
 
-class TestScalarFieldMappingDirtiness(UnitTestCase):
+class TestScalarFieldMappingDirtiness(FrappeTestCase):
 	"""
 	`set_item_fields` used to mark the Item dirty for every mapped field on every run, whether the
 	value had changed or not. Each needless save bumps `Item.modified` and flips the sync direction on
@@ -383,7 +383,7 @@ class TestScalarFieldMappingDirtiness(UnitTestCase):
 		self.assertEqual(item.description, "Keep me")
 
 
-class TestCreateFilteredJsonpathTarget(UnitTestCase):
+class TestCreateFilteredJsonpathTarget(FrappeTestCase):
 	"""
 	`$.meta_data[?key='x'].value` matches nothing until WordPress has written that meta row. The
 	entry the filter selects is created so that a value can be written to it.

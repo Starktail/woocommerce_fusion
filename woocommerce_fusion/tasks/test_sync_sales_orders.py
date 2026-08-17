@@ -469,7 +469,7 @@ class TestWooCommerceSync(FrappeTestCase):
 		self.assertEqual(result, None)
 
 
-class TestCustomerSellingPriceList(IntegrationTestCase):
+class TestCustomerSellingPriceList(FrappeTestCase):
 	"""
 	A Sales Order created from a WooCommerce order used to keep the Selling Settings default price
 	list, so its rates showed next to the ones WooCommerce charged as if the customer got a discount.
@@ -517,7 +517,7 @@ class TestCustomerSellingPriceList(IntegrationTestCase):
 		self.assertIsNone(get_customer_selling_price_list(self.customer.name, "ZAR"))
 
 
-class TestCustomerMatching(IntegrationTestCase):
+class TestCustomerMatching(FrappeTestCase):
 	"""
 	Guest orders were keyed on the WooCommerce order ID, so every order from the same person created
 	another Customer. `find_existing_contact` could already find the person by email, but its result
@@ -595,7 +595,7 @@ class TestCustomerMatching(IntegrationTestCase):
 		)
 
 
-class TestOrderLineItemFieldMap(IntegrationTestCase):
+class TestOrderLineItemFieldMap(FrappeTestCase):
 	"""
 	The order line mapper matched nothing on a meta key WooCommerce had not written, then raised
 	IndexError on `matches[0]` for a product that had no name to raise the proper error against.
@@ -665,7 +665,7 @@ class TestOrderLineItemFieldMap(IntegrationTestCase):
 		self.assertFalse(dirty)
 
 
-class TestLineItemMetaDisplayValues(IntegrationTestCase):
+class TestLineItemMetaDisplayValues(FrappeTestCase):
 	"""
 	WooCommerce declares a line item's meta `display_value` as a string and 400s the whole PUT when an
 	object is sent for it. Line items are carried over from the order as fetched, so structured meta

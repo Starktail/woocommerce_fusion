@@ -1,7 +1,7 @@
 from unittest.mock import patch
 
 import frappe
-from frappe.tests import UnitTestCase
+from frappe.tests.utils import FrappeTestCase
 
 from woocommerce_fusion.exceptions import SyncDisabledError
 from woocommerce_fusion.woocommerce.doctype.woocommerce_order.woocommerce_order import WooCommerceOrder
@@ -19,7 +19,7 @@ def _server(name: str, **overrides) -> frappe._dict:
 	return server
 
 
-class TestInitApi(UnitTestCase):
+class TestInitApi(FrappeTestCase):
 	"""
 	A WooCommerce Server without API credentials can only answer 401. Leaving it in the API list used
 	to break the other servers too, because looking a record up walks the whole list and the failure

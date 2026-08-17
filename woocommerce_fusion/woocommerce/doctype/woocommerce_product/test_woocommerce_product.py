@@ -94,7 +94,7 @@ class TestWooCommerceProduct(FrappeTestCase):
 		self.assertNotIn("sale_price", result)
 
 
-class TestLoadFromDbEndpoint(UnitTestCase):
+class TestLoadFromDbEndpoint(FrappeTestCase):
 	"""
 	A WooCommerce variation lives under its parent product, so load_from_db has to address
 	products/{parent_id}/variations/{id} instead of products/{id}.

@@ -392,7 +392,7 @@ class TestWooCommerceSync(FrappeTestCase):
 		item_mock.item.save.assert_called_once()
 
 
-class TestRunItemSyncFromHook(UnitTestCase):
+class TestRunItemSyncFromHook(FrappeTestCase):
 	"""
 	Everything the Item hook enqueues has to be enqueued after commit. A worker that starts
 	before the Item's transaction commits reads the document as it was before the edit, finds
