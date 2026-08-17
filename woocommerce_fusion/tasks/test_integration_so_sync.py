@@ -1162,3 +1162,77 @@ class TestIntegrationWooCommerceSync(TestIntegrationWooCommerce):
 
 		# Delete order in WooCommerce
 		# self.delete_woocommerce_order(wc_order_id=wc_order_id)
+
+	@parameterized.expand(BATCH_MODES)
+	def test_sync_uses_the_customers_default_price_list(self, mock_log_error, _name, batch_enabled):
+		"""
+		A Sales Order created from a WooCommerce order takes the Customer's price list, not the Selling
+		Settings default. The wrong list's rates would show next to the rates WooCommerce charged, as if
+		the customer had been given a discount.
+		"""
+		self._set_batch_mode(batch_enabled)
+		email = "trade@customer.com"
+
+		# Create a new order in WooCommerce, for an identified customer rather than a guest
+		wc_order_id, wc_order_name = self.post_woocommerce_order(
+			payment_method_title="Doge", item_price=10, item_qty=1, customer_id=1, email=email
+		)
+
+		# Give the customer a price list priced in the order's own currency
+		currency = self.get_woocommerce_order(order_id=wc_order_id)["currency"]
+		price_list = create_selling_price_list("_Test Woo Trade Selling", currency)
+		create_customer_with_price_list(email, price_list)
+
+		# Run synchronisation
+		run_sales_order_sync(woocommerce_order_name=wc_order_name)
+		self._flush_if_batch()
+
+		mock_log_error.assert_not_called()
+
+		sales_order_name = frappe.get_value("Sales Order", {"woocommerce_id": wc_order_id}, "name")
+		sales_order = frappe.get_doc("Sales Order", sales_order_name)
+		self.assertEqual(sales_order.selling_price_list, price_list)
+
+		# Delete order in WooCommerce
+		self.delete_woocommerce_order(wc_order_id=wc_order_id)
+
+
+def create_selling_price_list(price_list_name: str, currency: str) -> str:
+	if frappe.db.exists("Price List", price_list_name):
+		frappe.db.set_value("Price List", price_list_name, "currency", currency)
+		return price_list_name
+
+	return (
+		frappe.get_doc(
+			{
+				"doctype": "Price List",
+				"price_list_name": price_list_name,
+				"currency": currency,
+				"selling": 1,
+				"enabled": 1,
+			}
+		)
+		.insert(ignore_permissions=True)
+		.name
+	)
+
+
+def create_customer_with_price_list(email: str, price_list: str) -> str:
+	"""
+	A Customer the sync will match on, so that it does not create one of its own for this order
+	"""
+	name = frappe.get_value("Customer", {"woocommerce_identifier": email}, "name")
+	if name:
+		frappe.db.set_value("Customer", name, "default_price_list", price_list)
+		return name
+
+	customer = frappe.get_doc(
+		{
+			"doctype": "Customer",
+			"customer_name": f"Test Trade Customer {email}",
+			"customer_type": "Individual",
+			"woocommerce_identifier": email,
+			"default_price_list": price_list,
+		}
+	).insert(ignore_permissions=True)
+	return customer.name

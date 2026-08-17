@@ -112,7 +112,8 @@ class SynchroniseItemPrice(SynchroniseWooCommerce):
 			and_conditions = []
 			and_conditions.append(ip.price_list == self.wc_server.price_list)
 			and_conditions.append(iwc.woocommerce_server == self.wc_server.name)
-			and_conditions.append(item.disabled == 0)
+			if not self.wc_server.sync_prices_for_disabled_items:
+				and_conditions.append(item.disabled == 0)
 			and_conditions.append(iwc.woocommerce_id.isnotnull())
 			and_conditions.append(iwc.enabled == 1)
 			and_conditions.extend(item_wide_price_conditions(ip))
@@ -158,11 +159,14 @@ class SynchroniseItemPrice(SynchroniseWooCommerce):
 		and_conditions = [
 			ip.price_list == self.wc_server.sales_price_list,
 			iwc.woocommerce_server == self.wc_server.name,
-			item.disabled == 0,
 			iwc.woocommerce_id.isnotnull(),
 			iwc.enabled == 1,
 			*item_wide_price_conditions(ip),
 		]
+		# Both queries have to agree on this. A disabled Item that reached the regular price list but
+		# not this map would have its sale price cleared as though the sale had been withdrawn.
+		if not self.wc_server.sync_prices_for_disabled_items:
+			and_conditions.append(item.disabled == 0)
 		if self.item_code:
 			and_conditions.append(ip.item_code == self.item_code)
 
