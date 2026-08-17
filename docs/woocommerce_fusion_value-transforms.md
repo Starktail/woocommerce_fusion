@@ -4,6 +4,8 @@ A *Value Transform* on a **WooCommerce Server** > *Items* > *Fields Mapping* row
 
 **This page is for advanced users.** A transform is Python code that you deploy in your own app - see [Custom Fields Mapping](/woocommerce_fusion_items#custom-fields-mapping) for mapping fields that need no code.
 
+![](images/item-fields-mapping-3.png)
+
 ## When you need one
 
 On its own, a mapping row copies a value straight across - it does no reshaping. Add a transform when:
