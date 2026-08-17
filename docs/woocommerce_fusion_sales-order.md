@@ -79,11 +79,37 @@ Each **Customer** record has a `woocommerce_identifier` custom field. This ident
 
 | Case                                                                                                                                        | `woocommerce_identifier`    |
 | ------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------- |
-| Guest (`customer_id` on **WooCommerce Order** is empty or 0)                                                                                | `Guest-{order_id}`          |
 | Company (`billing.company` on **WooCommerce Order** is set), **Only if *Enable Dual Accounts for Same Email (Private/Company)* is checked** | `{billing.email}-{company}` |
 | Individual (`billing.company` on **WooCommerce Order** is not set)                                                                          | `billing.email`             |
+| Guest with no email address at all                                                                                                          | `Guest-{order_id}`          |
 
 ERPNext **Customer** records are created as Individual by default. If the WooCommerce Order company field contains a value other than "Private" or "Pvt", the **Customer** record is created as Company instead.
+
+### Matching an existing Customer
+
+Guest orders are keyed on their email address like any other order. Only a guest who gave no email at all falls back to `Guest-{order_id}`, which can never match another order.
+
+When no **Customer** carries the identifier, synchronisation looks for an existing one before creating a new record:
+
+1. A **Customer** whose `woocommerce_identifier` is that email address
+2. A **Customer** linked to a **Contact** that holds that email address
+3. A **Customer** already ordering from the same company email domain, if that domain is listed under **WooCommerce Server** > *Customers Sync* > *Match Customers by Email Domain*
+
+A **Customer** found this way is linked to, not rewritten: its name and identifier are left as they are, because renaming a **Customer** renames it on every document it already appears on.
+
+*Enable Dual Accounts for Same Email (Private/Company)* is unaffected. Where it is on and the order carries a company, only the exact identifier and a listed company domain are considered - matching on the email address alone would defeat the split it exists to create.
+
+### Matching by email domain
+
+List one company email domain per line, e.g. `acme.co.za`, to put every buyer at that company on one **Customer**. Only listed domains are matched, deliberately: most customers order from a free mail provider, so matching every domain would put all of them on a single account.
+
+### Finding existing duplicates
+
+Earlier versions created a new **Customer** for every guest order. The **WooCommerce Duplicate Customers** report groups **Customer** records that look like the same buyer - by email address, by company email domain, or by name - with order counts and values so that the record worth keeping is obvious. It only reports; use *Merge with* on the **Customer** form to act on a group.
+
+Group by *Email* first: an address identifies one buyer, so those groups need no judgement. *Name* is the widest net and the noisiest.
+
+When grouping by *Email Domain*, the *Ignore Email Domains* filter holds the providers whose address says nothing about who the customer is. It defaults to the global providers only - add the ISPs and regional providers your customers use, or every buyer on one of them is reported as a group.
 
 ## Contact Synchronisation
 

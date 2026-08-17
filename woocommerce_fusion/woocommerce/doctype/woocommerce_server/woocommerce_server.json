@@ -53,6 +53,7 @@
   "payment_method_gl_account_mapping",
   "customers_sync_section",
   "enable_dual_accounts",
+  "customer_matching_email_domains",
   "section_addresses",
   "address_title_convention",
   "shipping_methods_sync_section",
@@ -589,6 +590,13 @@
    "fieldname": "enable_dual_accounts",
    "fieldtype": "Check",
    "label": "Enable Dual Accounts for Same Email (Private/Company)"
+  },
+  {
+   "description": "One company email domain per line, e.g. <code>acme.co.za</code>. Orders from an address on a listed domain are linked to the same <b>Customer</b>, so that several buyers at one company share an account. Only listed domains are matched - matching every domain would put every customer using the same free mail provider on one account.",
+   "documentation_url": "https://woocommerce-fusion-docs.starktail.com/woocommerce_fusion_sales-order.html#customer-synchronisation",
+   "fieldname": "customer_matching_email_domains",
+   "fieldtype": "Small Text",
+   "label": "Match Customers by Email Domain"
   },
   {
    "default": "0",
