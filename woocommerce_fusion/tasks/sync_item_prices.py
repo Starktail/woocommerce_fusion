@@ -4,9 +4,10 @@ import frappe
 from erpnext.stock.doctype.item_price.item_price import ItemPrice
 from frappe import qb
 from frappe.query_builder import Criterion
+from frappe.query_builder.functions import IfNull
 from frappe.utils import get_datetime
 
-from woocommerce_fusion.tasks.sync import SynchroniseWooCommerce
+from woocommerce_fusion.tasks.sync import SynchroniseWooCommerce, get_variation_parent_woocommerce_id
 from woocommerce_fusion.woocommerce.doctype.woocommerce_product.woocommerce_product import (
 	WooCommerceProduct,
 )
@@ -29,6 +30,17 @@ def _format_sale_date(date_value) -> str | None:
 	if not date_value:
 		return None
 	return get_datetime(date_value).strftime("%Y-%m-%dT%H:%M:%S")
+
+
+def item_wide_price_conditions(ip) -> list:
+	"""
+	Conditions restricting an Item Price query to rows that apply to the whole item.
+	"""
+	return [
+		IfNull(ip.batch_no, "") == "",
+		IfNull(ip.customer, "") == "",
+		IfNull(ip.supplier, "") == "",
+	]
 
 
 def update_item_price_for_woocommerce_item_from_hook(doc, method):
@@ -100,9 +112,11 @@ class SynchroniseItemPrice(SynchroniseWooCommerce):
 			and_conditions = []
 			and_conditions.append(ip.price_list == self.wc_server.price_list)
 			and_conditions.append(iwc.woocommerce_server == self.wc_server.name)
-			and_conditions.append(item.disabled == 0)
+			if not self.wc_server.sync_prices_for_disabled_items:
+				and_conditions.append(item.disabled == 0)
 			and_conditions.append(iwc.woocommerce_id.isnotnull())
 			and_conditions.append(iwc.enabled == 1)
+			and_conditions.extend(item_wide_price_conditions(ip))
 			if self.item_code:
 				and_conditions.append(ip.item_code == self.item_code)
 
@@ -112,7 +126,14 @@ class SynchroniseItemPrice(SynchroniseWooCommerce):
 				.on(iwc.parent == ip.item_code)
 				.inner_join(item)
 				.on(item.name == ip.item_code)
-				.select(ip.name, ip.item_code, ip.price_list_rate, iwc.woocommerce_server, iwc.woocommerce_id)
+				.select(
+					ip.name,
+					ip.item_code,
+					ip.price_list_rate,
+					iwc.woocommerce_server,
+					iwc.woocommerce_id,
+					item.variant_of,
+				)
 				.where(Criterion.all(and_conditions))
 				.run(as_dict=True)
 			)
@@ -138,10 +159,14 @@ class SynchroniseItemPrice(SynchroniseWooCommerce):
 		and_conditions = [
 			ip.price_list == self.wc_server.sales_price_list,
 			iwc.woocommerce_server == self.wc_server.name,
-			item.disabled == 0,
 			iwc.woocommerce_id.isnotnull(),
 			iwc.enabled == 1,
+			*item_wide_price_conditions(ip),
 		]
+		# Both queries have to agree on this. A disabled Item that reached the regular price list but
+		# not this map would have its sale price cleared as though the sale had been withdrawn.
+		if not self.wc_server.sync_prices_for_disabled_items:
+			and_conditions.append(item.disabled == 0)
 		if self.item_code:
 			and_conditions.append(ip.item_code == self.item_code)
 
@@ -175,6 +200,11 @@ class SynchroniseItemPrice(SynchroniseWooCommerce):
 				domain=item_price.woocommerce_server, resource_id=item_price.woocommerce_id
 			)
 			wc_product = frappe.get_doc({"doctype": "WooCommerce Product", "name": wc_product_name})
+			# Handle variants
+			if item_price.variant_of:
+				wc_product.parent_id = get_variation_parent_woocommerce_id(
+					item_price.woocommerce_server, item_price.item_code
+				)
 
 			try:
 				wc_product.load_from_db()

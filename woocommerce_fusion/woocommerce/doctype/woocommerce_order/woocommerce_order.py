@@ -55,33 +55,11 @@ class WooCommerceOrder(WooCommerceResource):
 	doctype = "WooCommerce Order"
 	resource: str = "orders"
 
-	@staticmethod
-	def _init_api() -> list[WooCommerceAPI]:
-		"""
-		Initialise the WooCommerce API
-		"""
-		wc_servers = frappe.get_all("WooCommerce Server")
-		wc_servers = [frappe.get_doc("WooCommerce Server", server.name) for server in wc_servers]
+	api_class = WooCommerceOrderAPI
 
-		wc_api_list = [
-			WooCommerceOrderAPI(
-				api=APIWithRequestLogging(
-					url=server.woocommerce_server_url,
-					consumer_key=server.api_consumer_key,
-					consumer_secret=server.api_consumer_secret,
-					version="wc/v3",
-					timeout=40,
-					verify_ssl=verify_ssl,
-				),
-				woocommerce_server_url=server.woocommerce_server_url,
-				woocommerce_server=server.name,
-				wc_plugin_advanced_shipment_tracking=server.wc_plugin_advanced_shipment_tracking,
-			)
-			for server in wc_servers
-			if server.enable_sync == 1
-		]
-
-		return wc_api_list
+	@classmethod
+	def _api_kwargs(cls, server) -> dict:
+		return {"wc_plugin_advanced_shipment_tracking": server.wc_plugin_advanced_shipment_tracking}
 
 	# use "args" despite frappe-semgrep-rules.rules.overusing-args, following convention in ERPNext
 	# nosemgrep

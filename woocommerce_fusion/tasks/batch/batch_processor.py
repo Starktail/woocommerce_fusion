@@ -46,7 +46,7 @@ class BatchProcessor:
 		if sync_type == "order" and direction == "inbound":
 			return self._process_order_inbound_chunk(rows, flush_reason)
 		if direction == "inbound":
-			return self._process_item_inbound_chunk(rows, flush_reason)
+			return self._process_item_inbound_chunk(rows, flush_reason, parent_id=parent_id)
 		# item / item_price / stock + outbound → products batch endpoint
 		if sync_type in ("item_price", "stock"):
 			return self._process_simple_update_chunk(rows, resource_type, parent_id, flush_reason)
@@ -67,7 +67,10 @@ class BatchProcessor:
 		wc_products_map: dict[str, WooCommerceProduct] = {}
 		if rows_to_update:
 			try:
-				wc_products_map = self._bulk_get_products([r.woocommerce_id for r in rows_to_update])
+				wc_products_map = self._bulk_get_products(
+					[r.woocommerce_id for r in rows_to_update],
+					parent_id=parent_id if resource_type == "product_variation" else None,
+				)
 			except Exception:
 				self._mark_all_failed(rows_to_update, f"Bulk GET failed: {frappe.get_traceback()}", None)
 				pre_fail += len(rows_to_update)
@@ -198,7 +201,9 @@ class BatchProcessor:
 
 	# ── Item inbound (bulk GET → ERPNext writes) ─────────────────────────────────
 
-	def _process_item_inbound_chunk(self, rows: list, flush_reason: str) -> tuple[int, int]:
+	def _process_item_inbound_chunk(
+		self, rows: list, flush_reason: str, parent_id: str | None = None
+	) -> tuple[int, int]:
 		wc_ids = [r.woocommerce_id for r in rows if r.woocommerce_id]
 		if not wc_ids:
 			self._mark_all_failed(rows, "Missing WooCommerce ID for inbound sync", None)
@@ -212,7 +217,7 @@ class BatchProcessor:
 		)
 
 		try:
-			wc_products_map = self._bulk_get_products(wc_ids)
+			wc_products_map = self._bulk_get_products(wc_ids, parent_id=parent_id)
 		except Exception:
 			self._mark_all_failed(rows, f"Bulk GET failed: {frappe.get_traceback()}", batch_log.name)
 			self._finalise_batch_log(batch_log, 0, len(rows))
@@ -336,16 +341,20 @@ class BatchProcessor:
 
 	# ── Batch execution helpers ──────────────────────────────────────────────────
 
-	def _bulk_get_products(self, wc_ids: list) -> dict:
-		wc_products = frappe.get_doc({"doctype": "WooCommerce Product"}).get_list(
-			args={
-				"filters": [["WooCommerce Product", "id", "in", [str(i) for i in wc_ids]]],
-				"page_length": 100,
-				"start": 0,
-				"servers": [self.server_name],
-				"as_doc": True,
-			}
-		)
+	def _bulk_get_products(self, wc_ids: list, parent_id: str | None = None) -> dict:
+		args = {
+			"filters": [["WooCommerce Product", "id", "in", [str(i) for i in wc_ids]]],
+			"page_length": 100,
+			"start": 0,
+			"servers": [self.server_name],
+			"as_doc": True,
+		}
+		# Variations are not listed by the products endpoint; they live under their parent
+		if parent_id:
+			args["endpoint"] = f"products/{parent_id}/variations"
+			args["metadata"] = {}
+
+		wc_products = frappe.get_doc({"doctype": "WooCommerce Product"}).get_list(args=args)
 		return {str(p.woocommerce_id): p for p in (wc_products or [])}
 
 	def _bulk_get_orders(self, wc_ids: list, status: str | None = None) -> dict:
@@ -397,6 +406,8 @@ class BatchProcessor:
 		batch_log.successful_items = success_count
 		batch_log.failed_items = fail_count
 		batch_log.status = "Completed" if fail_count == 0 else "Failed" if success_count == 0 else "Partial"
+		if batch_log.flushed_at:
+			batch_log.duration = (now_datetime() - get_datetime(batch_log.flushed_at)).total_seconds()
 		batch_log.save(ignore_permissions=True)
 		if not frappe.flags.in_test:
 			# Commit the WooCommerce Batch Log now so the audit record of what was sent to
@@ -551,11 +562,6 @@ class BatchProcessor:
 		)
 
 	def _mark_failed(self, queue_row_name: str, error: str, batch_log_name: str | None):
-		updates = {"status": "Failed", "error_message": error[:2000]}
-		if batch_log_name:
-			updates["batch_log"] = batch_log_name
-		frappe.db.set_value("WooCommerce Sync Queue", queue_row_name, updates, update_modified=False)
-
 		ctx = (
 			frappe.db.get_value(
 				"WooCommerce Sync Queue",
@@ -573,7 +579,7 @@ class BatchProcessor:
 			)
 			or {}
 		)
-		frappe.log_error(
+		error_log = frappe.log_error(
 			"WooCommerce Batch Error",
 			f"Queue row: {queue_row_name}\n"
 			f"Server: {ctx.get('woocommerce_server')}\n"
@@ -582,7 +588,17 @@ class BatchProcessor:
 			f"Reference: {ctx.get('reference_doctype') or ''} {ctx.get('reference_name') or ''}\n"
 			f"Batch Log: {batch_log_name or '-'}\n\n"
 			f"{error}",
+			reference_doctype="WooCommerce Sync Queue",
+			reference_name=queue_row_name,
 		)
+
+		updates = {"status": "Failed", "error_message": error[:2000]}
+		if batch_log_name:
+			updates["batch_log"] = batch_log_name
+		error_log_name = getattr(error_log, "name", None)
+		if isinstance(error_log_name, str):
+			updates["error_log"] = error_log_name
+		frappe.db.set_value("WooCommerce Sync Queue", queue_row_name, updates, update_modified=False)
 
 	def _mark_all_failed(self, rows: list, error: str, batch_log_name: str | None):
 		for row in rows:

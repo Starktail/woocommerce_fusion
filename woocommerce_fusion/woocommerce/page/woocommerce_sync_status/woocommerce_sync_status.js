@@ -71,11 +71,11 @@ frappe.pages["woocommerce-sync-status"].on_page_load = function (wrapper) {
     )}</span>`;
   }
 
-  function recordLink(doctype, name) {
-    if (!doctype || !name) return frappe.utils.escape_html(name || "");
+  function recordLink(doctype, name, label) {
+    if (!doctype || !name) return frappe.utils.escape_html(label || name || "");
     return `<a href="/app/${frappe.router.slug(doctype)}/${encodeURIComponent(
       name,
-    )}">${frappe.utils.escape_html(name)}</a>`;
+    )}">${frappe.utils.escape_html(label || name)}</a>`;
   }
 
   // Inbound rows have no ERPNext document yet, so fall back to the WooCommerce id.
@@ -90,6 +90,17 @@ frappe.pages["woocommerce-sync-status"].on_page_load = function (wrapper) {
     }
     if (r.reference_name) return frappe.utils.escape_html(r.reference_name);
     return "";
+  }
+
+  // Errors are only linked for rows failed after the error_log field was added.
+  function errorCell(r) {
+    const text = frappe.utils.escape_html(
+      (r.error_message || "").slice(0, 200),
+    );
+    if (!r.error_log) return text;
+    return `<a href="/app/error-log/${encodeURIComponent(
+      r.error_log,
+    )}" title="${__("Open Error Log")}">${text}</a>`;
   }
 
   function renderServerCards(data) {
@@ -208,7 +219,11 @@ frappe.pages["woocommerce-sync-status"].on_page_load = function (wrapper) {
       ["Server", "Resource", "Status", "Total", "Success", "Failed", "Flushed"],
       (r) => `<tr>
 				<td>${frappe.utils.escape_html(r.woocommerce_server)}</td>
-				<td>${frappe.utils.escape_html(r.resource_type || "")}</td>
+				<td>${recordLink(
+          "WooCommerce Batch Log",
+          r.name,
+          r.resource_type || r.name,
+        )}</td>
 				<td>${badge(r.status)}</td>
 				<td>${r.total_items || 0}</td>
 				<td>${r.successful_items || 0}</td>
@@ -226,12 +241,26 @@ frappe.pages["woocommerce-sync-status"].on_page_load = function (wrapper) {
 				<td>${frappe.utils.escape_html(r.sync_type)}</td>
 				<td>${frappe.utils.escape_html(r.direction)}</td>
 				<td>${referenceCell(r)}</td>
-				<td class="small text-danger">${frappe.utils.escape_html(
-          (r.error_message || "").slice(0, 200),
-        )}</td>
-				<td><button class="btn btn-xs btn-default wc-retry" data-name="${frappe.utils.escape_html(
-          r.name,
-        )}">${__("Retry")}</button></td>
+				<td class="small text-danger">${errorCell(r)}</td>
+				<td>
+					<button class="btn btn-xs btn-default wc-retry" data-name="${frappe.utils.escape_html(
+            r.name,
+          )}">${__("Retry")}</button>
+					${
+            r.error_log
+              ? `<a class="btn btn-xs btn-default" href="/app/error-log/${encodeURIComponent(
+                  r.error_log,
+                )}">${__("Error Log")}</a>`
+              : ""
+          }
+					${
+            r.batch_log
+              ? `<a class="btn btn-xs btn-default" href="/app/woocommerce-batch-log/${encodeURIComponent(
+                  r.batch_log,
+                )}">${__("Batch Log")}</a>`
+              : ""
+          }
+				</td>
 			</tr>`,
       {
         kind: "failed",

@@ -11,6 +11,11 @@ from woocommerce_fusion.woocommerce.woocommerce_api import WC_RESOURCE_DELIMITER
 default_company = get_default_company() or "Some Company (Pty) Ltd"
 default_bank = "Test Bank"
 default_bank_account = "Checking Account"
+default_warehouse = "Stores - SC"
+# Must match the timezone the WooCommerce test instance is set to in wp_woo_blueprint.json:
+# WooCommerce reports date_modified in its own local time, and sync conflict resolution
+# compares that against the ERPNext document's `modified`, so the two have to agree.
+default_time_zone = "Africa/Johannesburg"
 
 verify_ssl = not frappe._dev_server
 
@@ -33,6 +38,13 @@ class TestIntegrationWooCommerce(FrappeTestCase):
 		self.wc_consumer_secret = os.getenv("WOO_API_CONSUMER_SECRET")
 		if not all([self.wc_url, self.wc_consumer_key, self.wc_consumer_secret]):
 			raise ValueError("Missing environment variables")
+
+		# erpnext.tests.utils instantiates BootStrapTestData() at import time, which rewrites
+		# System Settings.time_zone to Asia/Kolkata on every run - after before_tests has already
+		# completed the setup wizard. Restore it here, where it runs after all test modules have
+		# been imported.
+		if frappe.db.get_single_value("System Settings", "time_zone") != default_time_zone:
+			frappe.db.set_single_value("System Settings", "time_zone", default_time_zone)
 
 		# Set WooCommerce Settings
 		wc_servers = frappe.get_all("WooCommerce Server", filters={"woocommerce_server_url": self.wc_url})
@@ -60,6 +72,13 @@ class TestIntegrationWooCommerce(FrappeTestCase):
 		wc_server.api_consumer_secret = self.wc_consumer_secret
 		wc_server.enable_price_list_sync = 1
 		wc_server.price_list = "_Test Price list"
+		# Reset the Item matching settings, so that a test that changes them cannot leak into
+		# the tests that follow it in the same class
+		wc_server.name_by = "WooCommerce ID"
+		wc_server.match_items_by_sku = 0
+		# Same for the disabled-Item settings
+		wc_server.sync_prices_for_disabled_items = 0
+		wc_server.push_zero_stock_for_disabled_items = 0
 		bank_account = create_bank_account()
 		gl_account = create_gl_account_for_bank()
 		create_gl_account_for_tax()
@@ -250,6 +269,8 @@ class TestIntegrationWooCommerce(FrappeTestCase):
 		attributes: list[str] | None = None,
 		image_url: str | None = None,
 		meta_data: list[dict] | None = None,
+		category_ids: list[int] | None = None,
+		sku: str | None = None,
 	) -> int:
 		"""
 		Create a dummy product on a WooCommerce testing site
@@ -258,7 +279,8 @@ class TestIntegrationWooCommerce(FrappeTestCase):
 
 		from requests_oauthlib import OAuth1Session
 
-		if not attributes:
+		# An explicit empty list means "no attributes", which is a valid WooCommerce product
+		if attributes is None:
 			attributes = ["Material Type", "Volume"]
 
 		if type in ["variable", "variation"]:
@@ -311,6 +333,12 @@ class TestIntegrationWooCommerce(FrappeTestCase):
 
 		if meta_data:
 			payload["meta_data"] = meta_data
+
+		if category_ids:
+			payload["categories"] = [{"id": category_id} for category_id in category_ids]
+
+		if sku:
+			payload["sku"] = sku
 
 		payload = json.dumps(payload)
 		headers = {"Content-Type": "application/json"}
@@ -474,6 +502,30 @@ class TestIntegrationWooCommerce(FrappeTestCase):
 
 		return response.json()
 
+	def post_product_category(self, category_name: str) -> int:
+		"""
+		Create a product category on a WooCommerce testing site, or return the existing one
+		"""
+		import json
+
+		from requests_oauthlib import OAuth1Session
+
+		oauth = OAuth1Session(self.wc_consumer_key, client_secret=self.wc_consumer_secret)
+		if not verify_ssl:
+			oauth.verify = False
+
+		url = f"{self.wc_url}/wp-json/wc/v3/products/categories"
+		response = oauth.post(
+			url, headers={"Content-Type": "application/json"}, data=json.dumps({"name": category_name})
+		)
+		category = response.json()
+
+		# WooCommerce rejects a duplicate name, and hands back the existing id
+		if category.get("code") == "term_exists":
+			return category["data"]["resource_id"]
+
+		return category["id"]
+
 	def post_product_attribute(self, attribute_name: str, attribute_slug: str):
 		"""
 		Post product attribute to WooCommerce
@@ -530,6 +582,23 @@ class TestIntegrationWooCommerce(FrappeTestCase):
 		response = oauth.post(url, headers=headers, data=payload)
 
 		return response.json()["id"]
+
+	def update_woocommerce_variation(self, parent_id: int, variation_id: int, payload: dict) -> dict:
+		"""
+		Update a variation on a WooCommerce testing site
+		"""
+		import json
+
+		from requests_oauthlib import OAuth1Session
+
+		oauth = OAuth1Session(self.wc_consumer_key, client_secret=self.wc_consumer_secret)
+		if not verify_ssl:
+			oauth.verify = False
+
+		url = f"{self.wc_url}/wp-json/wc/v3/products/{parent_id}/variations/{variation_id}"
+		response = oauth.put(url, headers={"Content-Type": "application/json"}, data=json.dumps(payload))
+
+		return response.json()
 
 
 def create_bank_account(bank_name=default_bank, account_name="_Test Bank", company=default_company):
@@ -597,7 +666,7 @@ def create_gl_account_for_bank(account_name="_Test Bank"):
 	except frappe.DuplicateEntryError:
 		pass
 
-	return frappe.get_doc("Account", {"account_name": account_name})
+	return frappe.get_doc("Account", {"account_name": account_name, "company": default_company})
 
 
 def create_gl_account_for_tax():

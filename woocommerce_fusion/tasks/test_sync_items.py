@@ -3,7 +3,11 @@ from unittest.mock import MagicMock, Mock, call, patch
 import frappe
 from frappe.tests.utils import FrappeTestCase
 
-from woocommerce_fusion.tasks.sync_items import ERPNextItemToSync, SynchroniseItem
+from woocommerce_fusion.tasks.sync_items import (
+	ERPNextItemToSync,
+	SynchroniseItem,
+	run_item_sync_from_hook,
+)
 from woocommerce_fusion.woocommerce.woocommerce_api import (
 	generate_woocommerce_record_name_from_domain_and_id,
 )
@@ -386,3 +390,37 @@ class TestWooCommerceSync(FrappeTestCase):
 
 		self.assertEqual(wc_product_mock.type, "variable")
 		item_mock.item.save.assert_called_once()
+
+
+class TestRunItemSyncFromHook(FrappeTestCase):
+	"""
+	Everything the Item hook enqueues has to be enqueued after commit. A worker that starts
+	before the Item's transaction commits reads the document as it was before the edit, finds
+	nothing to push to WooCommerce, and queues no sync operation at all.
+	"""
+
+	@patch("woocommerce_fusion.tasks.sync_items.frappe.msgprint")
+	@patch("woocommerce_fusion.tasks.sync_items.frappe.get_cached_doc")
+	@patch("woocommerce_fusion.tasks.sync_items.frappe.enqueue")
+	def test_every_job_is_enqueued_after_commit(self, mock_enqueue, mock_get_cached_doc, _mock_msgprint):
+		mock_get_cached_doc.return_value = frappe._dict(enable_sync=1)
+		item = frappe._dict(
+			doctype="Item",
+			name="ITEM-1",
+			flags=frappe._dict(),
+			woocommerce_servers=[frappe._dict(woocommerce_server="site1.example.com")],
+		)
+
+		in_test = frappe.flags.in_test
+		frappe.flags.in_test = False
+		try:
+			run_item_sync_from_hook(item, "on_update")
+		finally:
+			frappe.flags.in_test = in_test
+
+		self.assertTrue(mock_enqueue.call_args_list)
+		for enqueue_call in mock_enqueue.call_args_list:
+			self.assertTrue(
+				enqueue_call.kwargs.get("enqueue_after_commit"),
+				f"{enqueue_call.args[0]} is enqueued before the transaction commits",
+			)

@@ -48,6 +48,21 @@ class WooCommerceProduct(WooCommerceResource):
 
 		return products
 
+	@classmethod
+	def pre_init_document(cls, record: dict, woocommerce_server_url: str):
+		return super().pre_init_document(cls.normalise_variation_image(record), woocommerce_server_url)
+
+	@staticmethod
+	def normalise_variation_image(product: dict) -> dict:
+		"""
+		WooCommerce gives a variation a single `image` object, where a product gets an `images`
+		array.
+		"""
+		if "images" not in product:
+			image = product.get("image")
+			product["images"] = [image] if image else []
+		return product
+
 	def after_load_from_db(self, product: dict):
 		product.pop("name")
 		product = self.set_title(product)
@@ -129,14 +144,20 @@ class WooCommerceProduct(WooCommerceResource):
 
 		# Convert numeric fields back to strings required by WC API
 		product["weight"] = str(product["weight"])
-		product["regular_price"] = str(product["regular_price"])
 
-		# Sale price: send empty string to clear an existing sale, or string value to set one.
-		# Popping the field entirely has no effect on an existing WC sale price.
-		if product.get("sale_price") and float(product["sale_price"]) > 0:
-			product["sale_price"] = str(product["sale_price"])
+		if product.get("type") == "variable":
+			# A variable product's price lives on its variations
+			product.pop("regular_price", None)
+			product.pop("sale_price", None)
 		else:
-			product["sale_price"] = ""
+			product["regular_price"] = str(product["regular_price"])
+
+			# Sale price: send empty string to clear an existing sale, or string value to set one.
+			# Popping the field entirely has no effect on an existing WC sale price.
+			if product.get("sale_price") and float(product["sale_price"]) > 0:
+				product["sale_price"] = str(product["sale_price"])
+			else:
+				product["sale_price"] = ""
 
 		# Sale date fields: normalise to ISO 8601 string, or None to clear via API
 		for date_field in ("date_on_sale_from", "date_on_sale_to"):

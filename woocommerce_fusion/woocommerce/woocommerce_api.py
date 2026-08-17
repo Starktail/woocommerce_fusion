@@ -39,21 +39,37 @@ class WooCommerceAPI:
 class WooCommerceResource(Document):
 	wc_api_list: list[WooCommerceAPI] | None = None
 	current_wc_api: WooCommerceAPI | None = None
+	api_class = WooCommerceAPI
 
 	resource: str | None = None
 	child_resource: str | None = None
 	field_setter_map: dict = None
 
-	@staticmethod
-	def _init_api() -> list[WooCommerceAPI]:
+	@classmethod
+	def _api_kwargs(cls, server) -> dict:
+		"""
+		Extra keyword arguments this resource's API class takes from the WooCommerce Server
+		"""
+		return {}
+
+	@classmethod
+	def _init_api(cls) -> list[WooCommerceAPI]:
 		"""
 		Initialise the WooCommerce API
 		"""
 		wc_servers = frappe.get_all("WooCommerce Server")
 		wc_servers = [frappe.get_doc("WooCommerce Server", server.name) for server in wc_servers]
+		enabled_servers = [server for server in wc_servers if server.enable_sync == 1]
+
+		# A server with no API credentials cannot answer anything but a 401.
+		servers_without_credentials = [
+			server.name
+			for server in enabled_servers
+			if not (server.api_consumer_key and server.api_consumer_secret)
+		]
 
 		wc_api_list = [
-			WooCommerceAPI(
+			cls.api_class(
 				api=APIWithRequestLogging(
 					url=server.woocommerce_server_url,
 					consumer_key=server.api_consumer_key,
@@ -64,12 +80,20 @@ class WooCommerceResource(Document):
 				),
 				woocommerce_server_url=server.woocommerce_server_url,
 				woocommerce_server=server.name,
+				**cls._api_kwargs(server),
 			)
-			for server in wc_servers
-			if server.enable_sync == 1
+			for server in enabled_servers
+			if server.name not in servers_without_credentials
 		]
 
 		if len(wc_api_list) == 0:
+			if servers_without_credentials:
+				frappe.throw(
+					_("Please set the API Consumer Key and Secret on WooCommerce Server {0}").format(
+						", ".join(servers_without_credentials)
+					),
+					SyncDisabledError,
+				)
 			frappe.throw(_("At least one WooCommerce Server should be Enabled"), SyncDisabledError)
 
 		return wc_api_list
@@ -116,9 +140,17 @@ class WooCommerceResource(Document):
 			(api for api in self.wc_api_list if wc_server_domain in api.woocommerce_server_url), None
 		)
 
+		# Child resources (e.g. product variations) live under their parent's endpoint. Set
+		# parent_id on the document before calling load_from_db() to read one.
+		endpoint = (
+			f"{self.resource}/{self.parent_id}/{self.child_resource}/{record_id}"
+			if self.get("parent_id") and self.child_resource
+			else f"{self.resource}/{record_id}"
+		)
+
 		# Get WooCommerce Record
 		try:
-			record = self.current_wc_api.api.get(f"{self.resource}/{record_id}").json()
+			record = self.current_wc_api.api.get(endpoint).json()
 		except Exception:
 			error_text = (
 				f"load_from_db failed (WooCommerce {self.resource} #{record_id})\n\n{frappe.get_traceback()}"

@@ -24,6 +24,12 @@ Stock Level Synchronisation can also be triggered from an **Item**, by clicking 
 
 By default only the actual stock levels will be synchronised. You can ensure that only available stock is synced (by subtracting reserved stock), by enabling **WooCommerce Server** > *Items* > *Reserved Stock Adjustment*.
 
+## Disabled Items
+
+A disabled **Item** is skipped by stock synchronisation, so its **WooCommerce Product** keeps the stock level of its last synchronisation and stays on sale indefinitely.
+
+Enable **WooCommerce Server** > *Items* > *Push Zero Stock for Disabled Items* to send a stock level of 0 for disabled **Items** instead. The daily background job then includes disabled **Items**, so an **Item** disabled after its last sync is still cleared.
+
 
 ## Troubleshooting
 - You can look at the list of **WooCommerce Products** from within ERPNext by opening the **WooCommerce Product** doctype. This is a [Virtual DocType](https://frappeframework.com/docs/v15/user/en/basics/doctypes/virtual-doctype) that interacts directly with your WooCommerce site's API interface

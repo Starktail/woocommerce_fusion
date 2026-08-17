@@ -1,16 +1,26 @@
 import json
 from dataclasses import dataclass
 from datetime import datetime
+from html import unescape
 
 import frappe
 from erpnext.stock.doctype.item.item import Item
 from frappe import ValidationError, _, _dict
+from frappe.model import no_value_fields, table_fields
 from frappe.query_builder import Criterion
 from frappe.utils import get_datetime, now
+from jsonpath_ng import Child, Fields
 from jsonpath_ng.ext import parse
+from jsonpath_ng.ext.filter import Filter
 
 from woocommerce_fusion.exceptions import SyncDisabledError
-from woocommerce_fusion.tasks.sync import SynchroniseWooCommerce
+from woocommerce_fusion.tasks.field_transforms import (
+	SKIP,
+	TO_ERPNEXT,
+	TO_WOOCOMMERCE,
+	apply_transform,
+)
+from woocommerce_fusion.tasks.sync import SynchroniseWooCommerce, get_variation_parent_woocommerce_id
 from woocommerce_fusion.tasks.sync_item_prices import _format_sale_date
 from woocommerce_fusion.woocommerce.doctype.woocommerce_product.woocommerce_product import (
 	WooCommerceProduct,
@@ -44,7 +54,7 @@ def run_item_sync_from_hook(doc, method):
 			indicator="blue",
 			alert=True,
 		)
-		frappe.enqueue(clear_sync_hash_and_run_item_sync, item_code=doc.name)
+		frappe.enqueue(clear_sync_hash_and_run_item_sync, item_code=doc.name, enqueue_after_commit=True)
 		frappe.enqueue(
 			"woocommerce_fusion.tasks.batch.queue_manager.check_and_flush_all_servers",
 			enqueue_after_commit=True,
@@ -152,6 +162,90 @@ def sync_woocommerce_products_modified_since(date_time_from=None):
 	frappe.db.set_single_value("WooCommerce Integration Settings", "wc_last_sync_date_items", now())
 
 
+def unescape_woocommerce_value(value):
+	"""
+	WooCommerce returns text HTML-escaped, e.g. an Item Group of "Sleeves &amp; Toploader".
+	ERPNext stores - and resolves links on - the plain text, so unescape before writing a value
+	to an Item or comparing it against one. Non-string values are passed through.
+	"""
+	return unescape(value) if isinstance(value, str) else value
+
+
+def create_filtered_jsonpath_target(jsonpath_expr, doc) -> bool:
+	"""
+	Create the list entry that a filtered JSONPath expression is looking for, so that a value can be
+	written to a target which does not exist on the WooCommerce Product yet.
+	"""
+	filter_node = _find_jsonpath_filter_node(jsonpath_expr)
+	if not filter_node:
+		return False
+
+	entry = {}
+	for expression in filter_node.right.expressions:
+		# `Expression(Fields('key') = 'x')`. `op` is None for a bare existence filter, e.g. `[?key]`
+		if expression.op != "=" or not isinstance(expression.target, Fields):
+			return False
+		if len(expression.target.fields) != 1:
+			return False
+		entry[expression.target.fields[0]] = expression.value
+
+	# The list the filter selects from, e.g. the `$.meta_data` of `$.meta_data[?key='x'].value`
+	container_matches = filter_node.left.find(doc)
+	if len(container_matches) != 1 or not isinstance(container_matches[0].value, list):
+		return False
+
+	container_matches[0].value.append(entry)
+	return True
+
+
+def _find_jsonpath_filter_node(jsonpath_expr):
+	"""
+	The outermost `Child` node whose right hand side is a filter, e.g. the `$.meta_data[?key='x']`
+	part of `$.meta_data[?key='x'].value`
+	"""
+	while isinstance(jsonpath_expr, Child):
+		if isinstance(jsonpath_expr.right, Filter):
+			return jsonpath_expr
+		jsonpath_expr = jsonpath_expr.left
+
+	return None
+
+
+def normalise_child_rows(rows, child_doctype: str) -> list[dict]:
+	"""
+	Reduce child rows - `Document` objects or plain dicts - to a comparable shape
+	"""
+	fieldnames = [
+		df.fieldname for df in frappe.get_meta(child_doctype).fields if df.fieldtype not in no_value_fields
+	]
+
+	return [{fieldname: (row.get(fieldname) or None) for fieldname in fieldnames} for row in rows or []]
+
+
+def set_mapped_field_value(item: Item, fieldname: str, value) -> bool:
+	"""
+	Write a mapped value to an ERPNext Item field. Returns True only if the value actually changed.
+	run and flips the sync direction.
+	"""
+	field = item.meta.get_field(fieldname)
+
+	if field and field.fieldtype in table_fields:
+		if normalise_child_rows(item.get(fieldname), field.options) == normalise_child_rows(
+			value, field.options
+		):
+			return False
+
+		# `Document.set` clears the table and re-appends from the given dicts
+		item.set(fieldname, value or [])
+		return True
+
+	if item.get(fieldname) == value:
+		return False
+
+	item.set(fieldname, value)
+	return True
+
+
 @dataclass
 class ERPNextItemToSync:
 	"""Class for keeping track of an ERPNext Item and the relevant WooCommerce Server to sync to"""
@@ -216,15 +310,45 @@ class SynchroniseItem(SynchroniseWooCommerce):
 			if not wc_server.enable_sync:
 				raise SyncDisabledError(wc_server)
 
-			wc_products = get_list_of_wc_products(item=self.item)
-			if len(wc_products) == 0:
-				raise ValueError(
-					f"No WooCommerce Product found with ID {self.item.item_woocommerce_server.woocommerce_id} on {self.item.item_woocommerce_server.woocommerce_server}"
-				)
-			self.woocommerce_product = wc_products[0]
+			self.woocommerce_product = self.get_woocommerce_product_for_item()
 
 		if self.woocommerce_product and not self.item:
 			self.get_erpnext_item()
+
+	def get_woocommerce_product_for_item(self) -> WooCommerceProduct:
+		"""
+		Get the WooCommerce Product corresponding to self.item
+		"""
+		iws = self.item.item_woocommerce_server
+
+		# A variation is not listed by the products endpoint, so it can only be read through its
+		# parent product. Fetch it directly instead of searching the product list.
+		if self.item.item.variant_of:
+			parent_woocommerce_id = get_variation_parent_woocommerce_id(
+				iws.woocommerce_server, self.item.item.name
+			)
+			if not parent_woocommerce_id:
+				raise ValueError(
+					f"Cannot sync variant {self.item.item.name}: its template is not linked to {iws.woocommerce_server}"
+				)
+			wc_product = frappe.get_doc(
+				{
+					"doctype": "WooCommerce Product",
+					"name": generate_woocommerce_record_name_from_domain_and_id(
+						iws.woocommerce_server, iws.woocommerce_id
+					),
+				}
+			)
+			wc_product.parent_id = parent_woocommerce_id
+			wc_product.load_from_db()
+			return wc_product
+
+		wc_products = get_list_of_wc_products(item=self.item)
+		if len(wc_products) == 0:
+			raise ValueError(
+				f"No WooCommerce Product found with ID {iws.woocommerce_id} on {iws.woocommerce_server}"
+			)
+		return wc_products[0]
 
 	def get_erpnext_item(self):
 		"""
@@ -260,6 +384,51 @@ class SynchroniseItem(SynchroniseWooCommerce):
 					if server.name == item_codes[0].name
 				),
 			)
+			return
+
+		self.get_erpnext_item_by_sku()
+
+	def get_erpnext_item_by_sku(self):
+		"""
+		Link a not-yet-linked WooCommerce Product to an existing Item with the same Item Code.
+		"""
+		wc_server = frappe.get_cached_doc("WooCommerce Server", self.woocommerce_product.woocommerce_server)
+		sku = (self.woocommerce_product.sku or "").strip()
+		if not wc_server.match_items_by_sku or not sku:
+			return
+
+		# Two Items with the same code cannot happen, but a stale index or a rename can leave the
+		# match ambiguous - rather create nothing than link the wrong Item.
+		item_codes = frappe.get_all("Item", filters={"item_code": sku}, pluck="name", limit=2)
+		if len(item_codes) != 1:
+			if item_codes:
+				frappe.log_error(
+					"WooCommerce Error",
+					f"SKU {sku} on {wc_server.name} matches more than one Item: {item_codes}",
+				)
+			return
+
+		item = frappe.get_doc("Item", item_codes[0])
+		row = next(
+			(
+				server_row
+				for server_row in item.woocommerce_servers
+				if server_row.woocommerce_server == wc_server.name
+			),
+			None,
+		)
+		if row and row.woocommerce_id:
+			# Already linked to a different product on this server; leave it alone
+			return
+
+		if not row:
+			row = item.append("woocommerce_servers", {"woocommerce_server": wc_server.name})
+		row.woocommerce_id = str(self.woocommerce_product.woocommerce_id)
+		row.enabled = 1
+		item.flags.created_by_sync = True
+		item.save(ignore_permissions=True)
+
+		self.item = ERPNextItemToSync(item=item, item_woocommerce_server_idx=row.idx)
 
 	def sync_wc_product_with_erpnext_item(self):
 		"""
@@ -291,15 +460,16 @@ class SynchroniseItem(SynchroniseWooCommerce):
 		Update the ERPNext Item with fields from it's corresponding WooCommerce Product
 		"""
 		item_dirty = False
-		if item.item.item_name != woocommerce_product.woocommerce_name:
-			item.item.item_name = woocommerce_product.woocommerce_name
+		woocommerce_name = unescape_woocommerce_value(woocommerce_product.woocommerce_name)
+		if item.item.item_name != woocommerce_name:
+			item.item.item_name = woocommerce_name
 			item_dirty = True
 
 		fields_updated, item.item = self.set_item_fields(item=item.item)
 
 		wc_server = frappe.get_cached_doc("WooCommerce Server", woocommerce_product.woocommerce_server)
 		if wc_server.enable_image_sync:
-			wc_product_images = json.loads(woocommerce_product.images)
+			wc_product_images = json.loads(woocommerce_product.images or "[]")
 			if len(wc_product_images) > 0:
 				if item.item.image != wc_product_images[0]["src"]:
 					item.item.image = wc_product_images[0]["src"]
@@ -330,7 +500,7 @@ class SynchroniseItem(SynchroniseWooCommerce):
 		wc_product = self.woocommerce_product
 		wc_product_dirty = False
 
-		if wc_product.woocommerce_name != item.item.item_name:
+		if unescape_woocommerce_value(wc_product.woocommerce_name) != item.item.item_name:
 			wc_product.woocommerce_name = item.item.item_name
 			wc_product_dirty = True
 
@@ -442,8 +612,14 @@ class SynchroniseItem(SynchroniseWooCommerce):
 			wc_product.attributes = json.dumps(wc_product_attributes)
 
 		# Set properties
+		wc_server = frappe.get_cached_doc(
+			"WooCommerce Server", item.item_woocommerce_server.woocommerce_server
+		)
 		wc_product.woocommerce_server = item.item_woocommerce_server.woocommerce_server
 		wc_product.woocommerce_name = item.item.item_name
+		if wc_server.name_by == "Product SKU":
+			# Without this the product has no SKU, and could never be matched back to this Item
+			wc_product.sku = item.item.item_code
 		wc_product.regular_price = get_item_price_rate(item) or "0"
 
 		sale_price_data = get_item_sale_price_data(item)
@@ -489,7 +665,7 @@ class SynchroniseItem(SynchroniseWooCommerce):
 					row.attribute_value = wc_attribute["option"]
 
 		# Handle variants
-		if wc_product.type == "variable":
+		if wc_product.type == "variable" and item.attributes:
 			item.has_variants = 1
 
 		if wc_product.type == "variation":
@@ -505,9 +681,15 @@ class SynchroniseItem(SynchroniseWooCommerce):
 			if wc_server.name_by == "Product SKU" and wc_product.sku
 			else str(wc_product.woocommerce_id)
 		)
+		if frappe.db.exists("Item", item.item_code):
+			# The Item already exists (e.g. it was created by an earlier sync, or by hand with the
+			# same code). Link it to this product rather than failing on a duplicate insert.
+			self.link_existing_item(item.item_code, wc_product, wc_server)
+			return
+
 		item.stock_uom = wc_server.uom or _("Nos")
 		item.item_group = wc_server.item_group
-		item.item_name = wc_product.woocommerce_name
+		item.item_name = unescape_woocommerce_value(wc_product.woocommerce_name)
 		row = item.append("woocommerce_servers")
 		row.woocommerce_id = wc_product.woocommerce_id
 		row.woocommerce_server = wc_server.name
@@ -515,7 +697,7 @@ class SynchroniseItem(SynchroniseWooCommerce):
 		item.flags.created_by_sync = True
 
 		if wc_server.enable_image_sync:
-			wc_product_images = json.loads(wc_product.images)
+			wc_product_images = json.loads(wc_product.images or "[]")
 			if len(wc_product_images) > 0:
 				item.image = wc_product_images[0]["src"]
 
@@ -533,6 +715,29 @@ class SynchroniseItem(SynchroniseWooCommerce):
 			),
 		)
 
+		self.set_sync_hash()
+
+	def link_existing_item(self, item_code: str, wc_product: WooCommerceProduct, wc_server) -> None:
+		"""
+		Attach an existing Item to this WooCommerce Product and continue the sync with it
+		"""
+		item = frappe.get_doc("Item", item_code)
+		row = next(
+			(
+				server_row
+				for server_row in item.woocommerce_servers
+				if server_row.woocommerce_server == wc_server.name
+			),
+			None,
+		)
+		if not row:
+			row = item.append("woocommerce_servers", {"woocommerce_server": wc_server.name})
+		row.woocommerce_id = str(wc_product.woocommerce_id)
+		row.enabled = 1
+		item.flags.created_by_sync = True
+		item.save(ignore_permissions=True)
+
+		self.item = ERPNextItemToSync(item=item, item_woocommerce_server_idx=row.idx)
 		self.set_sync_hash()
 
 	def create_or_update_item_attributes(self, wc_product: WooCommerceProduct):
@@ -593,14 +798,31 @@ class SynchroniseItem(SynchroniseWooCommerce):
 					)
 				)
 				for map in wc_server.item_field_map:
-					erpnext_item_field_name = map.erpnext_field_name.split(" | ")
+					erpnext_item_field_name = map.erpnext_field_name.split(" | ")[0]
 
 					# We expect woocommerce_field_name to be valid JSONPath
 					jsonpath_expr = parse(map.woocommerce_field_name)
 					woocommerce_product_field_matches = jsonpath_expr.find(woocommerce_product_dict)
+					if not woocommerce_product_field_matches:
+						# The mapped location is absent on this product, so there is nothing to copy in.
+						# Leave the Item's current value alone rather than clearing it.
+						continue
 
-					setattr(item, erpnext_item_field_name[0], woocommerce_product_field_matches[0].value)
-					item_dirty = True
+					# JSONPath parsing typically returns a list, we'll only take the first value
+					new_value = unescape_woocommerce_value(woocommerce_product_field_matches[0].value)
+
+					new_value = apply_transform(
+						map,
+						new_value,
+						direction=TO_ERPNEXT,
+						item=item,
+						woocommerce_product=woocommerce_product_dict,
+					)
+					if new_value is SKIP:
+						continue
+
+					if set_mapped_field_value(item, erpnext_item_field_name, new_value):
+						item_dirty = True
 		return item_dirty, item
 
 	def set_product_fields(
@@ -623,8 +845,20 @@ class SynchroniseItem(SynchroniseWooCommerce):
 				)
 
 				for map in wc_server.item_field_map:
-					erpnext_item_field_name = map.erpnext_field_name.split(" | ")
-					erpnext_item_field_value = getattr(item.item, erpnext_item_field_name[0])
+					erpnext_item_field_name = map.erpnext_field_name.split(" | ")[0]
+					erpnext_item_field_value = item.item.get(erpnext_item_field_name)
+
+					# Reshape the ERPNext value into its WooCommerce representation *before* the
+					# comparison below, so that we compare like with like.
+					erpnext_item_field_value = apply_transform(
+						map,
+						erpnext_item_field_value,
+						direction=TO_WOOCOMMERCE,
+						item=item.item,
+						woocommerce_product=wc_product_with_deserialised_fields,
+					)
+					if erpnext_item_field_value is SKIP:
+						continue
 
 					# We expect woocommerce_field_name to be valid JSONPath
 					jsonpath_expr = parse(map.woocommerce_field_name)
@@ -633,6 +867,18 @@ class SynchroniseItem(SynchroniseWooCommerce):
 					)
 
 					if len(woocommerce_product_field_matches) == 0:
+						if create_filtered_jsonpath_target(
+							jsonpath_expr, wc_product_with_deserialised_fields
+						):
+							# A filtered target such as `$.meta_data[?key='_my_key'].value` matches
+							# nothing until WordPress has written that meta row, so create the row
+							# here rather than failing the sync.
+							jsonpath_expr.update_or_create(
+								wc_product_with_deserialised_fields, erpnext_item_field_value
+							)
+							wc_product_dirty = True
+							continue
+
 						if woocommerce_product.name:
 							# We're strict about existing WooCommerce Products, the field should exist
 							raise ValueError(
@@ -645,7 +891,9 @@ class SynchroniseItem(SynchroniseWooCommerce):
 							continue
 
 					# JSONPath parsing typically returns a list, we'll only take the first value
-					woocommerce_product_field_value = woocommerce_product_field_matches[0].value
+					woocommerce_product_field_value = unescape_woocommerce_value(
+						woocommerce_product_field_matches[0].value
+					)
 
 					if erpnext_item_field_value != woocommerce_product_field_value:
 						jsonpath_expr.update(wc_product_with_deserialised_fields, erpnext_item_field_value)
@@ -714,7 +962,7 @@ def get_list_of_wc_products(
 		new_results = woocommerce_product.get_list(
 			args={
 				"filters": filters,
-				"page_lenth": page_length,
+				"page_length": page_length,
 				"start": start,
 				"servers": servers,
 				"as_doc": True,
@@ -737,7 +985,13 @@ def get_item_price_rate(item: ERPNextItemToSync):
 	if wc_server.enable_price_list_sync:
 		item_prices = frappe.get_all(
 			"Item Price",
-			filters={"item_code": item.item.item_name, "price_list": wc_server.price_list},
+			filters={
+				"item_code": item.item.item_code,
+				"price_list": wc_server.price_list,
+				"batch_no": ("is", "not set"),
+				"customer": ("is", "not set"),
+				"supplier": ("is", "not set"),
+			},
 			fields=["price_list_rate", "valid_upto"],
 		)
 		return next(
@@ -768,7 +1022,13 @@ def get_item_sale_price_data(item: ERPNextItemToSync) -> frappe._dict | None:
 
 	item_prices = frappe.get_all(
 		"Item Price",
-		filters={"item_code": item.item.item_name, "price_list": wc_server.sales_price_list},
+		filters={
+			"item_code": item.item.item_code,
+			"price_list": wc_server.sales_price_list,
+			"batch_no": ("is", "not set"),
+			"customer": ("is", "not set"),
+			"supplier": ("is", "not set"),
+		},
 		fields=["price_list_rate", "valid_from", "valid_upto"],
 	)
 	return next(

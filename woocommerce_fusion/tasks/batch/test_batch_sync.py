@@ -149,6 +149,28 @@ class TestBatchProcessor(FrappeTestCase):
 		self.assertEqual(frappe.db.get_value("WooCommerce Sync Queue", row2.name, "status"), "Failed")
 		self.assertEqual(frappe.db.get_value("WooCommerce Sync Queue", row2.name, "error_message"), "boom")
 
+		error_log = frappe.db.get_value("WooCommerce Sync Queue", row2.name, "error_log")
+		self.assertTrue(error_log)
+		self.assertEqual(
+			frappe.db.get_value("Error Log", error_log, "reference_name"),
+			row2.name,
+		)
+
+	def test_batch_log_gets_a_title_and_duration(self):
+		"""
+		The name is a random hash, so the log carries a readable title and how long it took.
+		"""
+		processor = BatchProcessor(self.server)
+		batch_log = processor._create_batch_log("product", "manual", 3, {"create": []})
+		self.assertEqual(batch_log.title, f"product 0/3 - {self.server}")
+
+		processor._finalise_batch_log(batch_log, success_count=2, fail_count=1)
+		batch_log.reload()
+
+		self.assertEqual(batch_log.status, "Partial")
+		self.assertEqual(batch_log.title, f"product 2/3 - {self.server}")
+		self.assertIsNotNone(batch_log.duration)
+
 	def test_process_chunk_routes_by_type_and_direction(self):
 		processor = BatchProcessor(self.server)
 		with patch.object(processor, "_process_order_chunk", return_value=(1, 0)) as m_order:

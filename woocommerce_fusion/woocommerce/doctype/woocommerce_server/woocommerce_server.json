@@ -53,6 +53,7 @@
   "payment_method_gl_account_mapping",
   "customers_sync_section",
   "enable_dual_accounts",
+  "customer_matching_email_domains",
   "section_addresses",
   "address_title_convention",
   "shipping_methods_sync_section",
@@ -73,11 +74,13 @@
   "tab_items",
   "item_section",
   "name_by",
+  "match_items_by_sku",
   "enable_image_sync",
   "item_stock_section",
   "enable_stock_level_synchronisation",
   "warehouses",
   "subtract_reserved_stock",
+  "push_zero_stock_for_disabled_items",
   "item_fields_section",
   "item_fields_warning_html",
   "item_field_map",
@@ -88,6 +91,7 @@
   "price_list_delay_per_item",
   "enable_sales_price_list_sync",
   "sales_price_list",
+  "sync_prices_for_disabled_items",
   "tab_plugins",
   "advanced_shipment_tracking_section",
   "wc_plugin_advanced_shipment_tracking",
@@ -341,6 +345,15 @@
    "options": "Price List"
   },
   {
+   "default": "0",
+   "depends_on": "eval: doc.enable_price_list_sync",
+   "description": "Keeps synchronising prices for disabled Items. Without this, a disabled Item's WooCommerce Product keeps the price of its last synchronisation, and an expired sale is never cleared",
+   "documentation_url": "https://woocommerce-fusion-docs.starktail.com/woocommerce_fusion_item-prices",
+   "fieldname": "sync_prices_for_disabled_items",
+   "fieldtype": "Check",
+   "label": "Sync Prices for Disabled Items"
+  },
+  {
    "fieldname": "tab_details",
    "fieldtype": "Tab Break",
    "label": "Details"
@@ -411,6 +424,14 @@
    "label": "Default Item Code Naming Basis",
    "mandatory_depends_on": "eval: doc.enable_stock_level_synchronisation",
    "options": "WooCommerce ID\nProduct SKU"
+  },
+  {
+   "default": "0",
+   "depends_on": "eval: doc.enable_sync",
+   "description": "Link a WooCommerce Product to an existing Item with the same Item Code when it has not been linked yet, instead of creating a new Item. Only used when the product carries an SKU and exactly one Item matches. Products already linked by WooCommerce ID are unaffected.",
+   "fieldname": "match_items_by_sku",
+   "fieldtype": "Check",
+   "label": "Match Items by SKU"
   },
   {
    "fieldname": "column_break_utsi",
@@ -571,12 +592,28 @@
    "label": "Enable Dual Accounts for Same Email (Private/Company)"
   },
   {
+   "description": "One company email domain per line, e.g. <code>acme.co.za</code>. Orders from an address on a listed domain are linked to the same <b>Customer</b>, so that several buyers at one company share an account. Only listed domains are matched - matching every domain would put every customer using the same free mail provider on one account.",
+   "documentation_url": "https://woocommerce-fusion-docs.starktail.com/woocommerce_fusion_sales-order.html#customer-synchronisation",
+   "fieldname": "customer_matching_email_domains",
+   "fieldtype": "Small Text",
+   "label": "Match Customers by Email Domain"
+  },
+  {
    "default": "0",
    "depends_on": "eval: doc.enable_stock_level_synchronisation",
    "description": "Adjusts stock levels sent to WooCommerce by subtracting reserved stock, ensuring only available stock is synced",
    "fieldname": "subtract_reserved_stock",
    "fieldtype": "Check",
    "label": "Reserved Stock Adjustment"
+  },
+  {
+   "default": "0",
+   "depends_on": "eval: doc.enable_stock_level_synchronisation",
+   "description": "Sends a stock level of 0 for disabled Items. Without this, a disabled Item's WooCommerce Product keeps the stock level of its last synchronisation and stays on sale",
+   "documentation_url": "https://woocommerce-fusion-docs.starktail.com/woocommerce_fusion_item-stock-levels",
+   "fieldname": "push_zero_stock_for_disabled_items",
+   "fieldtype": "Check",
+   "label": "Push Zero Stock for Disabled Items"
   },
   {
    "fieldname": "tab_logs",
