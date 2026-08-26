@@ -1,3 +1,4 @@
+import json
 from unittest.mock import MagicMock, Mock, call, patch
 
 import frappe
@@ -424,3 +425,83 @@ class TestRunItemSyncFromHook(UnitTestCase):
 				enqueue_call.kwargs.get("enqueue_after_commit"),
 				f"{enqueue_call.args[0]} is enqueued before the transaction commits",
 			)
+
+
+@patch("woocommerce_fusion.tasks.sync_items.run_item_sync")
+@patch.object(SynchroniseItem, "set_sync_hash")
+class TestCreateOrUpdateItemAttributes(UnitTestCase):
+	"""Regression tests for #243: syncing must never drop existing Item Attribute values."""
+
+	@classmethod
+	def setUpClass(cls):
+		super().setUpClass()
+
+	@staticmethod
+	def _item_attribute(values):
+		"""An in-memory Item Attribute pre-populated with `values` as (attribute_value, abbr)."""
+		attribute = frappe.get_doc({"doctype": "Item Attribute"})
+		attribute.attribute_name = "Size"
+		attribute.name = "Size"
+		for attribute_value, abbr in values:
+			row = attribute.append("item_attribute_values")
+			row.attribute_value = attribute_value
+			row.abbr = abbr
+		return attribute
+
+	def _run_sync(self, wc_product, attribute):
+		sync = SynchroniseItem(servers=Mock())
+		with patch("frappe.db.exists", return_value=True), patch(
+			"frappe.get_doc", return_value=attribute
+		), patch.object(attribute, "save"), patch.object(attribute, "insert"):
+			sync.create_or_update_item_attributes(wc_product)
+		return attribute
+
+	def test_syncing_a_variation_keeps_the_other_attribute_values(
+		self, mock_set_sync_hash, mock_run_item_sync
+	):
+		"""
+		A WooCommerce variation reports a single option. Syncing it must not reduce the
+		ERPNext Item Attribute to that one value, which would orphan every other variant.
+		"""
+		attribute = self._item_attribute([("Small", "S"), ("Medium", "M"), ("Large", "L")])
+
+		wc_product = Mock()
+		wc_product.type = "variation"
+		wc_product.attributes = json.dumps([{"name": "Size", "option": "Medium"}])
+
+		self._run_sync(wc_product, attribute)
+
+		self.assertEqual(
+			[row.attribute_value for row in attribute.item_attribute_values],
+			["Small", "Medium", "Large"],
+		)
+
+	def test_existing_abbreviations_are_not_rewritten(self, mock_set_sync_hash, mock_run_item_sync):
+		"""
+		`abbr` feeds generated item codes, so an existing value must keep its abbreviation
+		even when WooCommerce reports the same option again.
+		"""
+		attribute = self._item_attribute([("Small", "SM")])
+
+		wc_product = Mock()
+		wc_product.type = "variable"
+		wc_product.attributes = json.dumps([{"name": "Size", "options": ["Small"]}])
+
+		self._run_sync(wc_product, attribute)
+
+		self.assertEqual(len(attribute.item_attribute_values), 1)
+		self.assertEqual(attribute.item_attribute_values[0].abbr, "SM")
+
+	def test_new_options_are_added(self, mock_set_sync_hash, mock_run_item_sync):
+		"""Values that WooCommerce reports and ERPNext does not have yet are appended."""
+		attribute = self._item_attribute([("Small", "S")])
+
+		wc_product = Mock()
+		wc_product.type = "variable"
+		wc_product.attributes = json.dumps([{"name": "Size", "options": ["Small", "Large"]}])
+
+		self._run_sync(wc_product, attribute)
+
+		self.assertEqual(
+			[row.attribute_value for row in attribute.item_attribute_values], ["Small", "Large"]
+		)
