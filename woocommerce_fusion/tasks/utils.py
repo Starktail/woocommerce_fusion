@@ -2,8 +2,30 @@ import traceback
 
 import frappe
 import requests
+from frappe.utils import flt
 from frappe.utils.caching import redis_cache
 from woocommerce import API
+
+
+def get_sales_uom_conversion_factor(item_code: str) -> float:
+	"""Return how many Stock UOM units make up one Sales UOM unit for an Item.
+
+	Returns 1.0 when the Item has no Sales UOM, when it is the same as the Stock
+	UOM, or when no conversion is defined for it. That keeps callers a no-op for
+	the common case where a shop sells in the same unit the stock is kept in.
+
+	Example: an Item kept in "Piece" and sold in "Box" of 1000 returns 1000.0,
+	so 52900 pieces in stock become 52 boxes available in the shop.
+	"""
+	item = frappe.get_cached_doc("Item", item_code)
+	if not item.sales_uom or item.sales_uom == item.stock_uom:
+		return 1.0
+
+	for row in item.uoms:
+		if row.uom == item.sales_uom:
+			return flt(row.conversion_factor) or 1.0
+
+	return 1.0
 
 
 class APIWithRequestLogging(API):

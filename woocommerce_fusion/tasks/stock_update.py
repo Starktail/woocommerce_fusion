@@ -2,7 +2,10 @@ import math
 
 import frappe
 
-from woocommerce_fusion.tasks.utils import APIWithRequestLogging
+from woocommerce_fusion.tasks.utils import (
+	APIWithRequestLogging,
+	get_sales_uom_conversion_factor,
+)
 
 verify_ssl = not frappe._dev_server
 
@@ -116,19 +119,27 @@ def update_stock_levels_on_woocommerce_site(item_code: str):
 					verify_ssl=verify_ssl,
 				)
 
-				# Sum all quantities from select warehouses and round the total down (WooCommerce API doesn't accept float values)
+				# Sum all quantities from select warehouses
+				qty_in_stock_uom = sum(
+					bin.actual_qty
+					if not wc_server.subtract_reserved_stock
+					else bin.actual_qty - bin.reserved_qty
+					for bin in bins
+					if bin.warehouse in [row.warehouse for row in wc_server.warehouses]
+				)
+
+				# Convert to the Item's Sales UOM when the server is set up for it.
+				# Without this, a shop that sells by the box would advertise the
+				# number of individual pieces: 52900 instead of 52.
+				conversion_factor = (
+					get_sales_uom_conversion_factor(item_code) if wc_server.sync_in_sales_uom else 1.0
+				)
+
+				# Round the total down (WooCommerce API doesn't accept float values)
 				data_to_post = {
 					"stock_quantity": 0
 					if item.disabled
-					else math.floor(
-						sum(
-							bin.actual_qty
-							if not wc_server.subtract_reserved_stock
-							else bin.actual_qty - bin.reserved_qty
-							for bin in bins
-							if bin.warehouse in [row.warehouse for row in wc_server.warehouses]
-						)
-					)
+					else math.floor(qty_in_stock_uom / conversion_factor)
 				}
 
 				try:
