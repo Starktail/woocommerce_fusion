@@ -417,6 +417,14 @@
    "label": "Sync stock levels from ERPNext to WooCommerce (1-way)"
   },
   {
+   "default": "0",
+   "depends_on": "eval:doc.enable_stock_level_synchronisation || doc.enable_price_list_sync",
+   "description": "Publish quantities and prices in the Item's Sales UOM instead of its Stock UOM. Use this when you keep stock in one unit and sell in another, e.g. stock in Pieces and sales in Boxes of 1000: with this off the shop would advertise 52900 items instead of 52 boxes.",
+   "fieldname": "sync_in_sales_uom",
+   "fieldtype": "Check",
+   "label": "Synchronise in the Item's Sales UOM"
+  },
+  {
    "default": "WooCommerce ID",
    "description": "How the item code should be determined when an item is created",
    "fieldname": "name_by",
