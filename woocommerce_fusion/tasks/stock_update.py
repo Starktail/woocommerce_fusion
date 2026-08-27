@@ -137,9 +137,7 @@ def update_stock_levels_on_woocommerce_site(item_code: str):
 
 				# Round the total down (WooCommerce API doesn't accept float values)
 				data_to_post = {
-					"stock_quantity": 0
-					if item.disabled
-					else math.floor(qty_in_stock_uom / conversion_factor)
+					"stock_quantity": 0 if item.disabled else math.floor(qty_in_stock_uom / conversion_factor)
 				}
 
 				try:
