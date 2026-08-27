@@ -232,7 +232,7 @@ class TestWooCommerceStockSync(UnitTestCase):
 		self.assertEqual(mock_get_all.call_args.kwargs["filters"], {})
 
 
-class TestUOMConversion(FrappeTestCase):
+class TestUOMConversion(UnitTestCase):
 	"""Tests for `sync_in_sales_uom`: publishing quantities in the Sales UOM.
 
 	A distributor may keep stock in Pieces and sell in Boxes of 1000. Without
