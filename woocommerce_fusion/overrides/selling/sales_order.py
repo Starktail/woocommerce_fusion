@@ -8,6 +8,9 @@ from frappe.model.naming import get_default_naming_series, make_autoname
 from frappe.utils import cstr
 
 from woocommerce_fusion.tasks.sync_sales_orders import run_sales_order_sync
+from woocommerce_fusion.woocommerce.doctype.woocommerce_order.woocommerce_order import (
+	WC_ORDER_STATUS_MAPPING_REVERSE,
+)
 from woocommerce_fusion.woocommerce.woocommerce_api import (
 	generate_woocommerce_record_name_from_domain_and_id,
 )
@@ -77,12 +80,23 @@ class CustomSalesOrder(SalesOrder):
 					None,
 				)
 				if mapping:
-					if self.woocommerce_status != mapping.woocommerce_sales_order_status:
+					# `woocommerce_status` stores the connector's display label
+					# ("Processing"), while the status map stores the WooCommerce
+					# status key ("processing"). Writing the key straight into the
+					# field leaves a value that is not in the field's options, and
+					# every later save of that Sales Order fails validation with
+					# "Woocommerce Status cannot be 'processing'", which blocks the
+					# order sync entirely.
+					wc_status_label = WC_ORDER_STATUS_MAPPING_REVERSE.get(
+						mapping.woocommerce_sales_order_status,
+						mapping.woocommerce_sales_order_status,
+					)
+					if self.woocommerce_status != wc_status_label:
 						frappe.db.set_value(
 							"Sales Order",
 							self.name,
 							"woocommerce_status",
-							mapping.woocommerce_sales_order_status,
+							wc_status_label,
 						)
 						frappe.enqueue(
 							run_sales_order_sync,
