@@ -763,17 +763,21 @@ class SynchroniseItem(SynchroniseWooCommerce):
 					wc_attribute["options"] if wc_product.type == "variable" else [wc_attribute["option"]]
 				)
 
-				# If no attributes values exist, or attribute values exist already but are different, remove and update them
-				if len(item_attribute.item_attribute_values) == 0 or (
-					len(item_attribute.item_attribute_values) > 0
-					and set(options)
-					!= set([val.attribute_value for val in item_attribute.item_attribute_values])
-				):
-					item_attribute.item_attribute_values = []
-					for option in options:
-						row = item_attribute.append("item_attribute_values")
-						row.attribute_value = option
-						row.abbr = option.replace(" ", "")
+				# Only ADD values that are missing; never remove or rename existing ones.
+				#
+				# The previous implementation replaced the whole `item_attribute_values`
+				# table with `options`. For a WooCommerce *variation*, `options` holds a
+				# single value, so syncing one variation reduced the entire ERPNext Item
+				# Attribute to that one value, orphaning every other variant that used it.
+				# It also rewrote `abbr` for existing values, which breaks the item codes
+				# already generated from them.
+				existing_values = {val.attribute_value for val in item_attribute.item_attribute_values}
+				for option in options:
+					if option in existing_values:
+						continue
+					row = item_attribute.append("item_attribute_values")
+					row.attribute_value = option
+					row.abbr = option.replace(" ", "")
 
 				item_attribute.flags.ignore_mandatory = True
 				if not item_attribute.name:
