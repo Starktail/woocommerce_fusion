@@ -72,11 +72,12 @@ def update_stock_levels_for_all_enabled_items_in_background():
 		frappe.enqueue(
 			"woocommerce_fusion.tasks.stock_update.update_stock_levels_on_woocommerce_site",
 			item_code=item.name,
+			triggered_by="Scheduled",
 		)
 
 
 @frappe.whitelist()
-def update_stock_levels_on_woocommerce_site(item_code: str):
+def update_stock_levels_on_woocommerce_site(item_code: str, triggered_by: str = "Hook"):
 	"""
 	Updates stock levels of an item on all its associated WooCommerce sites.
 

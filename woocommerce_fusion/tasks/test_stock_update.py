@@ -163,6 +163,7 @@ class TestWooCommerceStockSync(UnitTestCase):
 		mock_enqueue.assert_called_with(
 			"woocommerce_fusion.tasks.stock_update.update_stock_levels_on_woocommerce_site",
 			item_code="Item-2-499",  # Here we'd check for the last `item_code` being passed.
+			triggered_by="Scheduled",
 		)
 
 	@staticmethod

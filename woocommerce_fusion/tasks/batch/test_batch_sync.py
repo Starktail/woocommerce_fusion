@@ -8,6 +8,7 @@ from frappe.tests import IntegrationTestCase
 from woocommerce_fusion.tasks.batch.batch_processor import BatchProcessor
 from woocommerce_fusion.tasks.batch.queue_manager import flush_pending, should_flush
 from woocommerce_fusion.woocommerce.doctype.woocommerce_sync_queue.woocommerce_sync_queue import (
+	MAX_CONSECUTIVE_FAILURES,
 	enqueue_item,
 	enqueue_order,
 )
@@ -97,6 +98,88 @@ class TestQueueEnqueue(IntegrationTestCase):
 		self.assertEqual(frappe.db.get_value("WooCommerce Sync Queue", inb, "status"), "Pending")
 
 
+class TestPoisonedResourceParking(IntegrationTestCase):
+	"""A scheduled sweep must stop re-queueing a resource that fails on every run."""
+
+	def setUp(self):
+		self.server = _ensure_test_server()
+
+	def _fail_last_enqueues(self, item_code, count):
+		for _i in range(count):
+			name = enqueue_item(
+				woocommerce_server=self.server,
+				item_code=item_code,
+				item_woocommerce_server_idx=1,
+				triggered_by="Scheduled",
+			)
+			frappe.db.set_value("WooCommerce Sync Queue", name, "status", "Failed")
+		return name
+
+	def test_scheduled_enqueue_parks_after_repeated_failures(self):
+		self._fail_last_enqueues("UNIT-POISON-1", MAX_CONSECUTIVE_FAILURES)
+
+		name = enqueue_item(
+			woocommerce_server=self.server,
+			item_code="UNIT-POISON-1",
+			item_woocommerce_server_idx=1,
+			triggered_by="Scheduled",
+		)
+		row = frappe.db.get_value("WooCommerce Sync Queue", name, ["status", "error_message"], as_dict=True)
+		self.assertEqual(row.status, "Skipped")
+		self.assertIn("Parked", row.error_message)
+
+	def test_fewer_failures_still_queue(self):
+		self._fail_last_enqueues("UNIT-POISON-2", MAX_CONSECUTIVE_FAILURES - 1)
+
+		name = enqueue_item(
+			woocommerce_server=self.server,
+			item_code="UNIT-POISON-2",
+			item_woocommerce_server_idx=1,
+			triggered_by="Scheduled",
+		)
+		self.assertEqual(frappe.db.get_value("WooCommerce Sync Queue", name, "status"), "Pending")
+
+	def test_hook_trigger_is_never_parked(self):
+		self._fail_last_enqueues("UNIT-POISON-3", MAX_CONSECUTIVE_FAILURES)
+
+		name = enqueue_item(
+			woocommerce_server=self.server,
+			item_code="UNIT-POISON-3",
+			item_woocommerce_server_idx=1,
+			triggered_by="Hook",
+		)
+		self.assertEqual(frappe.db.get_value("WooCommerce Sync Queue", name, "status"), "Pending")
+
+	def test_a_success_in_the_window_frees_the_resource(self):
+		last = self._fail_last_enqueues("UNIT-POISON-4", MAX_CONSECUTIVE_FAILURES)
+		frappe.db.set_value("WooCommerce Sync Queue", last, "status", "Completed")
+
+		name = enqueue_order(
+			woocommerce_server=self.server,
+			woocommerce_order_id="9001",
+			direction="inbound",
+			triggered_by="Scheduled",
+		)
+		self.assertEqual(frappe.db.get_value("WooCommerce Sync Queue", name, "status"), "Pending")
+
+		for _i in range(MAX_CONSECUTIVE_FAILURES):
+			failed = enqueue_order(
+				woocommerce_server=self.server,
+				woocommerce_order_id="9001",
+				direction="inbound",
+				triggered_by="Scheduled",
+			)
+			frappe.db.set_value("WooCommerce Sync Queue", failed, "status", "Failed")
+
+		name = enqueue_order(
+			woocommerce_server=self.server,
+			woocommerce_order_id="9001",
+			direction="inbound",
+			triggered_by="Scheduled",
+		)
+		self.assertEqual(frappe.db.get_value("WooCommerce Sync Queue", name, "status"), "Skipped")
+
+
 class TestShouldFlush(IntegrationTestCase):
 	def test_should_flush_buffer_full(self):
 		with patch("frappe.db.count", return_value=100), patch("frappe.get_cached_doc") as mock_server:
@@ -155,6 +238,19 @@ class TestBatchProcessor(IntegrationTestCase):
 			frappe.db.get_value("Error Log", error_log, "reference_name"),
 			row2.name,
 		)
+
+	def test_whole_batch_failure_writes_one_error_log(self):
+		"""A batch dies for one reason; logging it per row buried the cause under copies."""
+		processor = BatchProcessor(self.server)
+		rows = [self._make_queue_row(reference_name=f"UNIT-MAF-{i}", woocommerce_id=str(i)) for i in range(3)]
+
+		processor._mark_all_failed([_dict({"name": r.name}) for r in rows], "batch blew up", None)
+
+		error_logs = {frappe.db.get_value("WooCommerce Sync Queue", r.name, "error_log") for r in rows}
+		self.assertEqual(len(error_logs), 1)
+		self.assertTrue(error_logs.pop())
+		for row in rows:
+			self.assertEqual(frappe.db.get_value("WooCommerce Sync Queue", row.name, "status"), "Failed")
 
 	def test_batch_log_gets_a_title_and_duration(self):
 		"""

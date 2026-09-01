@@ -561,7 +561,18 @@ class BatchProcessor:
 			update_modified=False,
 		)
 
-	def _mark_failed(self, queue_row_name: str, error: str, batch_log_name: str | None):
+	def _mark_failed(
+		self,
+		queue_row_name: str,
+		error: str,
+		batch_log_name: str | None,
+		error_log_name: str | None = None,
+	):
+		if error_log_name:
+			# Already logged once for the whole batch - see _mark_all_failed
+			self._save_failure(queue_row_name, error, batch_log_name, error_log_name)
+			return
+
 		ctx = (
 			frappe.db.get_value(
 				"WooCommerce Sync Queue",
@@ -592,17 +603,32 @@ class BatchProcessor:
 			reference_name=queue_row_name,
 		)
 
+		self._save_failure(queue_row_name, error, batch_log_name, getattr(error_log, "name", None))
+
+	def _save_failure(
+		self, queue_row_name: str, error: str, batch_log_name: str | None, error_log_name: str | None
+	):
 		updates = {"status": "Failed", "error_message": error[:2000]}
 		if batch_log_name:
 			updates["batch_log"] = batch_log_name
-		error_log_name = getattr(error_log, "name", None)
 		if isinstance(error_log_name, str):
 			updates["error_log"] = error_log_name
 		frappe.db.set_value("WooCommerce Sync Queue", queue_row_name, updates, update_modified=False)
 
 	def _mark_all_failed(self, rows: list, error: str, batch_log_name: str | None):
+		"""
+		Fail every row of a batch that died as a whole
+		"""
+		error_log = frappe.log_error(
+			"WooCommerce Batch Error",
+			f"Server: {self.server_name}\n"
+			f"Batch Log: {batch_log_name or '-'}\n"
+			f"Failed queue rows ({len(rows)}): {', '.join(r.name for r in rows)}\n\n"
+			f"{error}",
+		)
+		error_log_name = getattr(error_log, "name", None)
 		for row in rows:
-			self._mark_failed(row.name, error, batch_log_name)
+			self._mark_failed(row.name, error, batch_log_name, error_log_name=error_log_name)
 
 
 def _expected_wc_type(item) -> str:
