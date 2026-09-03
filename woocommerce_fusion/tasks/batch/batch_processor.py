@@ -11,6 +11,34 @@ from woocommerce_fusion.woocommerce.doctype.woocommerce_product.woocommerce_prod
 	WooCommerceProduct,
 )
 
+WC_PAGE_LENGTH = 100
+
+
+def bulk_get_products(server_name: str, wc_ids: list, parent_id: str | None = None) -> dict:
+	"""
+	Fetch WooCommerce Products by id in pages of WC_PAGE_LENGTH, keyed by WooCommerce id.
+	"""
+	products: dict = {}
+	unique_ids = list(dict.fromkeys(str(i) for i in wc_ids))
+
+	for start in range(0, len(unique_ids), WC_PAGE_LENGTH):
+		args = {
+			"filters": [["WooCommerce Product", "id", "in", unique_ids[start : start + WC_PAGE_LENGTH]]],
+			"page_length": WC_PAGE_LENGTH,
+			"start": 0,
+			"servers": [server_name],
+			"as_doc": True,
+		}
+		# Variations are not listed by the products endpoint; they live under their parent
+		if parent_id:
+			args["endpoint"] = f"products/{parent_id}/variations"
+			args["metadata"] = {}
+
+		wc_products = frappe.get_doc({"doctype": "WooCommerce Product"}).get_list(args=args)
+		products.update({str(p.woocommerce_id): p for p in (wc_products or [])})
+
+	return products
+
 
 class BatchProcessor:
 	"""
@@ -342,20 +370,7 @@ class BatchProcessor:
 	# ── Batch execution helpers ──────────────────────────────────────────────────
 
 	def _bulk_get_products(self, wc_ids: list, parent_id: str | None = None) -> dict:
-		args = {
-			"filters": [["WooCommerce Product", "id", "in", [str(i) for i in wc_ids]]],
-			"page_length": 100,
-			"start": 0,
-			"servers": [self.server_name],
-			"as_doc": True,
-		}
-		# Variations are not listed by the products endpoint; they live under their parent
-		if parent_id:
-			args["endpoint"] = f"products/{parent_id}/variations"
-			args["metadata"] = {}
-
-		wc_products = frappe.get_doc({"doctype": "WooCommerce Product"}).get_list(args=args)
-		return {str(p.woocommerce_id): p for p in (wc_products or [])}
+		return bulk_get_products(self.server_name, wc_ids, parent_id=parent_id)
 
 	def _bulk_get_orders(self, wc_ids: list, status: str | None = None) -> dict:
 		"""Bulk-fetch WooCommerce Orders by id. Pass status='trash' to fetch trashed orders

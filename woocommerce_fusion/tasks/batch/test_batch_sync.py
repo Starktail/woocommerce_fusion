@@ -5,13 +5,14 @@ import frappe
 from frappe import _dict
 from frappe.tests import IntegrationTestCase
 
-from woocommerce_fusion.tasks.batch.batch_processor import BatchProcessor
+from woocommerce_fusion.tasks.batch.batch_processor import BatchProcessor, bulk_get_products
 from woocommerce_fusion.tasks.batch.queue_manager import (
 	check_and_flush_all_servers,
 	flush_job_id,
 	flush_pending,
 	should_flush,
 )
+from woocommerce_fusion.tasks.batch.sync_item_prices_batch import enqueue_price_updates
 from woocommerce_fusion.woocommerce.doctype.woocommerce_sync_queue.woocommerce_sync_queue import (
 	MAX_CONSECUTIVE_FAILURES,
 	enqueue_item,
@@ -303,6 +304,249 @@ class TestFlushClaimContention(IntegrationTestCase):
 
 	def test_flush_job_id_is_per_server(self):
 		self.assertNotEqual(flush_job_id("a.example.com"), flush_job_id("b.example.com"))
+
+
+class TestBulkGetProducts(IntegrationTestCase):
+	"""The shared bulk product read behind both the item and the price batch paths."""
+
+	def _patched_get_list(self, pages):
+		"""Return (patch context, recorded args list). `pages` is the value each call returns."""
+		calls = []
+
+		def fake_get_list(args=None):
+			calls.append(args)
+			return pages.pop(0) if pages else []
+
+		doc = MagicMock()
+		doc.get_list.side_effect = fake_get_list
+		return patch("frappe.get_doc", return_value=doc), calls
+
+	def test_ids_are_requested_in_pages_of_100(self):
+		wc_ids = [str(i) for i in range(250)]
+		ctx, calls = self._patched_get_list([[], [], []])
+		with ctx:
+			bulk_get_products("any.example.com", wc_ids)
+
+		self.assertEqual(len(calls), 3)
+		self.assertEqual([len(c["filters"][0][3]) for c in calls], [100, 100, 50])
+
+	def test_result_is_keyed_by_woocommerce_id_and_ids_deduplicated(self):
+		page = [MagicMock(woocommerce_id=11), MagicMock(woocommerce_id=12)]
+		ctx, calls = self._patched_get_list([page])
+		with ctx:
+			products = bulk_get_products("any.example.com", ["11", "12", "11"])
+
+		self.assertEqual(sorted(products), ["11", "12"])
+		self.assertEqual(calls[0]["filters"][0][3], ["11", "12"])
+
+	def test_variations_are_read_under_their_parent_endpoint(self):
+		ctx, calls = self._patched_get_list([[]])
+		with ctx:
+			bulk_get_products("any.example.com", ["21"], parent_id="7")
+
+		self.assertEqual(calls[0]["endpoint"], "products/7/variations")
+
+	def test_no_ids_makes_no_call(self):
+		ctx, calls = self._patched_get_list([])
+		with ctx:
+			self.assertEqual(bulk_get_products("any.example.com", []), {})
+		self.assertEqual(calls, [])
+
+
+class TestBatchPriceEnqueue(IntegrationTestCase):
+	"""
+	The price sweep used to GET one product per Item Price, which made a nightly sweep N serial
+	round trips and blew up on the first product deleted on WooCommerce.
+	"""
+
+	def setUp(self):
+		self.server = _ensure_test_server()
+		frappe.db.delete("WooCommerce Sync Queue", {"woocommerce_server": self.server})
+
+	def _sync(self, item_price_rows):
+		sync = MagicMock()
+		sync.wc_server = MagicMock(
+			name_="server",
+			price_list="Retail",
+			enable_sales_price_list_sync=0,
+			sales_price_list=None,
+		)
+		# MagicMock(name=...) sets the mock's repr, not the attribute
+		sync.wc_server.name = self.server
+		sync.item_price_doc = None
+		sync.item_price_list = item_price_rows
+		return sync
+
+	def _item_price(self, name, item_code, wc_id, rate, variant_of=None):
+		return _dict(
+			{
+				"name": name,
+				"item_code": item_code,
+				"price_list_rate": rate,
+				"woocommerce_server": self.server,
+				"woocommerce_id": wc_id,
+				"variant_of": variant_of,
+			}
+		)
+
+	def _wc_product(self, wc_id, regular_price):
+		return MagicMock(
+			woocommerce_id=wc_id,
+			regular_price=regular_price,
+			sale_price=None,
+			date_on_sale_from=None,
+			date_on_sale_to=None,
+		)
+
+	def test_one_bulk_read_for_the_whole_run_not_one_per_item_price(self):
+		rows = [self._item_price(f"IP-{i}", f"UNIT-PRICE-{i}", str(700 + i), 25) for i in range(30)]
+		fetched = {str(700 + i): self._wc_product(str(700 + i), "10") for i in range(30)}
+
+		with patch(
+			"woocommerce_fusion.tasks.batch.sync_item_prices_batch.bulk_get_products",
+			return_value=fetched,
+		) as mock_bulk:
+			enqueue_price_updates(self._sync(rows))
+
+		mock_bulk.assert_called_once()
+		self.assertEqual(len(mock_bulk.call_args.args[1]), 30)
+		queued = frappe.get_all(
+			"WooCommerce Sync Queue",
+			filters={"woocommerce_server": self.server, "sync_type": "item_price"},
+		)
+		self.assertEqual(len(queued), 30)
+
+	def test_unchanged_price_is_not_enqueued(self):
+		rows = [self._item_price("IP-SAME", "UNIT-PRICE-SAME", "801", 25)]
+		with patch(
+			"woocommerce_fusion.tasks.batch.sync_item_prices_batch.bulk_get_products",
+			return_value={"801": self._wc_product("801", "25")},
+		):
+			enqueue_price_updates(self._sync(rows))
+
+		self.assertEqual(frappe.db.count("WooCommerce Sync Queue", {"reference_name": "UNIT-PRICE-SAME"}), 0)
+
+	def test_changed_price_carries_the_payload_in_extra_data(self):
+		rows = [self._item_price("IP-CHANGED", "UNIT-PRICE-CHANGED", "802", 30)]
+		with patch(
+			"woocommerce_fusion.tasks.batch.sync_item_prices_batch.bulk_get_products",
+			return_value={"802": self._wc_product("802", "25")},
+		):
+			enqueue_price_updates(self._sync(rows))
+
+		row = frappe.get_last_doc("WooCommerce Sync Queue", filters={"reference_name": "UNIT-PRICE-CHANGED"})
+		self.assertEqual(row.sync_type, "item_price")
+		self.assertEqual(row.wc_resource_type, "product")
+		self.assertEqual(json.loads(row.extra_data), {"regular_price": "30"})
+
+	def test_variations_are_fetched_per_parent_and_queued_as_variations(self):
+		rows = [
+			self._item_price("IP-V1", "UNIT-PRICE-V1", "901", 30, variant_of="UNIT-PRICE-TMPL"),
+			self._item_price("IP-V2", "UNIT-PRICE-V2", "902", 30, variant_of="UNIT-PRICE-TMPL"),
+			self._item_price("IP-S1", "UNIT-PRICE-S1", "903", 30),
+		]
+		fetched = {wc_id: self._wc_product(wc_id, "25") for wc_id in ("901", "902", "903")}
+
+		with (
+			patch(
+				"woocommerce_fusion.tasks.batch.sync_item_prices_batch.get_variation_parent_woocommerce_id",
+				return_value="900",
+			),
+			patch(
+				"woocommerce_fusion.tasks.batch.sync_item_prices_batch.bulk_get_products",
+				return_value=fetched,
+			) as mock_bulk,
+		):
+			enqueue_price_updates(self._sync(rows))
+
+		# One call for the simple products, one for the variations under their parent
+		self.assertEqual(len(mock_bulk.call_args_list), 2)
+		simple_call, variation_call = mock_bulk.call_args_list
+		self.assertIsNone(simple_call.kwargs["parent_id"])
+		self.assertEqual(simple_call.args[1], ["903"])
+		self.assertEqual(variation_call.kwargs["parent_id"], "900")
+		self.assertEqual(variation_call.args[1], ["901", "902"])
+
+		self.assertEqual(
+			frappe.db.get_value(
+				"WooCommerce Sync Queue", {"reference_name": "UNIT-PRICE-V1"}, "wc_resource_type"
+			),
+			"product_variation",
+		)
+		self.assertEqual(
+			frappe.db.get_value(
+				"WooCommerce Sync Queue", {"reference_name": "UNIT-PRICE-S1"}, "wc_resource_type"
+			),
+			"product",
+		)
+
+	def test_product_deleted_on_woocommerce_is_skipped_and_reported_once(self):
+		rows = [
+			self._item_price("IP-GONE-1", "UNIT-PRICE-GONE-1", "1009", 30),
+			self._item_price("IP-GONE-2", "UNIT-PRICE-GONE-2", "623", 30),
+			self._item_price("IP-OK", "UNIT-PRICE-OK", "804", 30),
+		]
+		with (
+			patch(
+				"woocommerce_fusion.tasks.batch.sync_item_prices_batch.bulk_get_products",
+				return_value={"804": self._wc_product("804", "25")},
+			),
+			patch("frappe.log_error") as mock_log_error,
+		):
+			enqueue_price_updates(self._sync(rows))
+
+		# The live product still syncs
+		self.assertEqual(frappe.db.count("WooCommerce Sync Queue", {"reference_name": "UNIT-PRICE-OK"}), 1)
+		for item_code in ("UNIT-PRICE-GONE-1", "UNIT-PRICE-GONE-2"):
+			self.assertEqual(frappe.db.count("WooCommerce Sync Queue", {"reference_name": item_code}), 0)
+
+		# One aggregated log naming both ids, not a traceback each
+		mock_log_error.assert_called_once()
+		title, message = mock_log_error.call_args.args
+		self.assertIn("not found", title)
+		self.assertIn("1009", message)
+		self.assertIn("623", message)
+
+	def test_a_failed_fetch_logs_once_and_does_not_report_its_ids_as_deleted(self):
+		rows = [self._item_price("IP-BOOM", "UNIT-PRICE-BOOM", "805", 30)]
+		with (
+			patch(
+				"woocommerce_fusion.tasks.batch.sync_item_prices_batch.bulk_get_products",
+				side_effect=Exception("connection reset"),
+			),
+			patch("frappe.log_error") as mock_log_error,
+		):
+			enqueue_price_updates(self._sync(rows))
+
+		self.assertEqual(frappe.db.count("WooCommerce Sync Queue", {"reference_name": "UNIT-PRICE-BOOM"}), 0)
+		titles = [call.args[0] for call in mock_log_error.call_args_list]
+		self.assertEqual(titles, ["WooCommerce Batch Price Fetch Error"])
+
+	def test_a_failed_variation_group_does_not_stop_the_simple_products(self):
+		rows = [
+			self._item_price("IP-MIX-V", "UNIT-PRICE-MIX-V", "906", 30, variant_of="UNIT-PRICE-TMPL"),
+			self._item_price("IP-MIX-S", "UNIT-PRICE-MIX-S", "907", 30),
+		]
+
+		def fetch(server_name, wc_ids, parent_id=None):
+			if parent_id:
+				raise Exception("variations endpoint down")
+			return {"907": self._wc_product("907", "25")}
+
+		with (
+			patch(
+				"woocommerce_fusion.tasks.batch.sync_item_prices_batch.get_variation_parent_woocommerce_id",
+				return_value="905",
+			),
+			patch(
+				"woocommerce_fusion.tasks.batch.sync_item_prices_batch.bulk_get_products", side_effect=fetch
+			),
+			patch("frappe.log_error"),
+		):
+			enqueue_price_updates(self._sync(rows))
+
+		self.assertEqual(frappe.db.count("WooCommerce Sync Queue", {"reference_name": "UNIT-PRICE-MIX-S"}), 1)
+		self.assertEqual(frappe.db.count("WooCommerce Sync Queue", {"reference_name": "UNIT-PRICE-MIX-V"}), 0)
 
 
 class TestShouldFlush(IntegrationTestCase):
