@@ -6,7 +6,12 @@ from frappe import _dict
 from frappe.tests import IntegrationTestCase
 
 from woocommerce_fusion.tasks.batch.batch_processor import BatchProcessor
-from woocommerce_fusion.tasks.batch.queue_manager import flush_pending, should_flush
+from woocommerce_fusion.tasks.batch.queue_manager import (
+	check_and_flush_all_servers,
+	flush_job_id,
+	flush_pending,
+	should_flush,
+)
 from woocommerce_fusion.woocommerce.doctype.woocommerce_sync_queue.woocommerce_sync_queue import (
 	MAX_CONSECUTIVE_FAILURES,
 	enqueue_item,
@@ -178,6 +183,126 @@ class TestPoisonedResourceParking(IntegrationTestCase):
 			triggered_by="Scheduled",
 		)
 		self.assertEqual(frappe.db.get_value("WooCommerce Sync Queue", name, "status"), "Skipped")
+
+
+class TestFlushClaimContention(IntegrationTestCase):
+	"""
+	A flush can outlast the one-minute scheduler interval, so two flushes of the same server can
+	overlap. Claiming rows must not take out every lock at once, and losing the race must not kill
+	the job.
+	"""
+
+	def setUp(self):
+		self.server = _ensure_test_server()
+		frappe.db.delete("WooCommerce Sync Queue", {"woocommerce_server": self.server})
+
+	def _server_doc(self, batch_size_limit: int):
+		"""Detached stand-in for the server doc, so the claim slice size can be varied without
+		mutating the shared document cache."""
+		return MagicMock(batch_size_limit=batch_size_limit, batch_flush_interval_minutes=1)
+
+	def _enqueue(self, count: int, prefix: str) -> list:
+		return [
+			enqueue_item(
+				woocommerce_server=self.server,
+				item_code=f"{prefix}-{i}",
+				item_woocommerce_server_idx=1,
+				woocommerce_id=str(5000 + i),
+				direction="outbound",
+			)
+			for i in range(count)
+		]
+
+	def test_claim_is_sliced_not_one_statement(self):
+		names = self._enqueue(5, "UNIT-CLAIM")
+
+		real_set_value = frappe.db.set_value
+		calls = []
+
+		def recording_set_value(doctype, name, *args, **kwargs):
+			if doctype == "WooCommerce Sync Queue" and isinstance(name, dict):
+				calls.append(name)
+			return real_set_value(doctype, name, *args, **kwargs)
+
+		# chunk_size 2 over 5 rows -> 3 claim statements, not 1
+		with (
+			patch("frappe.get_cached_doc", return_value=self._server_doc(2)),
+			patch("frappe.db.set_value", side_effect=recording_set_value),
+			patch.object(BatchProcessor, "process_chunk", return_value=(2, 0)),
+		):
+			flush_pending(self.server, reason="manual")
+
+		self.assertEqual([len(c["name"][1]) for c in calls], [2, 2, 1])
+		for name in names:
+			self.assertEqual(frappe.db.get_value("WooCommerce Sync Queue", name, "status"), "Processing")
+
+	def test_lock_timeout_on_first_slice_flushes_nothing_and_leaves_rows_pending(self):
+		names = self._enqueue(3, "UNIT-CLAIM-LOCK")
+
+		with (
+			patch("frappe.get_cached_doc", return_value=self._server_doc(100)),
+			patch("frappe.db.set_value", side_effect=frappe.QueryTimeoutError("1205 lock wait timeout")),
+			patch.object(BatchProcessor, "process_chunk") as mock_process,
+		):
+			result = flush_pending(self.server, reason="manual")
+
+		mock_process.assert_not_called()
+		self.assertEqual(result, {"flushed": 0, "success": 0, "failed": 0})
+		for name in names:
+			self.assertEqual(frappe.db.get_value("WooCommerce Sync Queue", name, "status"), "Pending")
+
+	def test_lock_timeout_midway_still_flushes_the_claimed_slices(self):
+		names = self._enqueue(6, "UNIT-CLAIM-PARTIAL")
+
+		real_set_value = frappe.db.set_value
+		claim_calls = []
+
+		def failing_third_claim(doctype, name, *args, **kwargs):
+			if doctype == "WooCommerce Sync Queue" and isinstance(name, dict):
+				claim_calls.append(name)
+				if len(claim_calls) == 3:
+					raise frappe.QueryTimeoutError("1205 lock wait timeout")
+			return real_set_value(doctype, name, *args, **kwargs)
+
+		with (
+			patch("frappe.get_cached_doc", return_value=self._server_doc(2)),
+			patch("frappe.db.set_value", side_effect=failing_third_claim),
+			patch.object(BatchProcessor, "process_chunk", return_value=(2, 0)) as mock_process,
+		):
+			result = flush_pending(self.server, reason="manual")
+
+		# Slices 1 and 2 claimed (4 rows), slice 3 lost the race
+		self.assertEqual(result["flushed"], 4)
+		self.assertEqual(len(mock_process.call_args_list), 2)
+
+		statuses = [frappe.db.get_value("WooCommerce Sync Queue", name, "status") for name in names]
+		self.assertEqual(statuses.count("Processing"), 4)
+		self.assertEqual(statuses.count("Pending"), 2)
+
+	def test_scheduler_deduplicates_the_flush_per_server(self):
+		self._enqueue(1, "UNIT-CLAIM-DEDUPE")
+
+		with (
+			patch(
+				"woocommerce_fusion.tasks.batch.queue_manager.should_flush",
+				return_value=(True, "buffer_full"),
+			),
+			patch("frappe.get_all", return_value=[self.server]),
+			patch("frappe.enqueue") as mock_enqueue,
+		):
+			check_and_flush_all_servers()
+
+		mock_enqueue.assert_called_once_with(
+			"woocommerce_fusion.tasks.batch.queue_manager.flush_pending",
+			server_name=self.server,
+			reason="buffer_full",
+			queue="long",
+			job_id=flush_job_id(self.server),
+			deduplicate=True,
+		)
+
+	def test_flush_job_id_is_per_server(self):
+		self.assertNotEqual(flush_job_id("a.example.com"), flush_job_id("b.example.com"))
 
 
 class TestShouldFlush(IntegrationTestCase):

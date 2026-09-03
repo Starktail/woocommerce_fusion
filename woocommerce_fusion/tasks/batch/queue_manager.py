@@ -40,6 +40,39 @@ def should_flush(server_name: str) -> tuple[bool, str]:
 	return False, ""
 
 
+def flush_job_id(server_name: str) -> str:
+	"""Job id used to keep at most one flush in flight per server."""
+	return f"wc_flush_{server_name}"
+
+
+def _claim_pending_rows(pending_rows: list, chunk_size: int) -> list:
+	"""
+	Mark rows as Processing in slices, and return the rows actually claimed.
+	"""
+	claimed = []
+	for start in range(0, len(pending_rows), chunk_size):
+		rows = pending_rows[start : start + chunk_size]
+		try:
+			frappe.db.set_value(
+				"WooCommerce Sync Queue",
+				{"name": ["in", [r.name for r in rows]]},
+				"status",
+				"Processing",
+				update_modified=False,
+			)
+		except frappe.QueryTimeoutError:
+			# Another writer holds these rows. Leave them Pending
+			if not frappe.flags.in_test:
+				frappe.db.rollback()  # nosemgrep
+			break
+		if not frappe.flags.in_test:
+			# Commit the row claim (status=Processing) immediately
+			frappe.db.commit()  # nosemgrep
+		claimed.extend(rows)
+
+	return claimed
+
+
 def flush_pending(server_name: str, reason: str = "manual") -> dict:
 	"""
 	Flush all Pending queue entries for server_name as one or more batch calls.
@@ -66,19 +99,12 @@ def flush_pending(server_name: str, reason: str = "manual") -> dict:
 	if not pending_rows:
 		return {"flushed": 0, "success": 0, "failed": 0}
 
-	# Lock: mark all current Pending rows as Processing
-	names = [r.name for r in pending_rows]
-	frappe.db.set_value(
-		"WooCommerce Sync Queue",
-		{"name": ["in", names]},
-		"status",
-		"Processing",
-		update_modified=False,
-	)
-	if not frappe.flags.in_test:
-		# Commit the row claim (status=Processing) immediately so a concurrent flush worker
-		# cannot re-claim and double-process the same queue rows.
-		frappe.db.commit()  # nosemgrep
+	server = frappe.get_cached_doc("WooCommerce Server", server_name)
+	chunk_size = server.batch_size_limit or 100
+
+	pending_rows = _claim_pending_rows(pending_rows, chunk_size)
+	if not pending_rows:
+		return {"flushed": 0, "success": 0, "failed": 0}
 
 	# Group by (wc_resource_type, parent_woocommerce_id, sync_type, direction)
 	groups: dict[tuple, list] = {}
@@ -87,8 +113,6 @@ def flush_pending(server_name: str, reason: str = "manual") -> dict:
 		groups.setdefault(key, []).append(row)
 
 	processor = BatchProcessor(server_name=server_name)
-	server = frappe.get_cached_doc("WooCommerce Server", server_name)
-	chunk_size = server.batch_size_limit or 100
 
 	totals = {"success": 0, "failed": 0}
 
@@ -152,6 +176,8 @@ def check_and_flush_all_servers():
 				server_name=server_name,
 				reason=reason,
 				queue="long",
+				job_id=flush_job_id(server_name),
+				deduplicate=True,
 			)
 
 
