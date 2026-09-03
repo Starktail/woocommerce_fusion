@@ -11,6 +11,34 @@ from woocommerce_fusion.woocommerce.doctype.woocommerce_product.woocommerce_prod
 	WooCommerceProduct,
 )
 
+WC_PAGE_LENGTH = 100
+
+
+def bulk_get_products(server_name: str, wc_ids: list, parent_id: str | None = None) -> dict:
+	"""
+	Fetch WooCommerce Products by id in pages of WC_PAGE_LENGTH, keyed by WooCommerce id.
+	"""
+	products: dict = {}
+	unique_ids = list(dict.fromkeys(str(i) for i in wc_ids))
+
+	for start in range(0, len(unique_ids), WC_PAGE_LENGTH):
+		args = {
+			"filters": [["WooCommerce Product", "id", "in", unique_ids[start : start + WC_PAGE_LENGTH]]],
+			"page_length": WC_PAGE_LENGTH,
+			"start": 0,
+			"servers": [server_name],
+			"as_doc": True,
+		}
+		# Variations are not listed by the products endpoint; they live under their parent
+		if parent_id:
+			args["endpoint"] = f"products/{parent_id}/variations"
+			args["metadata"] = {}
+
+		wc_products = frappe.get_doc({"doctype": "WooCommerce Product"}).get_list(args=args)
+		products.update({str(p.woocommerce_id): p for p in (wc_products or [])})
+
+	return products
+
 
 class BatchProcessor:
 	"""
@@ -342,20 +370,7 @@ class BatchProcessor:
 	# ── Batch execution helpers ──────────────────────────────────────────────────
 
 	def _bulk_get_products(self, wc_ids: list, parent_id: str | None = None) -> dict:
-		args = {
-			"filters": [["WooCommerce Product", "id", "in", [str(i) for i in wc_ids]]],
-			"page_length": 100,
-			"start": 0,
-			"servers": [self.server_name],
-			"as_doc": True,
-		}
-		# Variations are not listed by the products endpoint; they live under their parent
-		if parent_id:
-			args["endpoint"] = f"products/{parent_id}/variations"
-			args["metadata"] = {}
-
-		wc_products = frappe.get_doc({"doctype": "WooCommerce Product"}).get_list(args=args)
-		return {str(p.woocommerce_id): p for p in (wc_products or [])}
+		return bulk_get_products(self.server_name, wc_ids, parent_id=parent_id)
 
 	def _bulk_get_orders(self, wc_ids: list, status: str | None = None) -> dict:
 		"""Bulk-fetch WooCommerce Orders by id. Pass status='trash' to fetch trashed orders
@@ -561,7 +576,18 @@ class BatchProcessor:
 			update_modified=False,
 		)
 
-	def _mark_failed(self, queue_row_name: str, error: str, batch_log_name: str | None):
+	def _mark_failed(
+		self,
+		queue_row_name: str,
+		error: str,
+		batch_log_name: str | None,
+		error_log_name: str | None = None,
+	):
+		if error_log_name:
+			# Already logged once for the whole batch - see _mark_all_failed
+			self._save_failure(queue_row_name, error, batch_log_name, error_log_name)
+			return
+
 		ctx = (
 			frappe.db.get_value(
 				"WooCommerce Sync Queue",
@@ -592,17 +618,32 @@ class BatchProcessor:
 			reference_name=queue_row_name,
 		)
 
+		self._save_failure(queue_row_name, error, batch_log_name, getattr(error_log, "name", None))
+
+	def _save_failure(
+		self, queue_row_name: str, error: str, batch_log_name: str | None, error_log_name: str | None
+	):
 		updates = {"status": "Failed", "error_message": error[:2000]}
 		if batch_log_name:
 			updates["batch_log"] = batch_log_name
-		error_log_name = getattr(error_log, "name", None)
 		if isinstance(error_log_name, str):
 			updates["error_log"] = error_log_name
 		frappe.db.set_value("WooCommerce Sync Queue", queue_row_name, updates, update_modified=False)
 
 	def _mark_all_failed(self, rows: list, error: str, batch_log_name: str | None):
+		"""
+		Fail every row of a batch that died as a whole
+		"""
+		error_log = frappe.log_error(
+			"WooCommerce Batch Error",
+			f"Server: {self.server_name}\n"
+			f"Batch Log: {batch_log_name or '-'}\n"
+			f"Failed queue rows ({len(rows)}): {', '.join(r.name for r in rows)}\n\n"
+			f"{error}",
+		)
+		error_log_name = getattr(error_log, "name", None)
 		for row in rows:
-			self._mark_failed(row.name, error, batch_log_name)
+			self._mark_failed(row.name, error, batch_log_name, error_log_name=error_log_name)
 
 
 def _expected_wc_type(item) -> str:

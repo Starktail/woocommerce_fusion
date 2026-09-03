@@ -23,6 +23,51 @@ class WooCommerceSyncQueue(Document):
 		)
 
 
+# A scheduled sweep re-queues the same resource every run. When the failure is one no retry
+# can fix - order data ERPNext rejects, a product deleted on WooCommerce - that means failing
+# forever. Park the resource after this many consecutive failures instead.
+MAX_CONSECUTIVE_FAILURES = 5
+
+
+def _park_reason(
+	woocommerce_server: str,
+	sync_type: str,
+	direction: str,
+	triggered_by: str,
+	filters: dict,
+) -> str | None:
+	"""
+	Reason to park this enqueue as Skipped, or None to queue it normally.
+
+	Only scheduled sweeps are parked - a Hook or Manual trigger is someone acting deliberately,
+	and a manual retry from the Sync Status page puts a Failed row back to Pending, which frees
+	the resource again.
+	"""
+	if triggered_by != "Scheduled":
+		return None
+
+	recent = frappe.get_all(
+		"WooCommerce Sync Queue",
+		filters={
+			"woocommerce_server": woocommerce_server,
+			"sync_type": sync_type,
+			"direction": direction,
+			"status": ["in", ("Failed", "Completed")],
+			**filters,
+		},
+		pluck="status",
+		order_by="creation desc",
+		limit=MAX_CONSECUTIVE_FAILURES,
+	)
+	if len(recent) < MAX_CONSECUTIVE_FAILURES or any(status != "Failed" for status in recent):
+		return None
+
+	return (
+		f"Parked after {MAX_CONSECUTIVE_FAILURES} consecutive failures. "
+		"Fix the cause, then retry from the WooCommerce Sync Status page."
+	)
+
+
 def _supersede_pending(
 	woocommerce_server: str,
 	sync_type: str,
@@ -77,12 +122,9 @@ def enqueue_item(
 	row already exists for this combination, it is marked "Superseded" before inserting the new
 	row. This preserves full history - each enqueue event gets its own row.
 	"""
-	_supersede_pending(
-		woocommerce_server,
-		sync_type,
-		direction,
-		{"reference_name": item_code},
-	)
+	filters = {"reference_name": item_code}
+	_supersede_pending(woocommerce_server, sync_type, direction, filters)
+	park_reason = _park_reason(woocommerce_server, sync_type, direction, triggered_by, filters)
 
 	doc = frappe.get_doc(
 		{
@@ -100,7 +142,8 @@ def enqueue_item(
 			"trigger_reference_doctype": trigger_reference_doctype,
 			"trigger_reference_name": trigger_reference_name,
 			"extra_data": json.dumps(extra_data) if extra_data else None,
-			"status": "Pending",
+			"status": "Skipped" if park_reason else "Pending",
+			"error_message": park_reason,
 		}
 	)
 	doc.insert(ignore_permissions=True)
@@ -122,12 +165,9 @@ def enqueue_order(
 	status value is always used at flush time. reference_name stores the WC status string for
 	outbound; for inbound it is unused.
 	"""
-	_supersede_pending(
-		woocommerce_server,
-		"order",
-		direction,
-		{"woocommerce_id": woocommerce_order_id},
-	)
+	filters = {"woocommerce_id": woocommerce_order_id}
+	_supersede_pending(woocommerce_server, "order", direction, filters)
+	park_reason = _park_reason(woocommerce_server, "order", direction, triggered_by, filters)
 
 	doc = frappe.get_doc(
 		{
@@ -140,7 +180,8 @@ def enqueue_order(
 			"reference_doctype": "WooCommerce Order",
 			"reference_name": new_status or "",
 			"triggered_by": triggered_by,
-			"status": "Pending",
+			"status": "Skipped" if park_reason else "Pending",
+			"error_message": park_reason,
 		}
 	)
 	doc.insert(ignore_permissions=True)

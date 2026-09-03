@@ -10,6 +10,7 @@ def enqueue_stock_update(
 	stock_quantity: int,
 	resource_type: str = "product",
 	parent_woocommerce_id: str | None = None,
+	triggered_by: str = "Hook",
 ) -> str:
 	"""
 	Enqueue a stock-level update for batch processing.
@@ -27,7 +28,7 @@ def enqueue_stock_update(
 		parent_woocommerce_id=parent_woocommerce_id,
 		woocommerce_id=str(woocommerce_id),
 		direction="outbound",
-		triggered_by="Hook",
+		triggered_by=triggered_by,
 		trigger_reference_doctype="Item",
 		trigger_reference_name=item_code,
 		extra_data={"stock_quantity": stock_quantity},

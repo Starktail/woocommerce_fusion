@@ -1,12 +1,10 @@
 import frappe
 
+from woocommerce_fusion.tasks.batch.batch_processor import bulk_get_products
 from woocommerce_fusion.tasks.sync import get_variation_parent_woocommerce_id
 from woocommerce_fusion.tasks.sync_item_prices import SynchroniseItemPrice
 from woocommerce_fusion.woocommerce.doctype.woocommerce_sync_queue.woocommerce_sync_queue import (
 	enqueue_item,
-)
-from woocommerce_fusion.woocommerce.woocommerce_api import (
-	generate_woocommerce_record_name_from_domain_and_id,
 )
 
 
@@ -15,9 +13,24 @@ def enqueue_price_updates(sync: SynchroniseItemPrice) -> None:
 	Enqueue an item_price operation (with the computed price payload stored in extra_data)
 	for each Item Price in sync.item_price_list, instead of PUTting directly.
 	"""
+	wc_products, unavailable_ids = _fetch_woocommerce_products(sync)
+	missing_ids = []
+
 	for item_price in sync.item_price_list:
+		woocommerce_id = str(item_price.woocommerce_id)
+		if woocommerce_id in unavailable_ids:
+			# Its group's fetch failed and was already logged
+			continue
+
+		wc_product = wc_products.get(woocommerce_id)
+		if not wc_product:
+			# Nothing came back for this id: the product was deleted on WooCommerce, or it is a
+			# variation whose parent has no WooCommerce ID.
+			missing_ids.append(woocommerce_id)
+			continue
+
 		try:
-			payload = _build_price_payload(sync, item_price)
+			payload = _build_price_payload(sync, item_price, wc_product)
 			if payload:
 				# Variations are flushed against products/{parent}/variations/batch
 				is_variation = bool(item_price.variant_of)
@@ -27,7 +40,7 @@ def enqueue_price_updates(sync: SynchroniseItemPrice) -> None:
 					item_woocommerce_server_idx=0,
 					sync_type="item_price",
 					resource_type="product_variation" if is_variation else "product",
-					woocommerce_id=str(item_price.woocommerce_id),
+					woocommerce_id=woocommerce_id,
 					direction="outbound",
 					triggered_by="Scheduled",
 					trigger_reference_doctype="Item Price",
@@ -37,23 +50,61 @@ def enqueue_price_updates(sync: SynchroniseItemPrice) -> None:
 		except Exception:
 			frappe.log_error("WooCommerce Batch Price Enqueue Error", frappe.get_traceback())
 
-
-def _build_price_payload(sync: SynchroniseItemPrice, item_price) -> dict | None:
-	"""
-	Load the WooCommerce Product, compare prices, and return the dict of changed price
-	fields, or None if nothing changed. Avoids enqueuing no-ops.
-	"""
-	wc_product_name = generate_woocommerce_record_name_from_domain_and_id(
-		domain=item_price.woocommerce_server, resource_id=item_price.woocommerce_id
-	)
-	wc_product = frappe.get_doc({"doctype": "WooCommerce Product", "name": wc_product_name})
-	# Variations are only readable under their parent product's endpoint
-	if item_price.variant_of:
-		wc_product.parent_id = get_variation_parent_woocommerce_id(
-			item_price.woocommerce_server, item_price.item_code
+	if missing_ids:
+		frappe.log_error(
+			"WooCommerce Batch Price Sync: products not found",
+			f"Server: {sync.wc_server.name}\n"
+			f"No WooCommerce product came back for these IDs, so they were skipped "
+			f"({len(missing_ids)}): {', '.join(missing_ids)}\n\n"
+			"Either the product was deleted on WooCommerce, or it is a variation whose parent "
+			"has no WooCommerce ID. Clear the WooCommerce ID or untick Enabled on the matching "
+			"Item WooCommerce Server row to stop this recurring.",
 		)
-	wc_product.load_from_db()
 
+
+def _fetch_woocommerce_products(sync: SynchroniseItemPrice) -> tuple[dict, set]:
+	"""
+	Bulk-read every WooCommerce Product the run needs, in pages of 100, and return
+	({woocommerce_id: product}, {ids whose fetch failed}).
+	"""
+	simple_ids = []
+	# Variations are only readable under their parent product's endpoint, so they are fetched
+	# one call per parent rather than in with everything else.
+	variation_ids_by_parent: dict[str, list] = {}
+
+	for item_price in sync.item_price_list:
+		if item_price.variant_of:
+			parent_id = get_variation_parent_woocommerce_id(
+				item_price.woocommerce_server, item_price.item_code
+			)
+			if not parent_id:
+				continue
+			variation_ids_by_parent.setdefault(str(parent_id), []).append(str(item_price.woocommerce_id))
+		else:
+			simple_ids.append(str(item_price.woocommerce_id))
+
+	products: dict = {}
+	unavailable_ids: set = set()
+
+	groups = [(None, simple_ids), *variation_ids_by_parent.items()]
+	for parent_id, wc_ids in groups:
+		if not wc_ids:
+			continue
+		try:
+			products.update(bulk_get_products(sync.wc_server.name, wc_ids, parent_id=parent_id))
+		except Exception:
+			# One unreachable group must not cost the rest of the run.
+			unavailable_ids.update(wc_ids)
+			frappe.log_error("WooCommerce Batch Price Fetch Error", frappe.get_traceback())
+
+	return products, unavailable_ids
+
+
+def _build_price_payload(sync: SynchroniseItemPrice, item_price, wc_product) -> dict | None:
+	"""
+	Compare the ERPNext price against the already-fetched WooCommerce Product and return the
+	dict of changed price fields, or None if nothing changed. Avoids enqueuing no-ops.
+	"""
 	payload = {}
 
 	# ── Regular price ────────────────────────────────────────────────────────────
