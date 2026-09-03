@@ -310,47 +310,50 @@ class TestBulkGetProducts(IntegrationTestCase):
 	"""The shared bulk product read behind both the item and the price batch paths."""
 
 	def _patched_get_list(self, pages):
-		"""Return (patch context, recorded args list). `pages` is the value each call returns."""
-		calls = []
-
-		def fake_get_list(args=None):
-			calls.append(args)
-			return pages.pop(0) if pages else []
-
+		"""
+		Patch the WooCommerce Product doc that bulk_get_products fetches. `pages` is one return
+		value per expected call; the doc's get_list mock records what it was asked for.
+		"""
 		doc = MagicMock()
-		doc.get_list.side_effect = fake_get_list
-		return patch("frappe.get_doc", return_value=doc), calls
+		doc.get_list.side_effect = pages
+		return patch("frappe.get_doc", return_value=doc), doc
+
+	@staticmethod
+	def _requests(doc) -> list:
+		"""The args dict passed to get_list on each call."""
+		return [call.kwargs["args"] for call in doc.get_list.call_args_list]
 
 	def test_ids_are_requested_in_pages_of_100(self):
 		wc_ids = [str(i) for i in range(250)]
-		ctx, calls = self._patched_get_list([[], [], []])
+		ctx, doc = self._patched_get_list([[], [], []])
 		with ctx:
 			bulk_get_products("any.example.com", wc_ids)
 
-		self.assertEqual(len(calls), 3)
-		self.assertEqual([len(c["filters"][0][3]) for c in calls], [100, 100, 50])
+		requests = self._requests(doc)
+		self.assertEqual(len(requests), 3)
+		self.assertEqual([len(r["filters"][0][3]) for r in requests], [100, 100, 50])
 
 	def test_result_is_keyed_by_woocommerce_id_and_ids_deduplicated(self):
 		page = [MagicMock(woocommerce_id=11), MagicMock(woocommerce_id=12)]
-		ctx, calls = self._patched_get_list([page])
+		ctx, doc = self._patched_get_list([page])
 		with ctx:
 			products = bulk_get_products("any.example.com", ["11", "12", "11"])
 
 		self.assertEqual(sorted(products), ["11", "12"])
-		self.assertEqual(calls[0]["filters"][0][3], ["11", "12"])
+		self.assertEqual(self._requests(doc)[0]["filters"][0][3], ["11", "12"])
 
 	def test_variations_are_read_under_their_parent_endpoint(self):
-		ctx, calls = self._patched_get_list([[]])
+		ctx, doc = self._patched_get_list([[]])
 		with ctx:
 			bulk_get_products("any.example.com", ["21"], parent_id="7")
 
-		self.assertEqual(calls[0]["endpoint"], "products/7/variations")
+		self.assertEqual(self._requests(doc)[0]["endpoint"], "products/7/variations")
 
 	def test_no_ids_makes_no_call(self):
-		ctx, calls = self._patched_get_list([])
+		ctx, doc = self._patched_get_list([])
 		with ctx:
 			self.assertEqual(bulk_get_products("any.example.com", []), {})
-		self.assertEqual(calls, [])
+		doc.get_list.assert_not_called()
 
 
 class TestBatchPriceEnqueue(IntegrationTestCase):
