@@ -763,23 +763,40 @@ class SynchroniseItem(SynchroniseWooCommerce):
 					wc_attribute["options"] if wc_product.type == "variable" else [wc_attribute["option"]]
 				)
 
-				# If no attributes values exist, or attribute values exist already but are different, remove and update them
-				if len(item_attribute.item_attribute_values) == 0 or (
-					len(item_attribute.item_attribute_values) > 0
-					and set(options)
-					!= set([val.attribute_value for val in item_attribute.item_attribute_values])
-				):
-					item_attribute.item_attribute_values = []
-					for option in options:
+				# Only add missing Item Attribute values; never wipe or remove existing options.
+				# A single variation sync must never delete other options from the global dictionary.
+				existing_values = {val.attribute_value for val in item_attribute.item_attribute_values}
+				new_options = [opt for opt in options if opt and opt not in existing_values]
+
+				if not item_attribute.name or new_options:
+					for option in new_options:
 						row = item_attribute.append("item_attribute_values")
 						row.attribute_value = option
 						row.abbr = option.replace(" ", "")
 
-				item_attribute.flags.ignore_mandatory = True
-				if not item_attribute.name:
-					item_attribute.insert()
-				else:
-					item_attribute.save()
+					item_attribute.flags.ignore_mandatory = True
+					# Retry on concurrent-modification races (parallel variation workers)
+					for _attempt in range(3):
+						try:
+							if not item_attribute.name:
+								item_attribute.insert()
+							else:
+								item_attribute.save()
+							break
+						except frappe.TimestampMismatchError:
+							if _attempt == 2:
+								raise
+							frappe.db.rollback()
+							item_attribute = frappe.get_doc("Item Attribute", item_attribute.name)
+							existing_values = {val.attribute_value for val in item_attribute.item_attribute_values}
+							new_options = [opt for opt in options if opt and opt not in existing_values]
+							if not new_options:
+								break
+							for option in new_options:
+								row = item_attribute.append("item_attribute_values")
+								row.attribute_value = option
+								row.abbr = option.replace(" ", "")
+							item_attribute.flags.ignore_mandatory = True
 
 	def set_item_fields(self, item: Item) -> tuple[bool, Item]:
 		"""
