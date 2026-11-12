@@ -231,6 +231,81 @@ class TestWooCommerceStockSync(UnitTestCase):
 
 		self.assertEqual(mock_get_all.call_args.kwargs["filters"], {})
 
+	@patch("woocommerce_fusion.tasks.stock_update.frappe")
+	@patch("woocommerce_fusion.tasks.stock_update.APIWithRequestLogging", autospec=True)
+	def test_update_stock_levels_strips_whitespace_from_woocommerce_id(self, mock_wc_api, mock_frappe):
+		some_item = frappe._dict(
+			woocommerce_servers=[
+				frappe._dict(woocommerce_id="  101  \n", woocommerce_server="woo1.example.com", enabled=1),
+			],
+			is_stock_item=1,
+			disabled=0,
+			variant_of=None,
+		)
+		mock_frappe.get_doc.return_value = some_item
+		mock_frappe.get_list.return_value = [
+			frappe._dict(warehouse="Warehouse A", actual_qty=5),
+		]
+		mock_frappe.get_cached_doc.return_value = frappe._dict(
+			woocommerce_server="woo1.example.com",
+			enable_sync=1,
+			enable_stock_level_synchronisation=1,
+			enable_batch_api=0,
+			subtract_reserved_stock=0,
+			sync_in_sales_uom=0,
+			warehouses=[frappe._dict(warehouse="Warehouse A")],
+		)
+
+		mock_put_response = Mock(status_code=200)
+		mock_api_instance = MagicMock()
+		mock_api_instance.put.return_value = mock_put_response
+		mock_wc_api.return_value = mock_api_instance
+
+		update_stock_levels_on_woocommerce_site("some_item_code")
+
+		mock_api_instance.put.assert_called_once_with(endpoint="products/101", data={"stock_quantity": 5})
+
+	@patch("woocommerce_fusion.tasks.stock_update.frappe")
+	@patch("woocommerce_fusion.tasks.stock_update.APIWithRequestLogging", autospec=True)
+	def test_update_stock_levels_strips_whitespace_from_parent_woocommerce_id(self, mock_wc_api, mock_frappe):
+		variant_item = frappe._dict(
+			woocommerce_servers=[
+				frappe._dict(woocommerce_id=" 202 ", woocommerce_server="woo1.example.com", enabled=1),
+			],
+			is_stock_item=1,
+			disabled=0,
+			variant_of="parent_item_code",
+		)
+		parent_item = frappe._dict(
+			woocommerce_servers=[
+				frappe._dict(woocommerce_id="  303 \t", woocommerce_server="woo1.example.com"),
+			],
+		)
+		mock_frappe.get_doc.side_effect = [variant_item, parent_item]
+		mock_frappe.get_list.return_value = [
+			frappe._dict(warehouse="Warehouse A", actual_qty=7),
+		]
+		mock_frappe.get_cached_doc.return_value = frappe._dict(
+			woocommerce_server="woo1.example.com",
+			enable_sync=1,
+			enable_stock_level_synchronisation=1,
+			enable_batch_api=0,
+			subtract_reserved_stock=0,
+			sync_in_sales_uom=0,
+			warehouses=[frappe._dict(warehouse="Warehouse A")],
+		)
+
+		mock_put_response = Mock(status_code=200)
+		mock_api_instance = MagicMock()
+		mock_api_instance.put.return_value = mock_put_response
+		mock_wc_api.return_value = mock_api_instance
+
+		update_stock_levels_on_woocommerce_site("variant_item_code")
+
+		mock_api_instance.put.assert_called_once_with(
+			endpoint="products/303/variations/202", data={"stock_quantity": 7}
+		)
+
 
 class TestUOMConversion(UnitTestCase):
 	"""Tests for `sync_in_sales_uom`: publishing quantities in the Sales UOM.

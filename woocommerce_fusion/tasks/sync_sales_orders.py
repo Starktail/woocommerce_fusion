@@ -287,7 +287,18 @@ class SynchroniseSalesOrder(SynchroniseWooCommerce):
 				so_dirty = True
 
 			if sales_order.custom_woocommerce_customer_note != woocommerce_order.customer_note:
+				old_note = sales_order.custom_woocommerce_customer_note
 				sales_order.custom_woocommerce_customer_note = woocommerce_order.customer_note
+				incoming_note = (
+					str(woocommerce_order.customer_note).strip() if woocommerce_order.customer_note else ""
+				)
+				if incoming_note and (
+					not sales_order.remarks
+					or sales_order.remarks == old_note
+					or sales_order.remarks in ("No Remarks", "No Remarks.")
+				):
+					sales_order.remarks = incoming_note
+				so_dirty = True
 
 			# Update the payment_method_title field if necessary, use the payment method ID
 			# if the title field is too long
@@ -551,6 +562,8 @@ class SynchroniseSalesOrder(SynchroniseWooCommerce):
 		# Carry the customer-facing WooCommerce order number for autonaming
 		new_sales_order.flags.woocommerce_number = wc_order.get("number")
 		new_sales_order.custom_woocommerce_customer_note = wc_order.customer_note
+		if wc_order.customer_note and str(wc_order.customer_note).strip():
+			new_sales_order.remarks = str(wc_order.customer_note).strip()
 
 		new_sales_order.woocommerce_status = WC_ORDER_STATUS_MAPPING_REVERSE[wc_order.status]
 		wc_server = frappe.get_cached_doc("WooCommerce Server", wc_order.woocommerce_server)
@@ -570,21 +583,33 @@ class SynchroniseSalesOrder(SynchroniseWooCommerce):
 		new_sales_order.company = wc_server.company
 		new_sales_order.currency = wc_order.currency
 
+		shipping_lines = []
 		if (
-			(wc_server.enable_shipping_methods_sync)
-			and (shipping_lines := json.loads(wc_order.shipping_lines))
+			wc_server.enable_shipping_methods_sync
+			and wc_order.shipping_lines
 			and len(wc_server.shipping_rule_map) > 0
 		):
-			if len(wc_order.shipping_lines) > 0:
+			if isinstance(wc_order.shipping_lines, str):
+				try:
+					shipping_lines = json.loads(wc_order.shipping_lines)
+				except (ValueError, TypeError):
+					shipping_lines = []
+			elif isinstance(wc_order.shipping_lines, list):
+				shipping_lines = wc_order.shipping_lines
+
+		if shipping_lines and isinstance(shipping_lines, list) and len(shipping_lines) > 0:
+			first_shipping_line = shipping_lines[0]
+			if isinstance(first_shipping_line, dict):
 				shipping_rule_mapping = next(
 					(
 						rule
 						for rule in wc_server.shipping_rule_map
-						if rule.wc_shipping_method_id == shipping_lines[0]["method_title"]
+						if rule.wc_shipping_method_id == first_shipping_line.get("method_title")
 					),
 					None,
 				)
-				new_sales_order.shipping_rule = shipping_rule_mapping.shipping_rule
+				if shipping_rule_mapping and shipping_rule_mapping.shipping_rule:
+					new_sales_order.shipping_rule = shipping_rule_mapping.shipping_rule
 
 		self.set_items_in_sales_order(new_sales_order, wc_order)
 		self.set_fee_lines_in_sales_order(new_sales_order, wc_order)

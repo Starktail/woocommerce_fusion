@@ -424,3 +424,262 @@ class TestRunItemSyncFromHook(UnitTestCase):
 				enqueue_call.kwargs.get("enqueue_after_commit"),
 				f"{enqueue_call.args[0]} is enqueued before the transaction commits",
 			)
+
+
+class TestVariationSync(UnitTestCase):
+	@patch("woocommerce_fusion.tasks.sync_items.frappe.db.exists", return_value=False)
+	@patch("woocommerce_fusion.tasks.sync_items.run_item_sync")
+	@patch("woocommerce_fusion.tasks.sync_items.frappe.new_doc")
+	@patch("woocommerce_fusion.tasks.sync_items.frappe.get_cached_doc")
+	def test_variation_inherits_uom_and_item_group_from_parent(
+		self, mock_get_server, mock_new_doc, mock_run_item_sync, _mock_exists
+	):
+		mock_get_server.return_value = frappe._dict(
+			{
+				"name": "woo.example.com",
+				"uom": "Box",
+				"item_group": "Server Default Group",
+				"name_by": "Product ID",
+				"enable_image_sync": 0,
+			}
+		)
+
+		parent_item = frappe._dict(
+			{
+				"item_code": "PARENT-ITEM",
+				"stock_uom": "Pair",
+				"item_group": "Parent Item Group",
+			}
+		)
+		mock_run_item_sync.return_value = (parent_item, None)
+
+		def append_child(field, row=None):
+			r = frappe._dict(row or {})
+			getattr(item, field).append(r)
+			return r
+
+		item = frappe._dict(
+			{
+				"flags": frappe._dict(),
+				"woocommerce_servers": [],
+				"attributes": [],
+				"append": append_child,
+				"insert": Mock(),
+			}
+		)
+		mock_new_doc.return_value = item
+
+		sync = SynchroniseItem(servers=Mock())
+		wc_product = frappe._dict(
+			{
+				"doctype": "WooCommerce Product",
+				"woocommerce_server": "woo.example.com",
+				"woocommerce_id": 55,
+				"woocommerce_name": "Variant Product",
+				"type": "variation",
+				"parent_id": 10,
+				"sku": "VAR-55",
+				"attributes": "[]",
+				"images": "[]",
+			}
+		)
+
+		with (
+			patch.object(sync, "create_or_update_item_attributes"),
+			patch.object(sync, "set_item_fields", return_value=(False, item)),
+			patch.object(sync, "set_sync_hash"),
+		):
+			sync.create_item(wc_product)
+
+		self.assertEqual(item.stock_uom, "Pair")
+		self.assertEqual(item.item_group, "Parent Item Group")
+		self.assertEqual(item.variant_of, "PARENT-ITEM")
+
+	@patch("woocommerce_fusion.tasks.sync_items.get_list_of_wc_products")
+	@patch("woocommerce_fusion.tasks.sync_items.frappe.get_cached_doc")
+	@patch("woocommerce_fusion.tasks.sync_items.frappe.db.set_single_value")
+	def test_sync_products_modified_since_enqueues_variation_with_parent_id(
+		self, _mock_set_val, mock_get_server, mock_get_products
+	):
+		from woocommerce_fusion.tasks.sync_items import sync_woocommerce_products_modified_since
+
+		mock_get_server.return_value = frappe._dict(
+			{
+				"woocommerce_server": "woo.example.com",
+				"enable_batch_api": 1,
+			}
+		)
+		wc_var = frappe._dict(
+			{
+				"woocommerce_server": "woo.example.com",
+				"woocommerce_id": 99,
+				"type": "variation",
+				"parent_id": 44,
+			}
+		)
+		mock_get_products.return_value = [wc_var]
+
+		with patch(
+			"woocommerce_fusion.woocommerce.doctype.woocommerce_sync_queue.woocommerce_sync_queue.enqueue_item"
+		) as mock_enqueue:
+			sync_woocommerce_products_modified_since(date_time_from="2026-01-01 00:00:00")
+
+			mock_enqueue.assert_called_once()
+			kwargs = mock_enqueue.call_args.kwargs
+			self.assertEqual(kwargs["resource_type"], "product_variation")
+			self.assertEqual(kwargs["parent_woocommerce_id"], "44")
+			self.assertEqual(kwargs["parent_id"], "44")
+
+	@patch("woocommerce_fusion.tasks.sync_items.frappe.db.exists", return_value=False)
+	@patch("woocommerce_fusion.tasks.sync_items.run_item_sync", side_effect=Exception("Parent not found"))
+	@patch("woocommerce_fusion.tasks.sync_items.frappe.new_doc")
+	@patch("woocommerce_fusion.tasks.sync_items.frappe.get_cached_doc")
+	def test_variation_with_failing_parent_falls_back_gracefully(
+		self, mock_get_server, mock_new_doc, _mock_run_sync, _mock_exists
+	):
+		mock_get_server.return_value = frappe._dict(
+			{
+				"name": "woo.example.com",
+				"uom": "Box",
+				"item_group": "Server Default Group",
+				"name_by": "Product ID",
+				"enable_image_sync": 0,
+			}
+		)
+
+		def append_child(field, row=None):
+			r = frappe._dict(row or {})
+			r.idx = len(getattr(item, field)) + 1
+			getattr(item, field).append(r)
+			return r
+
+		item = frappe._dict(
+			{
+				"flags": frappe._dict(),
+				"woocommerce_servers": [],
+				"attributes": [],
+				"append": append_child,
+				"insert": Mock(),
+			}
+		)
+		mock_new_doc.return_value = item
+
+		sync = SynchroniseItem(servers=Mock())
+		wc_product = frappe._dict(
+			{
+				"doctype": "WooCommerce Product",
+				"woocommerce_server": "woo.example.com",
+				"woocommerce_id": 56,
+				"woocommerce_name": "Variant Product",
+				"type": "variation",
+				"parent_id": 11,
+				"sku": "VAR-56",
+				"attributes": "[]",
+				"images": "[]",
+			}
+		)
+
+		with (
+			patch.object(sync, "create_or_update_item_attributes"),
+			patch.object(sync, "set_item_fields", return_value=(False, item)),
+			patch.object(sync, "set_sync_hash"),
+		):
+			sync.create_item(wc_product)
+
+		self.assertEqual(item.stock_uom, "Box")
+		self.assertEqual(item.item_group, "Server Default Group")
+
+	@patch("woocommerce_fusion.tasks.sync_items.frappe.db.exists", return_value=False)
+	@patch("woocommerce_fusion.tasks.sync_items.frappe.new_doc")
+	@patch("woocommerce_fusion.tasks.sync_items.frappe.get_cached_doc")
+	def test_variation_without_parent_id_falls_back_gracefully(
+		self, mock_get_server, mock_new_doc, _mock_exists
+	):
+		mock_get_server.return_value = frappe._dict(
+			{
+				"name": "woo.example.com",
+				"uom": "Box",
+				"item_group": "Server Default Group",
+				"name_by": "Product ID",
+				"enable_image_sync": 0,
+			}
+		)
+
+		def append_child(field, row=None):
+			r = frappe._dict(row or {})
+			r.idx = len(getattr(item, field)) + 1
+			getattr(item, field).append(r)
+			return r
+
+		item = frappe._dict(
+			{
+				"flags": frappe._dict(),
+				"woocommerce_servers": [],
+				"attributes": [],
+				"append": append_child,
+				"insert": Mock(),
+			}
+		)
+		mock_new_doc.return_value = item
+
+		sync = SynchroniseItem(servers=Mock())
+		wc_product = frappe._dict(
+			{
+				"doctype": "WooCommerce Product",
+				"woocommerce_server": "woo.example.com",
+				"woocommerce_id": 57,
+				"woocommerce_name": "Variant Product",
+				"type": "variation",
+				"parent_id": None,
+				"sku": "VAR-57",
+				"attributes": "[]",
+				"images": "[]",
+			}
+		)
+
+		with (
+			patch.object(sync, "create_or_update_item_attributes"),
+			patch.object(sync, "set_item_fields", return_value=(False, item)),
+			patch.object(sync, "set_sync_hash"),
+		):
+			sync.create_item(wc_product)
+
+		self.assertEqual(item.stock_uom, "Box")
+		self.assertEqual(item.item_group, "Server Default Group")
+
+	@patch("woocommerce_fusion.tasks.sync_items.get_list_of_wc_products")
+	@patch("woocommerce_fusion.tasks.sync_items.frappe.get_cached_doc")
+	@patch("woocommerce_fusion.tasks.sync_items.frappe.db.set_single_value")
+	def test_sync_products_modified_since_strips_whitespace_on_variation_ids(
+		self, _mock_set_val, mock_get_server, mock_get_products
+	):
+		from woocommerce_fusion.tasks.sync_items import sync_woocommerce_products_modified_since
+
+		mock_get_server.return_value = frappe._dict(
+			{
+				"woocommerce_server": "woo.example.com",
+				"enable_batch_api": 1,
+			}
+		)
+		wc_var = frappe._dict(
+			{
+				"woocommerce_server": "woo.example.com",
+				"woocommerce_id": " 99 \n",
+				"type": "variation",
+				"parent_id": " 44 \t",
+			}
+		)
+		mock_get_products.return_value = [wc_var]
+
+		with patch(
+			"woocommerce_fusion.woocommerce.doctype.woocommerce_sync_queue.woocommerce_sync_queue.enqueue_item"
+		) as mock_enqueue:
+			sync_woocommerce_products_modified_since(date_time_from="2026-01-01 00:00:00")
+
+			mock_enqueue.assert_called_once()
+			kwargs = mock_enqueue.call_args.kwargs
+			self.assertEqual(kwargs["resource_type"], "product_variation")
+			self.assertEqual(kwargs["parent_woocommerce_id"], "44")
+			self.assertEqual(kwargs["parent_id"], "44")
+			self.assertEqual(kwargs["woocommerce_id"], "99")
+			self.assertEqual(kwargs["item_code"], "99")

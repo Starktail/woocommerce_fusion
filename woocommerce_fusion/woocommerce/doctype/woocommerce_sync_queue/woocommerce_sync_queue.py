@@ -67,6 +67,7 @@ def enqueue_item(
 	trigger_reference_doctype: str | None = None,
 	trigger_reference_name: str | None = None,
 	extra_data: dict | None = None,
+	parent_id: str | None = None,
 ) -> str:
 	"""
 	Add an item/item_price/stock operation to the sync queue. Returns the new queue entry name.
@@ -77,6 +78,8 @@ def enqueue_item(
 	row already exists for this combination, it is marked "Superseded" before inserting the new
 	row. This preserves full history - each enqueue event gets its own row.
 	"""
+	parent_woocommerce_id = parent_woocommerce_id or parent_id
+
 	_supersede_pending(
 		woocommerce_server,
 		sync_type,

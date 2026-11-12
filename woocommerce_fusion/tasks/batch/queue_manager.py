@@ -71,8 +71,10 @@ def flush_pending(server_name: str, reason: str = "manual") -> dict:
 	frappe.db.set_value(
 		"WooCommerce Sync Queue",
 		{"name": ["in", names]},
-		"status",
-		"Processing",
+		{
+			"status": "Processing",
+			"modified": now_datetime(),
+		},
 		update_modified=False,
 	)
 	if not frappe.flags.in_test:
@@ -95,14 +97,33 @@ def flush_pending(server_name: str, reason: str = "manual") -> dict:
 	def run_chunks(resource_type: str, parent_id: str | None, rows: list) -> None:
 		for chunk_start in range(0, len(rows), chunk_size):
 			chunk = rows[chunk_start : chunk_start + chunk_size]
-			success, failed = processor.process_chunk(
-				rows=chunk,
-				resource_type=resource_type,
-				parent_id=parent_id or None,
-				flush_reason=reason,
-			)
-			totals["success"] += success
-			totals["failed"] += failed
+			try:
+				success, failed = processor.process_chunk(
+					rows=chunk,
+					resource_type=resource_type,
+					parent_id=parent_id or None,
+					flush_reason=reason,
+				)
+				totals["success"] += success
+				totals["failed"] += failed
+			except Exception as e:
+				error_msg = f"Chunk processing failed: {frappe.get_traceback()}"
+				frappe.log_error("WooCommerce Batch Chunk Error", error_msg)
+				if not frappe.flags.in_test:
+					frappe.db.rollback()
+				chunk_names = [r.name for r in chunk]
+				frappe.db.set_value(
+					"WooCommerce Sync Queue",
+					{"name": ["in", chunk_names]},
+					{
+						"status": "Failed",
+						"error_message": str(e) or error_msg,
+					},
+					update_modified=False,
+				)
+				if not frappe.flags.in_test:
+					frappe.db.commit()  # nosemgrep
+				totals["failed"] += len(chunk)
 
 	# Process parents (and everything that is not a variation) first, so that a parent product
 	# created in this same flush has a WooCommerce ID before its variations are sent.
@@ -135,10 +156,48 @@ def flush_pending(server_name: str, reason: str = "manual") -> dict:
 
 
 @frappe.whitelist()
+def reap_dead_processing_rows(timeout_minutes: int = 30) -> int:
+	"""
+	Reap queue entries stuck in Processing state for longer than timeout_minutes.
+	Marks them as Failed so they do not block queue processing indefinitely and can be retried.
+	"""
+	cutoff = now_datetime() - timedelta(minutes=timeout_minutes)
+	dead_rows = frappe.db.get_all(
+		"WooCommerce Sync Queue",
+		filters={
+			"status": "Processing",
+			"modified": ["<", cutoff],
+		},
+		fields=["name"],
+	)
+	if not dead_rows:
+		return 0
+
+	names = [r.name for r in dead_rows]
+	frappe.db.set_value(
+		"WooCommerce Sync Queue",
+		{"name": ["in", names]},
+		{
+			"status": "Failed",
+			"error_message": f"Timed out: Entry stuck in Processing state for more than {timeout_minutes} minutes (reaped)",
+		},
+		update_modified=False,
+	)
+	if not frappe.flags.in_test:
+		frappe.db.commit()  # nosemgrep
+	return len(names)
+
+
+@frappe.whitelist()
 def check_and_flush_all_servers():
 	"""
 	Called by the scheduler every minute. Flushes servers whose queue is ready.
 	"""
+	try:
+		reap_dead_processing_rows()
+	except Exception:
+		frappe.log_error("WooCommerce Batch Reaper Error", frappe.get_traceback())
+
 	servers = frappe.get_all(
 		"WooCommerce Server",
 		filters={"enable_sync": 1, "enable_batch_api": 1},

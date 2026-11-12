@@ -6,7 +6,11 @@ from frappe import _dict
 from frappe.tests import IntegrationTestCase
 
 from woocommerce_fusion.tasks.batch.batch_processor import BatchProcessor
-from woocommerce_fusion.tasks.batch.queue_manager import flush_pending, should_flush
+from woocommerce_fusion.tasks.batch.queue_manager import (
+	flush_pending,
+	reap_dead_processing_rows,
+	should_flush,
+)
 from woocommerce_fusion.woocommerce.doctype.woocommerce_sync_queue.woocommerce_sync_queue import (
 	enqueue_item,
 	enqueue_order,
@@ -266,3 +270,62 @@ class TestBatchProcessor(IntegrationTestCase):
 		# Use a server with no pending rows
 		result = flush_pending(self.server, reason="manual")
 		self.assertIn("flushed", result)
+
+	def test_run_chunks_catches_chunk_failure_and_marks_failed(self):
+		row = self._make_queue_row(reference_name="UNIT-ERR-1")
+		with patch.object(BatchProcessor, "process_chunk", side_effect=RuntimeError("API crashed")):
+			result = flush_pending(self.server, reason="manual")
+		self.assertEqual(result["failed"], 1)
+		self.assertEqual(frappe.db.get_value("WooCommerce Sync Queue", row.name, "status"), "Failed")
+		self.assertIn(
+			"API crashed",
+			frappe.db.get_value("WooCommerce Sync Queue", row.name, "error_message"),
+		)
+
+	def test_reap_dead_processing_rows(self):
+		from datetime import timedelta
+
+		from frappe.utils import now_datetime
+
+		dead_row = self._make_queue_row(
+			reference_name="UNIT-DEAD-1",
+			status="Processing",
+		)
+		frappe.db.set_value(
+			"WooCommerce Sync Queue",
+			dead_row.name,
+			"modified",
+			now_datetime() - timedelta(minutes=45),
+			update_modified=False,
+		)
+
+		active_row = self._make_queue_row(
+			reference_name="UNIT-ACTIVE-1",
+			status="Processing",
+		)
+		frappe.db.set_value(
+			"WooCommerce Sync Queue",
+			active_row.name,
+			"modified",
+			now_datetime() - timedelta(minutes=5),
+			update_modified=False,
+		)
+
+		pending_row = self._make_queue_row(
+			reference_name="UNIT-PENDING-1",
+			status="Pending",
+		)
+
+		reaped = reap_dead_processing_rows(timeout_minutes=30)
+		self.assertGreaterEqual(reaped, 1)
+
+		self.assertEqual(frappe.db.get_value("WooCommerce Sync Queue", dead_row.name, "status"), "Failed")
+		self.assertIn(
+			"Timed out",
+			frappe.db.get_value("WooCommerce Sync Queue", dead_row.name, "error_message"),
+		)
+
+		self.assertEqual(
+			frappe.db.get_value("WooCommerce Sync Queue", active_row.name, "status"), "Processing"
+		)
+		self.assertEqual(frappe.db.get_value("WooCommerce Sync Queue", pending_row.name, "status"), "Pending")
