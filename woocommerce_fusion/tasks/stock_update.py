@@ -95,7 +95,9 @@ def update_stock_levels_on_woocommerce_site(item_code: str):
 
 		for wc_site in item.woocommerce_servers:
 			if wc_site.woocommerce_id:
-				woocommerce_id = wc_site.woocommerce_id
+				woocommerce_id = str(wc_site.woocommerce_id).strip()
+				if not woocommerce_id:
+					continue
 				woocommerce_server = wc_site.woocommerce_server
 				wc_server = frappe.get_cached_doc("WooCommerce Server", woocommerce_server)
 
@@ -148,7 +150,9 @@ def update_stock_levels_on_woocommerce_site(item_code: str):
 						# Get the parent item's woocommerce_id
 						for parent_wc_site in parent_item.woocommerce_servers:
 							if parent_wc_site.woocommerce_server == woocommerce_server:
-								parent_woocommerce_id = parent_wc_site.woocommerce_id
+								if parent_wc_site.woocommerce_id:
+									cleaned_parent_id = str(parent_wc_site.woocommerce_id).strip()
+									parent_woocommerce_id = cleaned_parent_id or None
 								break
 						if not parent_woocommerce_id:
 							continue

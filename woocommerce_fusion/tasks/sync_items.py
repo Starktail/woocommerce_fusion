@@ -145,11 +145,22 @@ def sync_woocommerce_products_modified_since(date_time_from=None):
 					enqueue_item,
 				)
 
+				resource_type = "product_variation" if wc_product.type == "variation" else "product"
+				parent_id = (
+					str(wc_product.parent_id).strip()
+					if wc_product.type == "variation" and wc_product.parent_id
+					else None
+				)
+				wc_id = str(wc_product.woocommerce_id).strip()
+
 				enqueue_item(
 					woocommerce_server=wc_product.woocommerce_server,
-					item_code=str(wc_product.woocommerce_id),
+					item_code=wc_id,
 					item_woocommerce_server_idx=0,
-					woocommerce_id=str(wc_product.woocommerce_id),
+					resource_type=resource_type,
+					parent_woocommerce_id=parent_id,
+					parent_id=parent_id,
+					woocommerce_id=wc_id,
 					direction="inbound",
 					triggered_by="Scheduled",
 				)
@@ -668,13 +679,26 @@ class SynchroniseItem(SynchroniseWooCommerce):
 		if wc_product.type == "variable" and item.attributes:
 			item.has_variants = 1
 
-		if wc_product.type == "variation":
+		parent_item = None
+		if wc_product.type == "variation" and wc_product.parent_id:
 			# Check if parent exists
-			woocommerce_product_name = generate_woocommerce_record_name_from_domain_and_id(
-				wc_product.woocommerce_server, wc_product.parent_id
-			)
-			parent_item, _parent_wc_product = run_item_sync(woocommerce_product_name=woocommerce_product_name)
-			item.variant_of = parent_item.item_code
+			try:
+				woocommerce_product_name = generate_woocommerce_record_name_from_domain_and_id(
+					wc_product.woocommerce_server, wc_product.parent_id
+				)
+				parent_item, _parent_wc_product = run_item_sync(
+					woocommerce_product_name=woocommerce_product_name
+				)
+				if parent_item:
+					item.variant_of = getattr(parent_item, "item_code", None) or getattr(
+						parent_item, "name", None
+					)
+			except Exception:
+				frappe.log_error(
+					"WooCommerce Variation Sync",
+					f"Could not resolve parent product {wc_product.parent_id} for variation {wc_product.woocommerce_id}: {frappe.get_traceback()}",
+				)
+				parent_item = None
 
 		item.item_code = (
 			wc_product.sku
@@ -687,8 +711,12 @@ class SynchroniseItem(SynchroniseWooCommerce):
 			self.link_existing_item(item.item_code, wc_product, wc_server)
 			return
 
-		item.stock_uom = wc_server.uom or _("Nos")
-		item.item_group = wc_server.item_group
+		if wc_product.type == "variation" and parent_item:
+			item.stock_uom = getattr(parent_item, "stock_uom", None) or wc_server.uom or "Nos"
+			item.item_group = getattr(parent_item, "item_group", None) or wc_server.item_group
+		else:
+			item.stock_uom = wc_server.uom or "Nos"
+			item.item_group = wc_server.item_group
 		item.item_name = unescape_woocommerce_value(wc_product.woocommerce_name)
 		row = item.append("woocommerce_servers")
 		row.woocommerce_id = wc_product.woocommerce_id

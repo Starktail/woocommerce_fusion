@@ -468,6 +468,353 @@ class TestWooCommerceSync(IntegrationTestCase):
 		result = find_existing_contact(email="doesntexist@db.test", phone=None)
 		self.assertEqual(result, None)
 
+	@patch("woocommerce_fusion.tasks.sync_sales_orders.frappe.new_doc")
+	def test_shipping_rule_unmatched_does_not_raise(self, mock_new_doc, mock_get_wc_servers):
+		"""
+		Fixes #193: When shipping methods sync is enabled and an order contains a shipping
+		line that does not match any entry in wc_server.shipping_rule_map, it should not raise
+		AttributeError: 'NoneType' object has no attribute 'shipping_rule'.
+		"""
+		sync = SynchroniseSalesOrder()
+		wc_order = frappe._dict(
+			{
+				"id": 10978,
+				"name": "wc_order_10978",
+				"customer_note": "",
+				"status": "processing",
+				"woocommerce_server": "site1.example.com",
+				"payment_method": "PayPal",
+				"payment_method_title": "PayPal",
+				"date_created": "2025-04-12T10:00:00",
+				"currency": "EUR",
+				"line_items": "[]",
+				"shipping_lines": json.dumps([{"method_title": "DHL Express"}]),
+				"shipping_tax": 0.0,
+				"shipping_total": 5.0,
+			}
+		)
+		wc_server = frappe._dict(
+			{
+				"name": "site1.example.com",
+				"company": default_company,
+				"delivery_after_days": 7,
+				"enable_shipping_methods_sync": 1,
+				"shipping_rule_map": [
+					frappe._dict({"wc_shipping_method_id": "Free Shipping", "shipping_rule": "Free Rule"}),
+				],
+				"submit_sales_orders": 0,
+			}
+		)
+		mock_get_wc_servers.return_value = wc_server
+
+		new_so = frappe._dict(
+			{
+				"flags": frappe._dict(),
+				"shipping_rule": None,
+				"items": [],
+				"taxes": [],
+				"insert": Mock(),
+				"reload": Mock(),
+				"save": Mock(),
+			}
+		)
+		mock_new_doc.return_value = new_so
+
+		with (
+			patch.object(sync, "create_or_link_customer_and_address", return_value="Test Customer"),
+			patch.object(sync, "set_items_in_sales_order"),
+			patch.object(sync, "set_fee_lines_in_sales_order"),
+			patch.object(sync, "create_and_link_payment_entry"),
+		):
+			sync.create_sales_order(wc_order)
+
+		self.assertIsNone(new_so.shipping_rule)
+
+	@patch("woocommerce_fusion.tasks.sync_sales_orders.frappe.new_doc")
+	def test_shipping_rule_matched_sets_shipping_rule(self, mock_new_doc, mock_get_wc_servers):
+		sync = SynchroniseSalesOrder()
+		wc_order = frappe._dict(
+			{
+				"id": 10979,
+				"name": "wc_order_10979",
+				"customer_note": "",
+				"status": "processing",
+				"woocommerce_server": "site1.example.com",
+				"payment_method": "PayPal",
+				"payment_method_title": "PayPal",
+				"date_created": "2025-04-12T10:00:00",
+				"currency": "EUR",
+				"line_items": "[]",
+				"shipping_lines": json.dumps([{"method_title": "DHL Express"}]),
+				"shipping_tax": 0.0,
+				"shipping_total": 5.0,
+			}
+		)
+		wc_server = frappe._dict(
+			{
+				"name": "site1.example.com",
+				"company": default_company,
+				"delivery_after_days": 7,
+				"enable_shipping_methods_sync": 1,
+				"shipping_rule_map": [
+					frappe._dict({"wc_shipping_method_id": "DHL Express", "shipping_rule": "DHL Rule"}),
+				],
+				"submit_sales_orders": 0,
+			}
+		)
+		mock_get_wc_servers.return_value = wc_server
+
+		new_so = frappe._dict(
+			{
+				"flags": frappe._dict(),
+				"shipping_rule": None,
+				"items": [],
+				"taxes": [],
+				"insert": Mock(),
+				"reload": Mock(),
+				"save": Mock(),
+			}
+		)
+		mock_new_doc.return_value = new_so
+
+		with (
+			patch.object(sync, "create_or_link_customer_and_address", return_value="Test Customer"),
+			patch.object(sync, "set_items_in_sales_order"),
+			patch.object(sync, "set_fee_lines_in_sales_order"),
+			patch.object(sync, "create_and_link_payment_entry"),
+		):
+			sync.create_sales_order(wc_order)
+
+		self.assertEqual(new_so.shipping_rule, "DHL Rule")
+
+	@patch("woocommerce_fusion.tasks.sync_sales_orders.frappe.new_doc")
+	def test_customer_note_copied_to_remarks_on_create(self, mock_new_doc, mock_get_wc_servers):
+		sync = SynchroniseSalesOrder()
+		wc_order = frappe._dict(
+			{
+				"id": 10980,
+				"name": "wc_order_10980",
+				"customer_note": "Please leave at front door",
+				"status": "processing",
+				"woocommerce_server": "site1.example.com",
+				"payment_method": "PayPal",
+				"payment_method_title": "PayPal",
+				"date_created": "2025-04-12T10:00:00",
+				"currency": "EUR",
+				"line_items": "[]",
+				"shipping_lines": "[]",
+			}
+		)
+		wc_server = frappe._dict(
+			{
+				"name": "site1.example.com",
+				"company": default_company,
+				"delivery_after_days": 7,
+				"enable_shipping_methods_sync": 0,
+				"submit_sales_orders": 0,
+			}
+		)
+		mock_get_wc_servers.return_value = wc_server
+
+		new_so = frappe._dict(
+			{
+				"flags": frappe._dict(),
+				"remarks": None,
+				"custom_woocommerce_customer_note": None,
+				"items": [],
+				"taxes": [],
+				"insert": Mock(),
+				"reload": Mock(),
+				"save": Mock(),
+			}
+		)
+		mock_new_doc.return_value = new_so
+
+		with (
+			patch.object(sync, "create_or_link_customer_and_address", return_value="Test Customer"),
+			patch.object(sync, "set_items_in_sales_order"),
+			patch.object(sync, "set_fee_lines_in_sales_order"),
+			patch.object(sync, "create_and_link_payment_entry"),
+		):
+			sync.create_sales_order(wc_order)
+
+		self.assertEqual(new_so.custom_woocommerce_customer_note, "Please leave at front door")
+		self.assertEqual(new_so.remarks, "Please leave at front door")
+
+	def test_customer_note_copied_to_remarks_on_update(self, mock_get_wc_servers):
+		sync = SynchroniseSalesOrder()
+		wc_order = frappe._dict(
+			{
+				"id": 10981,
+				"status": "processing",
+				"customer_note": "Updated delivery note",
+				"payment_method": "PayPal",
+				"payment_method_title": "PayPal",
+			}
+		)
+		so = frappe._dict(
+			{
+				"flags": frappe._dict(),
+				"docstatus": 0,
+				"woocommerce_status": "Processing",
+				"custom_woocommerce_customer_note": "Old note",
+				"remarks": "Old note",
+				"woocommerce_payment_method": "PayPal",
+				"woocommerce_payment_entry": "PE-1",
+				"save": Mock(),
+			}
+		)
+
+		sync.update_sales_order(wc_order, so)
+
+		self.assertEqual(so.custom_woocommerce_customer_note, "Updated delivery note")
+		self.assertEqual(so.remarks, "Updated delivery note")
+		so.save.assert_called_once()
+
+	@patch("woocommerce_fusion.tasks.sync_sales_orders.frappe.new_doc")
+	def test_shipping_rule_none_shipping_lines_does_not_crash(self, mock_new_doc, mock_get_wc_servers):
+		sync = SynchroniseSalesOrder()
+		wc_order = frappe._dict(
+			{
+				"id": 10982,
+				"name": "wc_order_10982",
+				"customer_note": "",
+				"status": "processing",
+				"woocommerce_server": "site1.example.com",
+				"payment_method": "PayPal",
+				"payment_method_title": "PayPal",
+				"date_created": "2025-04-12T10:00:00",
+				"currency": "EUR",
+				"line_items": "[]",
+				"shipping_lines": None,
+				"shipping_tax": 0.0,
+				"shipping_total": 0.0,
+			}
+		)
+		wc_server = frappe._dict(
+			{
+				"name": "site1.example.com",
+				"company": default_company,
+				"delivery_after_days": 7,
+				"enable_shipping_methods_sync": 1,
+				"shipping_rule_map": [
+					frappe._dict({"wc_shipping_method_id": "Free Shipping", "shipping_rule": "Free Rule"}),
+				],
+				"submit_sales_orders": 0,
+			}
+		)
+		mock_get_wc_servers.return_value = wc_server
+
+		new_so = frappe._dict(
+			{
+				"flags": frappe._dict(),
+				"shipping_rule": None,
+				"items": [],
+				"taxes": [],
+				"insert": Mock(),
+				"reload": Mock(),
+				"save": Mock(),
+			}
+		)
+		mock_new_doc.return_value = new_so
+
+		with (
+			patch.object(sync, "create_or_link_customer_and_address", return_value="Test Customer"),
+			patch.object(sync, "set_items_in_sales_order"),
+			patch.object(sync, "set_fee_lines_in_sales_order"),
+			patch.object(sync, "create_and_link_payment_entry"),
+		):
+			sync.create_sales_order(wc_order)
+
+		self.assertIsNone(new_so.shipping_rule)
+
+	@patch("woocommerce_fusion.tasks.sync_sales_orders.frappe.new_doc")
+	def test_shipping_rule_list_shipping_lines_supported(self, mock_new_doc, mock_get_wc_servers):
+		sync = SynchroniseSalesOrder()
+		wc_order = frappe._dict(
+			{
+				"id": 10983,
+				"name": "wc_order_10983",
+				"customer_note": "",
+				"status": "processing",
+				"woocommerce_server": "site1.example.com",
+				"payment_method": "PayPal",
+				"payment_method_title": "PayPal",
+				"date_created": "2025-04-12T10:00:00",
+				"currency": "EUR",
+				"line_items": "[]",
+				"shipping_lines": [{"method_title": "Express Air"}],
+				"shipping_tax": 0.0,
+				"shipping_total": 10.0,
+			}
+		)
+		wc_server = frappe._dict(
+			{
+				"name": "site1.example.com",
+				"company": default_company,
+				"delivery_after_days": 7,
+				"enable_shipping_methods_sync": 1,
+				"shipping_rule_map": [
+					frappe._dict({"wc_shipping_method_id": "Express Air", "shipping_rule": "Express Rule"}),
+				],
+				"submit_sales_orders": 0,
+			}
+		)
+		mock_get_wc_servers.return_value = wc_server
+
+		new_so = frappe._dict(
+			{
+				"flags": frappe._dict(),
+				"shipping_rule": None,
+				"items": [],
+				"taxes": [],
+				"insert": Mock(),
+				"reload": Mock(),
+				"save": Mock(),
+			}
+		)
+		mock_new_doc.return_value = new_so
+
+		with (
+			patch.object(sync, "create_or_link_customer_and_address", return_value="Test Customer"),
+			patch.object(sync, "set_items_in_sales_order"),
+			patch.object(sync, "set_fee_lines_in_sales_order"),
+			patch.object(sync, "create_and_link_payment_entry"),
+		):
+			sync.create_sales_order(wc_order)
+
+		self.assertEqual(new_so.shipping_rule, "Express Rule")
+
+	def test_customer_note_copied_to_remarks_on_update_when_default_no_remarks(self, mock_get_wc_servers):
+		sync = SynchroniseSalesOrder()
+		wc_order = frappe._dict(
+			{
+				"id": 10984,
+				"status": "processing",
+				"customer_note": "Please leave at reception",
+				"payment_method": "PayPal",
+				"payment_method_title": "PayPal",
+			}
+		)
+		so = frappe._dict(
+			{
+				"flags": frappe._dict(),
+				"docstatus": 0,
+				"woocommerce_status": "Processing",
+				"custom_woocommerce_customer_note": None,
+				"remarks": "No Remarks.",
+				"woocommerce_payment_method": "PayPal",
+				"woocommerce_payment_entry": "PE-1",
+				"save": Mock(),
+			}
+		)
+
+		sync.update_sales_order(wc_order, so)
+
+		self.assertEqual(so.custom_woocommerce_customer_note, "Please leave at reception")
+		self.assertEqual(so.remarks, "Please leave at reception")
+		so.save.assert_called_once()
+
 
 class TestCustomerSellingPriceList(IntegrationTestCase):
 	"""
