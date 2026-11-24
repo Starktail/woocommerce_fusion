@@ -90,10 +90,10 @@ doctype_list_js = {"Sales Order": "public/js/selling/sales_order_list.js"}
 
 # DocType Class
 # ---------------
-# Override standard doctype classes
+# Extend standard doctype classes
 
-override_doctype_class = {
-	"Sales Order": "woocommerce_fusion.overrides.selling.sales_order.CustomSalesOrder",
+extend_doctype_class = {
+	"Sales Order": ["woocommerce_fusion.overrides.selling.sales_order.CustomSalesOrderMixin"],
 }
 
 # Document Events

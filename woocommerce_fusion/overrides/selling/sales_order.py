@@ -1,7 +1,6 @@
 import json
 
 import frappe
-from erpnext.selling.doctype.sales_order.sales_order import SalesOrder
 from frappe import _
 from frappe.model.document import Document
 from frappe.model.naming import get_default_naming_series, make_autoname
@@ -13,12 +12,11 @@ from woocommerce_fusion.woocommerce.woocommerce_api import (
 )
 
 
-class CustomSalesOrder(SalesOrder):
+class CustomSalesOrderMixin:
 	"""
-	This class extends ERPNext's Sales Order doctype to override the autoname method
-	This allows us to name the Sales Order conditionally.
+	Mixin for ERPNext's Sales Order controller, registered via ``extend_doctype_class``.
 
-	We also add logic to set the WooCommerce Status field on validate.
+	Names WooCommerce-linked Sales Orders conditionally and syncs the WooCommerce Status on change.
 	"""
 
 	def autoname(self):
@@ -64,6 +62,8 @@ class CustomSalesOrder(SalesOrder):
 		"""
 		This is called when a document's values has been changed (including db_set).
 		"""
+		super().on_change()
+
 		# If Sales Order Status Sync is enabled, update the WooCommerce status of the Sales Order
 		if self.woocommerce_id and self.woocommerce_server:
 			wc_server = frappe.get_cached_doc("WooCommerce Server", self.woocommerce_server)

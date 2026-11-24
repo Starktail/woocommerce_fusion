@@ -3,10 +3,12 @@ from datetime import date
 from unittest.mock import Mock, patch
 
 import frappe
+from erpnext.selling.doctype.sales_order.sales_order import SalesOrder
 from frappe.model.naming import get_default_naming_series
 from frappe.tests import IntegrationTestCase
 
 from woocommerce_fusion.overrides.selling.sales_order import (
+	CustomSalesOrderMixin,
 	get_woocommerce_order_shipment_trackings,
 	update_woocommerce_order_shipment_trackings,
 )
@@ -62,12 +64,21 @@ class TestCustomSalesOrder(IntegrationTestCase):
 
 		self.assertEqual(updated_woocommerce_order.shipment_trackings, json.dumps([{"foo": "baz"}]))
 
-	def test_sales_order_uses_custom_class(self, mock_get_woocommerce_order):
+	def test_sales_order_is_extended_with_mixin(self, mock_get_woocommerce_order):
 		"""
-		Test that SalesOrder doctype class is overrided by CustomSalesOrder doctype class
+		Test that the Sales Order controller is extended (not overridden) with CustomSalesOrderMixin
 		"""
 		so = create_so()
-		self.assertEqual(so.__class__.__name__, "CustomSalesOrder")
+		self.assertIsInstance(so, CustomSalesOrderMixin)
+		self.assertIsInstance(so, SalesOrder)
+
+	def test_sales_order_on_change_calls_upstream(self, mock_get_woocommerce_order):
+		"""
+		Test that the mixin's on_change keeps ERPNext's on_change in the chain
+		"""
+		with patch.object(SalesOrder, "on_change", autospec=True) as mock_upstream_on_change:
+			create_so()
+		mock_upstream_on_change.assert_called()
 
 	def test_sales_order_is_named_by_default_if_not_linked_to_woocommerce_order(
 		self, mock_get_woocommerce_order
